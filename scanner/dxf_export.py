@@ -74,8 +74,25 @@ def export_dxf(project: dict) -> bytes:
         attribs = {"layer": lname}
         etype = ent.get("type")
         if etype == "line":
+            if ent.get("lt") == "dashed":
+                attribs["linetype"] = "DASHED"
             msp.add_line(tr(ent["x1"], ent["y1"]), tr(ent["x2"], ent["y2"]),
                          dxfattribs=attribs)
+        elif etype == "polyline":
+            pts = [tr(px, py) for px, py in ent.get("points", [])]
+            if len(pts) >= 2:
+                msp.add_lwpolyline(pts, dxfattribs=attribs)
+        elif etype == "fill":
+            outer = [tr(px, py) for px, py in ent.get("outer", [])]
+            if len(outer) >= 3:
+                msp.add_lwpolyline(outer, close=True, dxfattribs=dict(attribs))
+                hatch = msp.add_hatch(dxfattribs=dict(attribs))
+                hatch.paths.add_polyline_path(outer, is_closed=True, flags=1)
+                for hole in ent.get("holes", []):
+                    hpts = [tr(px, py) for px, py in hole]
+                    if len(hpts) >= 3:
+                        msp.add_lwpolyline(hpts, close=True, dxfattribs=dict(attribs))
+                        hatch.paths.add_polyline_path(hpts, is_closed=True, flags=0)
         elif etype == "text":
             x, y = tr(ent["x"], ent["y"])
             height = max(float(ent.get("size", 12)) / px_per_m, 0.05)

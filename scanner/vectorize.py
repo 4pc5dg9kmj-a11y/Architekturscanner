@@ -28,7 +28,7 @@ class VectorizeParams:
     angle_snap_deg: float = 4.0    # Toleranz fuer Snapping auf 0/90 Grad
     corner_snap: float = 8.0       # Radius fuer Eckpunkt-Clustering
     max_dim: int = 3000            # Bild wird auf diese Kantenlaenge begrenzt
-    thick_stroke: int = 13         # ab dieser Strichstaerke gilt eine Flaeche als gefuellt
+    thick_stroke: int = 0          # 0 = automatisch (2.2 x Median-Strichstaerke)
 
 
 def decode_image(data: bytes) -> np.ndarray:
@@ -143,7 +143,8 @@ def filter_ink(segments: np.ndarray, norm: np.ndarray,
 
 
 def detect_segments(binary: np.ndarray, p: VectorizeParams) -> np.ndarray:
-    """Skelettierung + probabilistische Hough-Transformation -> Nx4 (x1,y1,x2,y2)."""
+    """Skelettierung + probabilistische Hough-Transformation -> Nx4 (x1,y1,x2,y2).
+    (Nur noch fuer die schnelle Verdrehungs-Schaetzung verwendet.)"""
     skel = cv2.ximgproc.thinning(binary)
     lines = cv2.HoughLinesP(skel, 1, np.pi / 360, threshold=20,
                             minLineLength=max(6, int(p.min_len * 0.6)),
@@ -151,6 +152,230 @@ def detect_segments(binary: np.ndarray, p: VectorizeParams) -> np.ndarray:
     if lines is None:
         return np.zeros((0, 4), dtype=np.float64)
     return lines.reshape(-1, 4).astype(np.float64)
+
+
+# ------------------------------------------------------------------
+# Skelettgraph-Verfolgung: verwandelt das Skelett verlustfrei in Pfade
+# (Polylinien). Das ist das klassische Raster-zu-Vektor-Verfahren und
+# erhaelt auch Kurven und kleine Details vollstaendig.
+# ------------------------------------------------------------------
+
+_NBRS8 = ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1))
+
+
+def trace_paths(skel: np.ndarray, min_spur: float = 7.0) -> list[np.ndarray]:
+    """Skelett -> Liste von Pfaden (Mx2, x/y). Knoten = Verzweigungen/Enden."""
+    on = set(map(tuple, np.argwhere(skel > 0)))
+    if not on:
+        return []
+
+    def neighbors(px):
+        res = []
+        for dy, dx in _NBRS8:
+            q = (px[0] + dy, px[1] + dx)
+            if q in on:
+                res.append(q)
+        return res
+
+    deg = {px: len(neighbors(px)) for px in on}
+    nodes = {px for px, d in deg.items() if d != 2}
+    visited = set()
+    paths: list[list[tuple[int, int]]] = []
+
+    def walk(start, nxt):
+        chain = [start, nxt]
+        prev, cur = start, nxt
+        while cur not in nodes:
+            options = [q for q in neighbors(cur) if q != prev]
+            if len(options) != 1:
+                break
+            prev, cur = cur, options[0]
+            chain.append(cur)
+        return chain
+
+    for node in nodes:
+        for nb in neighbors(node):
+            if (node, nb) in visited:
+                continue
+            chain = walk(node, nb)
+            visited.add((node, nb))
+            visited.add((chain[-1], chain[-2]))
+            paths.append(chain)
+
+    # Reine Schleifen ohne Knoten (z. B. Kreise)
+    covered = set()
+    for chain in paths:
+        covered.update(chain)
+    remaining = on - covered - nodes
+    while remaining:
+        start = next(iter(remaining))
+        chain = [start]
+        remaining.discard(start)
+        prev, cur = None, start
+        while True:
+            options = [q for q in neighbors(cur) if q != prev and q in remaining]
+            if not options:
+                break
+            prev, cur = cur, options[0]
+            chain.append(cur)
+            remaining.discard(cur)
+        if len(chain) > 3:
+            chain.append(chain[0])
+            paths.append(chain)
+
+    # Kurze Sporne (Skelett-Artefakte an Verzweigungen) verwerfen
+    out: list[np.ndarray] = []
+    for chain in paths:
+        a, b = chain[0], chain[-1]
+        is_spur = (deg.get(a, 0) == 1 or deg.get(b, 0) == 1) and len(chain) <= min_spur
+        if is_spur:
+            continue
+        arr = np.array([(px[1], px[0]) for px in chain], dtype=np.float64)  # (x, y)
+        out.append(arr)
+    return out
+
+
+def rdp(points: np.ndarray, eps: float) -> np.ndarray:
+    """Douglas-Peucker-Vereinfachung (iterativ)."""
+    n = len(points)
+    if n < 3:
+        return points
+    keep = np.zeros(n, dtype=bool)
+    keep[0] = keep[-1] = True
+    stack = [(0, n - 1)]
+    while stack:
+        i0, i1 = stack.pop()
+        if i1 <= i0 + 1:
+            continue
+        a, b = points[i0], points[i1]
+        ab = b - a
+        L = np.hypot(*ab) or 1.0
+        rel = points[i0 + 1:i1] - a
+        d = np.abs(ab[0] * rel[:, 1] - ab[1] * rel[:, 0]) / L
+        k = int(np.argmax(d))
+        if d[k] > eps:
+            mid = i0 + 1 + k
+            keep[mid] = True
+            stack.append((i0, mid))
+            stack.append((mid, i1))
+    return points[keep]
+
+
+def classify_paths(paths: list[np.ndarray], eps: float = 2.0,
+                   min_len: float = 10.0) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Teilt Pfade in gerade Segmente und echte Polylinien (Kurven) auf."""
+    segments: list[list[float]] = []
+    polylines: list[np.ndarray] = []
+    for chain in paths:
+        total = float(np.sum(np.hypot(*np.diff(chain, axis=0).T)))
+        if total < min_len:
+            continue
+        simp = rdp(chain, eps)
+        a, b = chain[0], chain[-1]
+        chord = np.hypot(*(b - a))
+        if chord > 1:
+            ab = b - a
+            rel = chain - a
+            dev = np.abs(ab[0] * rel[:, 1] - ab[1] * rel[:, 0]) / chord
+            if float(dev.max()) <= max(2.2, 0.015 * chord):
+                segments.append([a[0], a[1], b[0], b[1]])
+                continue
+        if len(simp) <= 3 and total < 3.5 * max(chord, 1):
+            # fast gerade Knicke: als Einzelsegmente uebernehmen
+            for i in range(len(simp) - 1):
+                segments.append([simp[i][0], simp[i][1], simp[i + 1][0], simp[i + 1][1]])
+        else:
+            polylines.append(np.round(simp, 2))
+    return (np.array(segments, dtype=np.float64) if segments else np.zeros((0, 4)),
+            polylines)
+
+
+def detect_dashes(segments: np.ndarray, p: VectorizeParams) -> tuple[np.ndarray, np.ndarray]:
+    """Erkennt Strichlinien (>=3 kurze kollineare Stuecke mit regelmaessigen
+    Luecken) und ersetzt sie durch eine durchgehende gestrichelte Linie."""
+    if len(segments) < 3:
+        return np.zeros((0, 4)), segments
+    length = np.hypot(segments[:, 2] - segments[:, 0], segments[:, 3] - segments[:, 1])
+    shortish = (length >= 3) & (length <= 50)
+    cand = segments[shortish]
+    rest = [segments[~shortish]]
+    if len(cand) < 3:
+        return np.zeros((0, 4)), segments
+
+    dx = cand[:, 2] - cand[:, 0]
+    dy = cand[:, 3] - cand[:, 1]
+    ang = np.degrees(np.arctan2(dy, dx)) % 180.0
+    order = np.argsort(ang)
+    dashes: list[list[float]] = []
+    leftover: list[np.ndarray] = []
+    i = 0
+    while i < len(order):
+        j = i
+        a0 = ang[order[i]]
+        cluster = []
+        while j < len(order) and (ang[order[j]] - a0) <= 3.0:
+            cluster.append(order[j])
+            j += 1
+        i = j
+        theta = math.radians(float(np.median(ang[cluster])))
+        c, s = math.cos(-theta), math.sin(-theta)
+        items = []
+        for k in cluster:
+            x1, y1, x2, y2 = cand[k]
+            u1, v1 = x1 * c - y1 * s, x1 * s + y1 * c
+            u2, v2 = x2 * c - y2 * s, x2 * s + y2 * c
+            items.append(((v1 + v2) / 2, min(u1, u2), max(u1, u2), k))
+        items.sort()
+        tracks: list[list] = []
+        for it in items:
+            if tracks and it[0] - tracks[-1][-1][0] <= p.merge_offset * 1.5:
+                tracks[-1].append(it)
+            else:
+                tracks.append([it])
+        for track in tracks:
+            ivs = sorted((u1, u2, v, k) for v, u1, u2, k in track)
+            run: list = []
+            def flush(run):
+                if len(run) >= 3:
+                    v = float(np.mean([r[2] for r in run]))
+                    dashes.append(_unrotate(run[0][0], run[-1][1], v, theta))
+                else:
+                    for r in run:
+                        leftover.append(cand[r[3]])
+            for iv in ivs:
+                if run and 2.0 <= iv[0] - run[-1][1] <= 40.0:
+                    run.append(iv)
+                elif run and iv[0] - run[-1][1] < 2.0:
+                    run[-1] = (run[-1][0], max(run[-1][1], iv[1]), iv[2], iv[3])
+                else:
+                    flush(run)
+                    run = [iv]
+            flush(run)
+    rest.append(np.array(leftover) if leftover else np.zeros((0, 4)))
+    return (np.array(dashes) if dashes else np.zeros((0, 4)), np.vstack(rest))
+
+
+def fills_from_thick(thick: np.ndarray, eps: float = 2.5,
+                     min_area: float = 150.0) -> list[dict]:
+    """Gefuellte Flaechen (Waende/Decken, Poche) -> Polygone mit Loechern."""
+    contours, hierarchy = cv2.findContours(thick, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    fills: list[dict] = []
+    if hierarchy is None:
+        return fills
+    hierarchy = hierarchy[0]
+    outer_map: dict[int, dict] = {}
+    for idx, cnt in enumerate(contours):
+        if hierarchy[idx][3] == -1 and cv2.contourArea(cnt) >= min_area:
+            poly = cv2.approxPolyDP(cnt, eps, closed=True).reshape(-1, 2)
+            if len(poly) >= 3:
+                outer_map[idx] = {"outer": poly.astype(float).round(2).tolist(), "holes": []}
+    for idx, cnt in enumerate(contours):
+        parent = hierarchy[idx][3]
+        if parent in outer_map and cv2.contourArea(cnt) >= 40:
+            poly = cv2.approxPolyDP(cnt, eps, closed=True).reshape(-1, 2)
+            if len(poly) >= 3:
+                outer_map[parent]["holes"].append(poly.astype(float).round(2).tolist())
+    return list(outer_map.values())
 
 
 def mask_word_boxes(binary: np.ndarray, words: list[dict]) -> np.ndarray:
@@ -231,10 +456,27 @@ def rescue_text_groups(line_bin: np.ndarray, norm: np.ndarray) -> tuple[np.ndarr
     return out, rescued
 
 
+def estimate_thick_stroke(binary: np.ndarray) -> int:
+    """Adaptive Schwelle fuer 'gefuellte Flaeche': 2.2 x Median-Strichstaerke."""
+    dt = cv2.distanceTransform(binary, cv2.DIST_L2, 5)
+    skel = cv2.ximgproc.thinning(binary)
+    widths = 2.0 * dt[skel > 0]
+    if widths.size < 100:
+        return 9
+    med = float(np.median(widths))
+    k = int(round(2.2 * med))
+    return max(7, min(k | 1, 17))  # ungerade, 7..17
+
+
 def split_thick(binary: np.ndarray, thickness: int) -> tuple[np.ndarray, np.ndarray]:
     """Trennt gefuellte Flaechen (Waende/Decken, Pochee) von duennen Strichen."""
+    if thickness <= 0:
+        thickness = estimate_thick_stroke(binary)
     k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (thickness, thickness))
     thick = cv2.morphologyEx(binary, cv2.MORPH_OPEN, k)
+    # leichte Dilatation, damit die Flaeche wieder ihre echte Kontur erreicht
+    thick = cv2.dilate(thick, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+    thick = cv2.bitwise_and(thick, binary)
     thin = cv2.bitwise_and(binary, cv2.bitwise_not(thick))
     return thick, thin
 
@@ -661,14 +903,18 @@ def vectorize(img: np.ndarray, params: VectorizeParams | None = None,
         line_bin, rescued = rescue_text_groups(line_bin, norm)
         words += rescued
 
-    # 4) gefuellte Flaechen (Waende) als saubere Konturen, duenne Striche per Skelett
+    # 4) gefuellte Flaechen (Waende/Poche) als Polygone, duenne Striche als
+    #    Skelettgraph verlustfrei verfolgen
     thick, thin = split_thick(line_bin, p.thick_stroke)
-    segs_thin = detect_segments(thin, p)
-    segs_thick = outline_segments(thick)
-    segs = np.vstack([segs_thin, segs_thick]) if len(segs_thick) else segs_thin
+    fills = fills_from_thick(thick)
+    skel = cv2.ximgproc.thinning(thin)
+    paths = trace_paths(skel)
+    segs, polylines = classify_paths(paths, min_len=max(6.0, p.min_len * 0.6))
 
-    # 5) Faltenschatten aussortieren, begradigen, zu langen Linien zusammenfuehren
+    # 5) Faltenschatten aussortieren, Strichlinien erkennen, begradigen,
+    #    zu langen logischen Linien zusammenfuehren
     segs = filter_ink(segs, norm)
+    dashes, segs = detect_dashes(segs, p)
     segs = snap_angles(segs, p.angle_snap_deg)
     segs = merge_collinear(segs, p)
     segs = merge_collinear(segs, p)          # 2. Durchgang schliesst neue Luecken
@@ -677,6 +923,8 @@ def vectorize(img: np.ndarray, params: VectorizeParams | None = None,
     segs = close_corners(segs, p.corner_snap)
     segs = snap_corners(segs, p.corner_snap * 0.75)
     segs = filter_short(segs, p.min_len)
+    dashes = snap_angles(dashes, p.angle_snap_deg)
+    dashes = merge_collinear(dashes, VectorizeParams(**{**p.__dict__, "merge_gap": 25.0}))
 
     return {
         "width": int(img.shape[1]),
@@ -684,5 +932,8 @@ def vectorize(img: np.ndarray, params: VectorizeParams | None = None,
         "skew_corrected_deg": round(skew, 3),
         "image_png_base64": encode_png_base64(img),
         "segments": [[round(v, 2) for v in s] for s in segs.tolist()],
+        "dashes": [[round(v, 2) for v in s] for s in dashes.tolist()],
+        "polylines": [pl.tolist() for pl in polylines],
+        "fills": fills,
         "texts": group_text_lines(words),
     }
