@@ -12,6 +12,14 @@ Layern und DXF-Export (AutoCAD/DWG-kompatibel).
   Verdrehung (Deskew), Skelettierung und Linienerkennung machen aus krummen,
   fotografierten Linien gerade, exakt horizontale/vertikale Segmente.
   Schräge Linien (z. B. Dachneigungen) bleiben erhalten.
+- **Lange, logische Linien statt Fragmente**: kollineare Stücke werden
+  spurweise zu durchgehenden Linien verschmolzen, Lücken unter entfernter
+  Beschriftung überbrückt, Ecken exakt geschlossen. Gefüllte Flächen
+  (Wände, Decken) werden als saubere Konturzüge übernommen.
+- **Text bleibt Text**: erkannte Beschriftungen werden vor der
+  Linienerkennung maskiert und als editierbare Textobjekte übernommen –
+  Buchstaben werden nicht zu Linien vektorisiert. Papierkanten und
+  Faltenschatten werden ausgefiltert.
 - **Perspektiv-Entzerrung**: 4 Ecken des Plans klicken → das Foto wird
   rechtwinklig entzerrt (Knopf „◇ Entzerren“).
 - **Maßstab kalibrieren**: Zwei Punkte einer bekannten Strecke klicken

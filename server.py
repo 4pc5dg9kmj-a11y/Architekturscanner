@@ -28,7 +28,7 @@ async def api_vectorize(
     corner_snap: float = Form(7.0),
     max_dim: int = Form(3000),
     corners: str = Form(""),        # JSON: [[x,y],[x,y],[x,y],[x,y]] oder leer
-    with_ocr: bool = Form(False),
+    with_ocr: bool = Form(True),
     pdf_page: int = Form(0),
 ):
     data = await file.read()
