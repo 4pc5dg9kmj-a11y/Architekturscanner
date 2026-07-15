@@ -182,7 +182,15 @@ function drawEntity(ent, color, selected) {
     const size = Math.max(9, ent.size * state.view.s);
     ctx.font = `${size}px sans-serif`;
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-    ctx.fillText(ent.text, p.x, p.y);
+    if (ent.angle) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(-ent.angle * Math.PI / 180);
+      ctx.fillText(ent.text, 0, 0);
+      ctx.restore();
+    } else {
+      ctx.fillText(ent.text, p.x, p.y);
+    }
     if (selected) handle(p);
   } else if (ent.type === "dim") {
     drawDim(ent, color, selected);
@@ -341,7 +349,10 @@ function hitEntity(world) {
       if (distPointSeg(world, { x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 }) < tol) return ent;
     } else if (ent.type === "text") {
       const wPix = ent.text.length * ent.size * 0.55;
-      if (world.x >= ent.x - tol && world.x <= ent.x + wPix + tol &&
+      if (ent.angle === 90) {
+        if (world.x >= ent.x - ent.size - tol && world.x <= ent.x + tol &&
+            world.y >= ent.y - wPix - tol && world.y <= ent.y + tol) return ent;
+      } else if (world.x >= ent.x - tol && world.x <= ent.x + wPix + tol &&
           world.y >= ent.y - ent.size - tol && world.y <= ent.y + tol) return ent;
     } else if (ent.type === "dim") {
       const g = dimGeometry(ent);
@@ -855,7 +866,8 @@ async function applyVectorizeResult(data) {
     state.entities = state.entities.filter(ent => !(ent.layer === tl.id && ent.type === "text" && ent.ocr));
     for (const t of data.texts)
       state.entities.push({ id: uid(), type: "text", layer: tl.id, ocr: true,
-                            x: t.x, y: t.y, text: t.text, size: Math.max(10, t.size) });
+                            x: t.x, y: t.y, text: t.text, angle: t.angle || 0,
+                            size: Math.max(10, t.size) });
   }
   state.selection.clear();
   updateScaleLabel();

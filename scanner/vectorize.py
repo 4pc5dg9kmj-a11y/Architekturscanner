@@ -165,19 +165,15 @@ def mask_word_boxes(binary: np.ndarray, words: list[dict]) -> np.ndarray:
     return out
 
 
-def remove_glyph_blobs(binary: np.ndarray) -> np.ndarray:
-    """Entfernt kleine, kompakte Komponenten (Buchstaben-Reste, Pfeilspitzen),
-    behaelt duenne laengliche Striche und kleine Zeichnungsdetails.
-
-    Bewusst konservativ: nur Komponenten in Glyphengroesse, die weder laenglich
-    (Strich) noch hohl (Zeichnungsdetail aus duennen Linien) sind."""
+def _glyph_candidates(binary: np.ndarray) -> list[tuple[int, int, int, int]]:
+    """Kompakte Komponenten in Buchstabengroesse (moeglicher Text)."""
     h, w = binary.shape
-    tmax = max(12, int(0.012 * max(h, w)))
+    tmax = max(14, int(0.025 * max(h, w)))
     num, labels, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
-    out = binary.copy()
+    boxes: list[tuple[int, int, int, int]] = []
     for i in range(1, num):
         x, y, bw, bh, area = stats[i]
-        if bw > tmax or bh > tmax or area < 12:
+        if bw > tmax or bh > tmax or area < 12 or bh < 6:
             continue
         sub = (labels[y:y + bh, x:x + bw] == i).astype(np.uint8)
         contours, _ = cv2.findContours(sub, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -185,12 +181,54 @@ def remove_glyph_blobs(binary: np.ndarray) -> np.ndarray:
             continue
         (_, _), (rw, rh), _ = cv2.minAreaRect(max(contours, key=cv2.contourArea))
         long_side, short_side = max(rw, rh), max(min(rw, rh), 1.0)
-        if long_side / short_side >= 3.5:         # laenglich -> Strich, behalten
+        if long_side / short_side < 3.5:          # kompakt -> Glyphen-Kandidat
+            boxes.append((x, y, bw, bh))
+    return boxes
+
+
+def rescue_text_groups(line_bin: np.ndarray, norm: np.ndarray) -> tuple[np.ndarray, list[dict]]:
+    """Findet Reihen unerkannter Buchstaben und liest sie gezielt nach.
+
+    Nur wenn die Nachlese-OCR den Text bestaetigt, wird der Bereich aus dem
+    Linienbild entfernt und als Textobjekt uebernommen. Unbestaetigte Bereiche
+    bleiben unveraendert sichtbar - es verschwindet nichts vom Original."""
+    boxes = _glyph_candidates(line_bin)
+    if len(boxes) < 3:
+        return line_bin, []
+    # Reihen bilden: von links nach rechts, gleiche Zeile, horizontal benachbart
+    boxes.sort(key=lambda b: b[0])
+    rows: list[list[tuple[int, int, int, int]]] = []
+    for b in boxes:
+        placed = False
+        for row in rows:
+            lx, ly, lw, lh = row[-1]
+            band = max(b[3], lh)
+            same_band = abs((b[1] + b[3] / 2) - (ly + lh / 2)) < 0.6 * band
+            gap = b[0] - (lx + lw)
+            if same_band and -0.3 * lw <= gap < 2.0 * band:
+                row.append(b)
+                placed = True
+                break
+        if not placed:
+            rows.append([b])
+
+    out = line_bin.copy()
+    rescued: list[dict] = []
+    for row in rows:
+        if len(row) < 3:                          # einzelne Blobs: Symbole, behalten
             continue
-        fill = area / max(rw * rh, 1.0)
-        if fill >= 0.22:                          # kompakt gefuellt -> Glyphe/Pfeil
-            out[y:y + bh, x:x + bw][sub > 0] = 0
-    return out
+        x0 = min(b[0] for b in row); y0 = min(b[1] for b in row)
+        x1 = max(b[0] + b[2] for b in row); y1 = max(b[1] + b[3] for b in row)
+        words = ocr_crop(norm, (x0, y0, x1 - x0, y1 - y0))
+        text = " ".join(w["text"] for w in words)
+        if not words or sum(len(w["text"]) for w in words) < max(2, len(row) // 2):
+            continue                              # nicht bestaetigt -> sichtbar lassen
+        pad = 2
+        out[max(0, y0 - pad):y1 + pad, max(0, x0 - pad):x1 + pad] = 0
+        rescued.append({"text": text, "conf": min(w["conf"] for w in words),
+                        "angle": 0, "x": x0, "y": y0,
+                        "w": x1 - x0, "h": y1 - y0})
+    return out, rescued
 
 
 def split_thick(binary: np.ndarray, thickness: int) -> tuple[np.ndarray, np.ndarray]:
@@ -257,7 +295,7 @@ def snap_angles(segments: np.ndarray, tol_deg: float) -> np.ndarray:
 
 
 def bridge_text_gaps(segments: np.ndarray, p: VectorizeParams,
-                     gap: float = 70.0, min_support: float = 40.0) -> np.ndarray:
+                     gap: float = 90.0, min_support: float = 45.0) -> np.ndarray:
     """Ueberbrueckt grosse Luecken (z. B. wo Beschriftung auf der Linie sass),
     aber nur zwischen bereits langen kollinearen Segmenten, damit Strichlinien
     und benachbarte Details nicht faelschlich verklebt werden."""
@@ -442,44 +480,157 @@ def encode_png_base64(img: np.ndarray) -> str:
     return base64.b64encode(buf.tobytes()).decode("ascii")
 
 
-def ocr_words(img: np.ndarray) -> list[dict]:
-    """Wortweise Texterkennung mit Tesseract (leer, falls nicht verfuegbar)."""
+_WORD_RE = None
+
+
+def _has_content(txt: str) -> bool:
+    return any(c.isalnum() for c in txt)
+
+
+def _tess_words(gray: np.ndarray, psm: int, min_conf: int,
+                scale: float = 1.0, origin: tuple[int, int] = (0, 0)) -> list[dict]:
+    """Ein Tesseract-Durchgang -> Wortliste in Bildkoordinaten."""
     try:
         import pytesseract
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        data = pytesseract.image_to_data(gray, lang="deu",
+        data = pytesseract.image_to_data(gray, lang="deu", config=f"--psm {psm}",
                                          output_type=pytesseract.Output.DICT)
     except Exception:
         return []
     words: list[dict] = []
     for i in range(len(data["text"])):
         txt = data["text"][i].strip()
-        conf = int(float(data["conf"][i]))
-        if not txt or conf < 40:
+        try:
+            conf = int(float(data["conf"][i]))
+        except (ValueError, TypeError):
+            continue
+        if not txt or conf < min_conf or not _has_content(txt):
             continue
         words.append({
-            "text": txt, "conf": conf,
-            "x": data["left"][i], "y": data["top"][i],
-            "w": data["width"][i], "h": data["height"][i],
-            "line_key": (data["block_num"][i], data["par_num"][i], data["line_num"][i]),
+            "text": txt, "conf": conf, "angle": 0,
+            "x": int(data["left"][i] / scale) + origin[0],
+            "y": int(data["top"][i] / scale) + origin[1],
+            "w": max(int(data["width"][i] / scale), 1),
+            "h": max(int(data["height"][i] / scale), 1),
         })
     return words
 
 
-def group_text_lines(words: list[dict], min_conf: int = 55) -> list[dict]:
-    """Woerter zu Textzeilen gruppieren (fuer Text-Entities im Plan)."""
-    lines: dict[tuple, list[dict]] = {}
-    for wd in words:
-        if wd["conf"] >= min_conf:
-            lines.setdefault(wd["line_key"], []).append(wd)
+def _iou(a: dict, b: dict) -> float:
+    x1 = max(a["x"], b["x"]); y1 = max(a["y"], b["y"])
+    x2 = min(a["x"] + a["w"], b["x"] + b["w"])
+    y2 = min(a["y"] + a["h"], b["y"] + b["h"])
+    inter = max(0, x2 - x1) * max(0, y2 - y1)
+    if inter == 0:
+        return 0.0
+    return inter / (a["w"] * a["h"] + b["w"] * b["h"] - inter)
+
+
+def _dedupe_words(words: list[dict]) -> list[dict]:
+    kept: list[dict] = []
+    for wd in sorted(words, key=lambda w: -w["conf"]):
+        if all(_iou(wd, k) <= 0.25 for k in kept):
+            kept.append(wd)
+    return kept
+
+
+_MEASURE_RE = __import__("re").compile(r"^[~±+\-=≈]*\d+[.,]\d+[\"'°”]*$")
+
+
+def _plausible(wd: dict) -> bool:
+    """Filtert OCR-Phantomwoerter (Linienmuster, die wie Kurztext aussehen)."""
+    txt = wd["text"]
+    if wd["h"] < 9:
+        return False
+    if wd["angle"] == 90:
+        # senkrecht stehen praktisch nur Masszahlen; sonst sehr strenge Regeln
+        return bool(_MEASURE_RE.match(txt)) or (len(txt) >= 4 and wd["conf"] >= 80)
+    if len(txt) <= 2 and wd["conf"] < 70 and not any(c.isdigit() for c in txt):
+        return False
+    # riesige "Woerter" mit wenigen Zeichen sind fast immer fehlgelesene Grafik
+    if wd["h"] >= 60 and len(txt) <= 4 and not _MEASURE_RE.match(txt):
+        return False
+    return True
+
+
+def ocr_words(norm: np.ndarray) -> list[dict]:
+    """Mehrpass-Texterkennung auf dem beleuchtungskorrigierten Graubild:
+    Layout-Modus + Streutext-Modus + um 90 Grad gedrehter Durchgang fuer
+    senkrechte Beschriftungen (Masszahlen)."""
+    words = _tess_words(norm, psm=3, min_conf=45)
+    words += _tess_words(norm, psm=11, min_conf=55)
+
+    # gedrehte Beschriftung (liest von unten nach oben)
+    h = norm.shape[0]
+    rot = cv2.rotate(norm, cv2.ROTATE_90_CLOCKWISE)
+    for wd in _tess_words(rot, psm=11, min_conf=60):
+        if len(wd["text"]) < 2:
+            continue
+        # Ruecktransformation: (x', y') = (H-1-y, x)
+        x = wd["y"]
+        y = h - 1 - (wd["x"] + wd["w"])
+        words.append({**wd, "x": x, "y": y, "w": wd["h"], "h": wd["w"],
+                      "angle": 90})
+    return _dedupe_words([wd for wd in words if _plausible(wd)])
+
+
+def ocr_crop(norm: np.ndarray, box: tuple[int, int, int, int],
+             min_conf: int = 45) -> list[dict]:
+    """Gezielter OCR-Versuch auf einem Ausschnitt (2x vergroessert, eine Zeile)."""
+    x, y, w, h = box
+    pad = max(4, h // 4)
+    x0, y0 = max(0, x - pad), max(0, y - pad)
+    x1, y1 = min(norm.shape[1], x + w + pad), min(norm.shape[0], y + h + pad)
+    sub = norm[y0:y1, x0:x1]
+    if sub.size == 0:
+        return []
+    sub2 = cv2.resize(sub, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
+    return _tess_words(sub2, psm=7, min_conf=min_conf, scale=3.0, origin=(x0, y0))
+
+
+def group_text_lines(words: list[dict], min_conf: int = 45) -> list[dict]:
+    """Woerter geometrisch zu Textzeilen gruppieren (fuer Text-Entities)."""
     items: list[dict] = []
-    for group in lines.values():
-        group.sort(key=lambda wd: wd["x"])
-        x = min(wd["x"] for wd in group)
-        y = min(wd["y"] for wd in group)
-        h = max(wd["h"] for wd in group)
-        items.append({"text": " ".join(wd["text"] for wd in group),
-                      "x": x, "y": y + h, "size": h})
+    for angle in (0, 90):
+        ws = [w for w in words if w["angle"] == angle and w["conf"] >= min_conf]
+        if angle == 0:
+            ws.sort(key=lambda w: (w["y"] + w["h"] / 2, w["x"]))
+        else:
+            ws.sort(key=lambda w: (w["x"] + w["w"] / 2, -w["y"]))
+        rows: list[list[dict]] = []
+        for wd in ws:
+            placed = False
+            for row in rows:
+                last = row[-1]
+                if angle == 0:
+                    same_band = abs((wd["y"] + wd["h"] / 2) - (last["y"] + last["h"] / 2)) \
+                        < 0.7 * max(wd["h"], last["h"])
+                    similar_size = min(wd["h"], last["h"]) / max(wd["h"], last["h"]) > 0.5
+                    gap = wd["x"] - (last["x"] + last["w"])
+                    # kein starkes Ueberlappen (Duplikate aus zwei OCR-Durchgaengen)
+                    ok = same_band and similar_size and \
+                        -0.4 * last["w"] < gap < 1.8 * max(wd["h"], last["h"])
+                else:
+                    same_band = abs((wd["x"] + wd["w"] / 2) - (last["x"] + last["w"] / 2)) \
+                        < 0.7 * max(wd["w"], last["w"])
+                    ok = same_band and (last["y"] - (wd["y"] + wd["h"])) < 2.5 * max(wd["w"], last["w"])
+                if ok:
+                    row.append(wd)
+                    placed = True
+                    break
+            if not placed:
+                rows.append([wd])
+        for row in rows:
+            if angle == 0:
+                x = min(w["x"] for w in row)
+                y = max(w["y"] + w["h"] for w in row)
+                size = max(w["h"] for w in row)
+            else:
+                x = max(w["x"] + w["w"] for w in row)
+                y = max(w["y"] + w["h"] for w in row)
+                size = max(w["w"] for w in row)
+            items.append({"text": " ".join(w["text"] for w in row),
+                          "x": int(x), "y": int(y), "size": int(size),
+                          "angle": angle})
     return items
 
 
@@ -502,9 +653,13 @@ def vectorize(img: np.ndarray, params: VectorizeParams | None = None,
     binary = cv2.bitwise_and(binary, paper_mask(img))
 
     # 3) Text erkennen und aus dem Linienbild entfernen (Text bleibt Text!)
-    words = ocr_words(img) if with_ocr else []
+    #    Entfernt wird nur, was die OCR wirklich gelesen hat - unbestaetigte
+    #    Bereiche bleiben als Linien sichtbar, damit nichts verschwindet.
+    words = ocr_words(norm) if with_ocr else []
     line_bin = mask_word_boxes(binary, words) if words else binary
-    line_bin = remove_glyph_blobs(line_bin)
+    if with_ocr:
+        line_bin, rescued = rescue_text_groups(line_bin, norm)
+        words += rescued
 
     # 4) gefuellte Flaechen (Waende) als saubere Konturen, duenne Striche per Skelett
     thick, thin = split_thick(line_bin, p.thick_stroke)

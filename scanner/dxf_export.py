@@ -79,9 +79,10 @@ def export_dxf(project: dict) -> bytes:
         elif etype == "text":
             x, y = tr(ent["x"], ent["y"])
             height = max(float(ent.get("size", 12)) / px_per_m, 0.05)
-            msp.add_text(ent.get("text", ""),
-                         dxfattribs={**attribs, "height": height}
-                         ).set_placement((x, y), align=TextEntityAlignment.BOTTOM_LEFT)
+            text = msp.add_text(ent.get("text", ""),
+                                dxfattribs={**attribs, "height": height,
+                                            "rotation": float(ent.get("angle", 0))})
+            text.set_placement((x, y), align=TextEntityAlignment.BOTTOM_LEFT)
         elif etype == "dim":
             _export_dim_chain(msp, ent, tr, attribs, px_per_m)
 
