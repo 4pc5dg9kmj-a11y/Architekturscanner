@@ -175,8 +175,37 @@ function drawEntity(ent, color, selected) {
   if (ent.type === "line") {
     const a = w2s({ x: ent.x1, y: ent.y1 }), b = w2s({ x: ent.x2, y: ent.y2 });
     ctx.lineWidth = selected ? 2.4 : 1.4;
+    if (ent.lt === "dashed") ctx.setLineDash([8, 5]);
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
     if (selected) { handle(a); handle(b); }
+  } else if (ent.type === "polyline") {
+    ctx.lineWidth = selected ? 2.4 : 1.4;
+    ctx.beginPath();
+    ent.points.forEach((pt, i) => {
+      const s = w2s({ x: pt[0], y: pt[1] });
+      i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y);
+    });
+    ctx.stroke();
+    if (selected) {
+      handle(w2s({ x: ent.points[0][0], y: ent.points[0][1] }));
+      const last = ent.points[ent.points.length - 1];
+      handle(w2s({ x: last[0], y: last[1] }));
+    }
+  } else if (ent.type === "fill") {
+    ctx.lineWidth = selected ? 2 : 1;
+    ctx.beginPath();
+    const ring = pts => pts.forEach((pt, i) => {
+      const s = w2s({ x: pt[0], y: pt[1] });
+      i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y);
+    });
+    ring(ent.outer); ctx.closePath();
+    for (const hole of ent.holes || []) { ring(hole); ctx.closePath(); }
+    ctx.save();
+    ctx.globalAlpha = selected ? 0.75 : 0.55;
+    ctx.fill("evenodd");
+    ctx.restore();
+    ctx.stroke();
   } else if (ent.type === "text") {
     const p = w2s({ x: ent.x, y: ent.y });
     const size = Math.max(9, ent.size * state.view.s);
@@ -328,6 +357,11 @@ function findSnap(world) {
     if (!layer || !layer.visible) continue;
     if (ent.type === "line") { consider({ x: ent.x1, y: ent.y1 }); consider({ x: ent.x2, y: ent.y2 }); }
     else if (ent.type === "dim") for (const p of ent.points) consider({ x: p[0], y: p[1] });
+    else if (ent.type === "polyline") {
+      consider({ x: ent.points[0][0], y: ent.points[0][1] });
+      const last = ent.points[ent.points.length - 1];
+      consider({ x: last[0], y: last[1] });
+    } else if (ent.type === "fill") for (const p of ent.outer) consider({ x: p[0], y: p[1] });
   }
   return best ? { x: best.x, y: best.y } : null;
 }
@@ -347,6 +381,17 @@ function hitEntity(world) {
     if (!layer || !layer.visible) continue;
     if (ent.type === "line") {
       if (distPointSeg(world, { x: ent.x1, y: ent.y1 }, { x: ent.x2, y: ent.y2 }) < tol) return ent;
+    } else if (ent.type === "polyline") {
+      for (let k = 0; k < ent.points.length - 1; k++)
+        if (distPointSeg(world, { x: ent.points[k][0], y: ent.points[k][1] },
+                         { x: ent.points[k + 1][0], y: ent.points[k + 1][1] }) < tol) return ent;
+    } else if (ent.type === "fill") {
+      const rings = [ent.outer, ...(ent.holes || [])];
+      for (const ring of rings)
+        for (let k = 0; k < ring.length; k++) {
+          const a = ring[k], b = ring[(k + 1) % ring.length];
+          if (distPointSeg(world, { x: a[0], y: a[1] }, { x: b[0], y: b[1] }) < tol) return ent;
+        }
     } else if (ent.type === "text") {
       const wPix = ent.text.length * ent.size * 0.55;
       if (ent.angle === 90) {
@@ -608,7 +653,9 @@ function entInRect(ent, x1, y1, x2, y2) {
   const inside = p => p.x >= x1 && p.x <= x2 && p.y >= y1 && p.y <= y2;
   if (ent.type === "line") return inside({ x: ent.x1, y: ent.y1 }) && inside({ x: ent.x2, y: ent.y2 });
   if (ent.type === "text") return inside({ x: ent.x, y: ent.y });
-  if (ent.type === "dim") return ent.points.every(p => inside({ x: p[0], y: p[1] }));
+  if (ent.type === "dim" || ent.type === "polyline")
+    return ent.points.every(p => inside({ x: p[0], y: p[1] }));
+  if (ent.type === "fill") return ent.outer.every(p => inside({ x: p[0], y: p[1] }));
   return false;
 }
 
@@ -616,7 +663,12 @@ function moveEntity(ent, dx, dy) {
   if (!ent) return;
   if (ent.type === "line") { ent.x1 += dx; ent.y1 += dy; ent.x2 += dx; ent.y2 += dy; }
   else if (ent.type === "text") { ent.x += dx; ent.y += dy; }
-  else if (ent.type === "dim") for (const p of ent.points) { p[0] += dx; p[1] += dy; }
+  else if (ent.type === "dim" || ent.type === "polyline")
+    for (const p of ent.points) { p[0] += dx; p[1] += dy; }
+  else if (ent.type === "fill") {
+    for (const p of ent.outer) { p[0] += dx; p[1] += dy; }
+    for (const hole of ent.holes || []) for (const p of hole) { p[0] += dx; p[1] += dy; }
+  }
 }
 
 function dragHandle(h, wp, shift) {
@@ -854,12 +906,21 @@ async function applyVectorizeResult(data) {
   state.imgW = data.width; state.imgH = data.height;
   if (scaleChanged) state.pxPerMeter = null;   // Bildgeometrie geaendert -> neu kalibrieren
 
-  // Bestandslinien ersetzen, Nutzer-Elemente behalten
+  // Bestand ersetzen, Nutzer-Elemente behalten
   const bestand = layerByKind("bestand") || state.layers[0];
-  state.entities = state.entities.filter(ent => ent.layer !== bestand.id || ent.type !== "line");
+  const generated = new Set(["line", "polyline", "fill"]);
+  state.entities = state.entities.filter(ent => ent.layer !== bestand.id || !generated.has(ent.type));
+  for (const f of data.fills || [])
+    state.entities.push({ id: uid(), type: "fill", layer: bestand.id,
+                          outer: f.outer, holes: f.holes || [] });
   for (const s of data.segments)
     state.entities.push({ id: uid(), type: "line", layer: bestand.id,
                           x1: s[0], y1: s[1], x2: s[2], y2: s[3] });
+  for (const s of data.dashes || [])
+    state.entities.push({ id: uid(), type: "line", lt: "dashed", layer: bestand.id,
+                          x1: s[0], y1: s[1], x2: s[2], y2: s[3] });
+  for (const pl of data.polylines || [])
+    state.entities.push({ id: uid(), type: "polyline", layer: bestand.id, points: pl });
 
   if (data.texts && data.texts.length) {
     const tl = layerByKind("text") || bestand;
@@ -872,8 +933,9 @@ async function applyVectorizeResult(data) {
   state.selection.clear();
   updateScaleLabel();
   zoomFit();
-  setHint(`${data.segments.length} Linien erkannt` +
-          (data.texts ? `, ${data.texts.length} Textzeilen (OCR)` : "") +
+  setHint(`${data.segments.length} Linien, ${(data.dashes || []).length} Strichlinien, ` +
+          `${(data.polylines || []).length} Kurven, ${(data.fills || []).length} Füllungen` +
+          (data.texts ? `, ${data.texts.length} Texte` : "") +
           (data.skew_corrected_deg ? ` – Verdrehung um ${data.skew_corrected_deg}° korrigiert` : "") +
           ". Jetzt mit „Kalibrieren“ den Maßstab festlegen.");
   requestDraw();
