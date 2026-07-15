@@ -75,6 +75,11 @@ async def index():
 
 
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+app.mount(
+    "/krankenversicherung",
+    StaticFiles(directory=ROOT / "krankenversicherung", html=True),
+    name="krankenversicherung",
+)
 
 
 if __name__ == "__main__":

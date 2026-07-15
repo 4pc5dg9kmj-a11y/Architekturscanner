@@ -1,5 +1,12 @@
 # 📐 Architekturscanner
 
+> **Außerdem in diesem Repository:** der
+> [🏥 Beihilfe- & PKV-Rechnungsprüfer](krankenversicherung/README.md) –
+> eine eigenständige Web-App, mit der Beamtenfamilien nachvollziehen können,
+> ob Beihilfe und private Krankenversicherung ihre Arztrechnungen vollständig
+> erstattet haben (läuft ohne Server, erreichbar auch unter
+> `/krankenversicherung/`, wenn `python server.py` läuft).
+
 Digitalisiert abfotografierte oder gescannte Altpläne (Foto/PDF) zu **exakten,
 geraden, maßstäblichen CAD-Zeichnungen** – mit editierbaren Maßketten,
 Layern und DXF-Export (AutoCAD/DWG-kompatibel).
