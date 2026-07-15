@@ -286,10 +286,10 @@ function analyseAlle() {
 
 function statusBadge(status) {
   switch (status) {
-    case "ok":      return '<span class="badge b-ok">✓ vollständig erstattet</span>';
-    case "fehlt":   return '<span class="badge b-bad">▲ Erstattung fehlt</span>';
-    case "pruefen": return '<span class="badge b-warn">? mehr erhalten als erwartet</span>';
-    default:        return '<span class="badge b-mut">○ offen</span>';
+    case "ok":      return '<span class="badge b-ok">vollständig erstattet</span>';
+    case "fehlt":   return '<span class="badge b-bad">Erstattung fehlt</span>';
+    case "pruefen": return '<span class="badge b-warn">mehr erhalten als erwartet</span>';
+    default:        return '<span class="badge b-mut">offen</span>';
   }
 }
 
@@ -334,8 +334,10 @@ function viewUebersicht() {
       if (pos.markiert) markierte.push({ r, pos });
 
   let html = `
-    <h1>Übersicht</h1>
-    <p class="sub">Beihilfe (${esc(landName(store.settings.bundesland))}) und private Krankenversicherung im Blick.</p>
+    <div class="page-head"><div>
+      <h1>Übersicht</h1>
+      <p class="sub">Beihilfe (${esc(landName(store.settings.bundesland))}) und private Krankenversicherung im Blick.</p>
+    </div></div>
     <div class="cards">
       <div class="card ${fehltB > EPS ? "c-bad" : "c-ok"}">
         <div class="card-label">Fehlende Beihilfe</div>
@@ -380,7 +382,7 @@ function viewUebersicht() {
       }
       const vertrag = vertragById(p.vertragId);
       return `<tr>
-        <td><span class="person-dot" style="background:${personFarbe(p)}"></span>${esc(p.name)}
+        <td style="min-width:220px"><span class="person-dot" style="background:${personFarbe(p)}"></span><b>${esc(p.name)}</b>
             <div class="small muted">${esc(rolleName(p.rolle))} · Beihilfesatz ${p.beihilfesatz} %${vertrag ? " · " + esc(vertrag.name) : ""}</div></td>
         <td class="num">${n}</td>
         <td class="num">${fmtEUR(sum)}</td>
@@ -422,8 +424,8 @@ function viewUebersicht() {
 
   /* Markierte Positionen */
   if (markierte.length) {
-    html += `<div class="panel"><h2>🔖 Markierte Positionen</h2>
-      <p class="sub mt0">Von dir markierte Deltas / fehlende Auszahlungen.</p>
+    html += `<div class="panel"><h2>Markierte Positionen</h2>
+      <p class="panel-sub" style="margin-top:4px">Von dir markierte Deltas / fehlende Auszahlungen.</p>
       <div class="table-wrap"><table>
       <thead><tr><th>Rechnung</th><th>Position</th><th class="num">Betrag</th><th>Notiz</th></tr></thead><tbody>
       ${markierte.map(({ r, pos }) => `
@@ -443,11 +445,15 @@ function viewUebersicht() {
 
 function viewPersonen() {
   let html = `
-    <h1>Personen</h1>
-    <p class="sub">Bis zu ${MAX_PERSONEN} Familienmitglieder mit eigenem Beihilfesatz, Vertrag und Bausteinen.</p>
-    <div class="toolbar">
-      <button class="primary" data-action="person-neu" ${store.persons.length >= MAX_PERSONEN ? "disabled" : ""}>+ Person anlegen</button>
-      <span class="muted small">${store.persons.length} / ${MAX_PERSONEN} Personen</span>
+    <div class="page-head">
+      <div>
+        <h1>Personen</h1>
+        <p class="sub">Bis zu ${MAX_PERSONEN} Familienmitglieder mit eigenem Beihilfesatz, Vertrag und Bausteinen.</p>
+      </div>
+      <div class="page-actions">
+        <span class="muted small">${store.persons.length} / ${MAX_PERSONEN}</span>
+        <button class="primary" data-action="person-neu" ${store.persons.length >= MAX_PERSONEN ? "disabled" : ""}>+ Person anlegen</button>
+      </div>
     </div>`;
 
   if (!store.persons.length) {
@@ -461,8 +467,8 @@ function viewPersonen() {
       b.aktiv && (!p.bausteinAktiv || p.bausteinAktiv[b.id] !== false));
     const nRechnungen = store.rechnungen.filter(r => r.personId === p.id).length;
     return `<div class="panel">
-      <div class="toolbar" style="margin:0 0 8px">
-        <h2 class="mt0" style="margin:0"><span class="person-dot" style="background:${personFarbe(p)}"></span>${esc(p.name)}</h2>
+      <div class="panel-head">
+        <h2><span class="person-dot" style="background:${personFarbe(p)}"></span>${esc(p.name)}</h2>
         <span class="badge b-info">${esc(rolleName(p.rolle))}</span>
         <span class="badge b-mut">Beihilfesatz ${p.beihilfesatz} %</span>
         <div class="spacer"></div>
@@ -480,7 +486,7 @@ function viewPersonen() {
         ${bausteine.length ? bausteine.map(b => `<span class="chip">✓ ${esc(b.name)} · ${b.satz} %</span>`).join("")
                            : '<span class="badge b-warn">keine aktiven Bausteine</span>'}
       </div>` : ""}
-      ${p.notiz ? `<div class="small muted" style="margin-top:6px">📝 ${esc(p.notiz)}</div>` : ""}
+      ${p.notiz ? `<div class="small muted" style="margin-top:6px">Notiz: ${esc(p.notiz)}</div>` : ""}
     </div>`;
   }).join("");
   return html;
@@ -571,9 +577,13 @@ function personModal(person) {
 
 function viewVertraege() {
   let html = `
-    <h1>Verträge</h1>
-    <p class="sub">PKV-Verträge mit ihren Tarif-Bausteinen. Bausteine lassen sich hier global und zusätzlich pro Person aktivieren/deaktivieren.</p>
-    <div class="toolbar"><button class="primary" data-action="vertrag-neu">+ Vertrag anlegen</button></div>`;
+    <div class="page-head">
+      <div>
+        <h1>Verträge</h1>
+        <p class="sub">PKV-Verträge mit ihren Tarif-Bausteinen. Bausteine lassen sich hier global und zusätzlich pro Person aktivieren/deaktivieren.</p>
+      </div>
+      <div class="page-actions"><button class="primary" data-action="vertrag-neu">+ Vertrag anlegen</button></div>
+    </div>`;
 
   if (!store.vertraege.length) {
     html += `<div class="panel"><div class="empty">Noch keine Verträge angelegt.</div></div>`;
@@ -583,8 +593,8 @@ function viewVertraege() {
   html += store.vertraege.map(v => {
     const nutzer = store.persons.filter(p => p.vertragId === v.id);
     return `<div class="panel">
-      <div class="toolbar" style="margin:0 0 8px">
-        <h2 class="mt0" style="margin:0">📄 ${esc(v.name)}</h2>
+      <div class="panel-head">
+        <h2>${esc(v.name)}</h2>
         ${v.versicherer ? `<span class="badge b-info">${esc(v.versicherer)}</span>` : ""}
         ${v.tarif ? `<span class="badge b-mut">Tarif ${esc(v.tarif)}</span>` : ""}
         <div class="spacer"></div>
@@ -595,7 +605,7 @@ function viewVertraege() {
         ${v.gueltigAb ? "gültig ab " + fmtDate(v.gueltigAb) + " · " : ""}
         genutzt von: ${nutzer.length ? nutzer.map(p => esc(p.name)).join(", ") : "niemandem"}
       </div>
-      ${v.notiz ? `<div class="small muted" style="margin-top:4px">📝 ${esc(v.notiz)}</div>` : ""}
+      ${v.notiz ? `<div class="small muted" style="margin-top:4px">Notiz: ${esc(v.notiz)}</div>` : ""}
       <h3>Bausteine</h3>
       <div class="table-wrap"><table>
         <thead><tr><th>Aktiv</th><th>Baustein</th><th>Leistungsbereiche</th>
@@ -603,8 +613,8 @@ function viewVertraege() {
         <tbody>
         ${(v.bausteine || []).map(b => `<tr>
           <td><input type="checkbox" data-action="baustein-aktiv" data-vertrag="${v.id}" data-id="${b.id}" ${b.aktiv ? "checked" : ""}></td>
-          <td><b>${esc(b.name)}</b>${b.notiz ? `<div class="small muted">${esc(b.notiz)}</div>` : ""}</td>
-          <td>${(b.kategorien || []).map(katName).map(esc).join(", ") || "–"}</td>
+          <td style="min-width:220px"><b>${esc(b.name)}</b>${b.notiz ? `<div class="small muted">${esc(b.notiz)}</div>` : ""}</td>
+          <td style="min-width:220px">${(b.kategorien || []).map(katName).map(esc).join(", ") || "–"}</td>
           <td class="num">${b.satz} %</td>
           <td class="num">${b.jahresLimit > 0 ? fmtEUR(b.jahresLimit) + "/Jahr" : "–"}</td>
           <td style="white-space:nowrap">
@@ -723,22 +733,25 @@ function viewRechnungen() {
   if (filterStatus) liste = liste.filter(r => (analysen.get(r.id) || {}).status === filterStatus);
 
   let html = `
-    <h1>Rechnungen</h1>
-    <p class="sub">Arztrechnungen erfassen, Erstattungen von Beihilfe und PKV gegenprüfen.</p>
-    <div class="toolbar">
-      <button class="primary" data-action="rechnung-neu">+ Rechnung erfassen</button>
-      <div class="spacer"></div>
-      <select id="filter-person" class="w-130" style="width:auto">
-        <option value="">Alle Personen</option>
-        ${store.persons.map(p => `<option value="${p.id}" ${p.id === filterPerson ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
-      </select>
-      <select id="filter-status" style="width:auto">
-        <option value="">Alle Status</option>
-        <option value="offen"   ${filterStatus === "offen" ? "selected" : ""}>offen</option>
-        <option value="fehlt"   ${filterStatus === "fehlt" ? "selected" : ""}>Erstattung fehlt</option>
-        <option value="pruefen" ${filterStatus === "pruefen" ? "selected" : ""}>prüfen</option>
-        <option value="ok"      ${filterStatus === "ok" ? "selected" : ""}>vollständig</option>
-      </select>
+    <div class="page-head">
+      <div>
+        <h1>Rechnungen</h1>
+        <p class="sub">Arztrechnungen erfassen, Erstattungen von Beihilfe und PKV gegenprüfen.</p>
+      </div>
+      <div class="page-actions">
+        <select id="filter-person" style="width:auto">
+          <option value="">Alle Personen</option>
+          ${store.persons.map(p => `<option value="${p.id}" ${p.id === filterPerson ? "selected" : ""}>${esc(p.name)}</option>`).join("")}
+        </select>
+        <select id="filter-status" style="width:auto">
+          <option value="">Alle Status</option>
+          <option value="offen"   ${filterStatus === "offen" ? "selected" : ""}>offen</option>
+          <option value="fehlt"   ${filterStatus === "fehlt" ? "selected" : ""}>Erstattung fehlt</option>
+          <option value="pruefen" ${filterStatus === "pruefen" ? "selected" : ""}>prüfen</option>
+          <option value="ok"      ${filterStatus === "ok" ? "selected" : ""}>vollständig</option>
+        </select>
+        <button class="primary" data-action="rechnung-neu">+ Rechnung erfassen</button>
+      </div>
     </div>`;
 
   if (!liste.length) {
@@ -837,12 +850,15 @@ function viewRechnungDetail(id) {
   const quote = a.sumBetrag > 0 ? Math.min(100, (a.istBeihilfe + a.istPKV) / a.sumBetrag * 100) : 0;
 
   return `
-    <p><a href="#/rechnungen">← alle Rechnungen</a></p>
-    <div class="toolbar" style="margin-top:4px">
-      <h1 style="margin:0">Rechnung ${esc(r.nummer || "")}</h1>
-      ${statusBadge(a.status)}
-      <div class="spacer"></div>
-      <button class="danger" data-action="rechnung-del" data-id="${r.id}">Rechnung löschen</button>
+    <a class="backlink" href="#/rechnungen">← Alle Rechnungen</a>
+    <div class="page-head">
+      <div>
+        <h1>Rechnung ${esc(r.nummer || "")} ${statusBadge(a.status)}</h1>
+        <p class="sub">${esc(r.arzt || "Ohne Leistungserbringer")} · ${fmtDate(r.datum)} · ${p ? esc(p.name) : "?"}</p>
+      </div>
+      <div class="page-actions">
+        <button class="danger" data-action="rechnung-del" data-id="${r.id}">Rechnung löschen</button>
+      </div>
     </div>
 
     <div class="panel">
@@ -872,7 +888,7 @@ function viewRechnungDetail(id) {
 
     <div class="panel">
       <h2>Rechnungspositionen</h2>
-      <p class="sub mt0 small">„Ist B/PKV“ optional je Position ausfüllen, um Deltas genau zu verorten. Erwartungswerte ergeben sich aus Beihilfesatz (${p ? p.beihilfesatz : "?"} %) und den aktiven Vertragsbausteinen.</p>
+      <p class="panel-sub">„Ist B/PKV“ optional je Position ausfüllen, um Deltas genau zu verorten. Erwartungswerte ergeben sich aus Beihilfesatz (${p ? p.beihilfesatz : "?"} %) und den aktiven Vertragsbausteinen.</p>
       <div class="table-wrap"><table>
         <thead><tr>
           <th>Datum</th><th>Ziffer</th><th>Beschreibung</th><th>Kategorie</th>
@@ -895,7 +911,7 @@ function viewRechnungDetail(id) {
 
     <div class="panel">
       <h2>Erhaltene Erstattungen</h2>
-      <p class="sub mt0 small">Auszahlungen laut Beihilfebescheid und PKV-Leistungsabrechnung eintragen.</p>
+      <p class="panel-sub">Auszahlungen laut Beihilfebescheid und PKV-Leistungsabrechnung eintragen.</p>
       <div class="table-wrap"><table>
         <thead><tr><th>Quelle</th><th>Datum</th><th class="num">Betrag</th><th>Bemerkung</th><th></th></tr></thead>
         <tbody>${erstRows || `<tr><td colspan="5" class="muted">Noch keine Erstattungen erfasst.</td></tr>`}</tbody>
@@ -936,10 +952,10 @@ function viewRechnungDetail(id) {
 
     <div class="panel">
       <h2>Beleg / Anhänge</h2>
-      <p class="sub mt0 small">Original-Rechnung (PDF oder Foto) hereinladen – wird lokal im Browser gespeichert.</p>
+      <p class="panel-sub">Original-Rechnung (PDF oder Foto) hereinladen – wird lokal im Browser gespeichert.</p>
       <input type="file" id="anhang-file" accept="application/pdf,image/*" multiple>
       <ul class="attach-list" id="anhang-liste">
-        ${(r.anhaenge || []).map(x => `<li>📎 <a href="#" data-action="anhang-open" data-id="${x.id}">${esc(x.name)}</a>
+        ${(r.anhaenge || []).map(x => `<li><a href="#" data-action="anhang-open" data-id="${x.id}">${esc(x.name)}</a>
           <span class="muted small">${x.size ? (x.size / 1024).toFixed(0) + " kB" : ""}</span>
           <button class="small danger" data-action="anhang-del" data-id="${x.id}">✕</button></li>`).join("")}
       </ul>
@@ -973,8 +989,10 @@ function afterRechnungRender(id) {
 function viewEinstellungen() {
   const land = BUNDESLAENDER.find(b => b.id === store.settings.bundesland);
   return `
-    <h1>Einstellungen</h1>
-    <p class="sub">Beihilfe-Träger, Datensicherung.</p>
+    <div class="page-head"><div>
+      <h1>Einstellungen</h1>
+      <p class="sub">Beihilfe-Träger, Datensicherung.</p>
+    </div></div>
     <div class="panel">
       <h2>Beihilfe</h2>
       <label class="f" style="max-width:420px"><span>Bundesland / Dienstherr</span>
