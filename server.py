@@ -12,6 +12,8 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from heizung.berechnung import berechnen as heizung_berechnen
+from heizung.report import report_pdf as heizung_report_pdf
 from scanner.dxf_export import export_dxf
 from scanner.vectorize import VectorizeParams, decode_image, pdf_to_image, vectorize
 
@@ -67,6 +69,35 @@ async def api_export_dxf(project: dict):
         media_type="application/dxf",
         headers={"Content-Disposition": 'attachment; filename="plan.dxf"'},
     )
+
+
+@app.post("/api/heizung/berechnen")
+async def api_heizung_berechnen(eingabe: dict):
+    try:
+        return JSONResponse(heizung_berechnen(eingabe))
+    except Exception as exc:
+        return JSONResponse({"error": f"Berechnung fehlgeschlagen: {exc}"},
+                            status_code=400)
+
+
+@app.post("/api/heizung/report")
+async def api_heizung_report(eingabe: dict):
+    try:
+        result = heizung_berechnen(eingabe)
+        pdf = heizung_report_pdf(result, eingabe)
+    except Exception as exc:
+        return JSONResponse({"error": f"Bericht fehlgeschlagen: {exc}"},
+                            status_code=400)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="heizungsbericht.pdf"'},
+    )
+
+
+@app.get("/heizung")
+async def heizung_seite():
+    return FileResponse(ROOT / "static" / "heizung.html")
 
 
 @app.get("/")

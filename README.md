@@ -1,5 +1,8 @@
 # 📐 Architekturscanner
 
+> Enthält zusätzlich den **🔥 Heizungsrechner** unter `http://localhost:8000/heizung`
+> – siehe [Abschnitt unten](#-heizungsrechner).
+
 Digitalisiert abfotografierte oder gescannte Altpläne (Foto/PDF) zu **exakten,
 geraden, maßstäblichen CAD-Zeichnungen** – mit editierbaren Maßketten,
 Layern und DXF-Export (AutoCAD/DWG-kompatibel).
@@ -88,3 +91,48 @@ Dann <http://localhost:8000> öffnen.
 - Vektorisierungs-Parameter (Mindestlänge, Lückenschluss, Winkeltoleranz)
   sind in der Seitenleiste einstellbar; „Neu vektorisieren“ wendet sie an,
   ohne eigene Zeichnungen/Maßketten zu verlieren.
+
+---
+
+# 🔥 Heizungsrechner
+
+Berechnet, **welche Heizung sich für ein konkretes Haus lohnt** – als
+Web-Oberfläche unter <http://localhost:8000/heizung> (gleicher Server,
+`python server.py`).
+
+## Eingaben
+
+- **Gebäude**: Baujahr, Wohnfläche, Etagen, Raumhöhe, Personen – daraus werden
+  beheiztes Volumen, Gebäudekubatur und Wärmehüllfläche berechnet.
+- **Dach**: Dachform (Satteldach, Flachdach, Pult-, Walm-, Mansard-, Zeltdach)
+  und Dämmzustand.
+- **Mauerwerk**: Wandaufbau (massiv, zweischalig, Beton, Fachwerk, Holz) und
+  Dämmzustand, Fensterqualität, Keller/Bodenplatte samt Dämmung.
+- **Bestandsheizung**: Heizart (Öl, Gas, Wärmepumpe, Pellets, Fernwärme,
+  Nachtspeicher) und Baujahr der Anlage.
+- **Räume**: je Raum Fläche und Wärmeübergabe (Fußbodenheizung, Heizkörper,
+  Wand-/Deckenheizung, Konvektor) – daraus ergibt sich die mittlere
+  Vorlauftemperatur und damit insbesondere die Wärmepumpen-Effizienz (JAZ).
+- **Förderung**: BEG-Boni (Klimageschwindigkeit, Einkommen) zuschaltbar.
+
+## Ergebnisse
+
+- **Gebäudeanalyse**: Heizlast (kW), Jahres-Heizwärmebedarf (kWh/a),
+  spezifischer Bedarf, Aufteilung der Wärmeverluste (Wände, Dach, Fenster,
+  Boden, Lüftung) – vereinfachtes Hüllflächen-/Gradtagzahlverfahren.
+- **Systemvergleich**: Luft-/Sole-Wärmepumpe, Gas- und Öl-Brennwert, Pellets,
+  Fernwärme, Stromdirekt – Investition, Förderung, Energie- und Vollkosten,
+  CO₂, kumulierte Kosten über 20 Jahre und **Amortisation gegenüber dem
+  Weiterbetrieb der Bestandsanlage** (interaktive Charts mit Tooltip).
+- **Heizart-Vergleich**: Ist-Zustand vs. „alles Heizkörper“ vs. „alles
+  Fußbodenheizung“ – Effekt der Vorlauftemperatur auf JAZ und Kosten.
+- **Maßnahmen**: Dach-/Fassaden-/Kellerdeckendämmung, Fenstertausch,
+  hydraulischer Abgleich, Fußbodenheizungs-Nachrüstung – jeweils Kosten,
+  Ersparnis pro Jahr und Amortisationszeit.
+- **Empfehlung**: bester Wärmeerzeuger + beste Wärmeübergabe.
+- **📄 PDF-Bericht**: vierseitiger Bericht mit allen Kennzahlen, Charts,
+  Tabellen, Empfehlung und Rentabilitätsbetrachtung
+  (`POST /api/heizung/report`).
+
+Alle Preise/Förderwerte sind Richtwerte (Stand 2026); die Berechnung ersetzt
+keine Heizlastberechnung nach DIN EN 12831 oder GEG-Energieberatung.

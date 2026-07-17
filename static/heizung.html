@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heizungsrechner – Effizienz &amp; Rentabilität</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔥</text></svg>">
+<link rel="stylesheet" href="/static/heizung.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <h1>🔥 Heizungsrechner</h1>
+    <span class="sub">Welche Heizung lohnt sich? Effizienz, Ersparnis &amp; Amortisation</span>
+    <nav><a href="/">📐 Architekturscanner</a></nav>
+  </div>
+</header>
+
+<main>
+  <!-- ================= Eingabe ================= -->
+  <form id="formular" autocomplete="off">
+    <div class="karten">
+
+      <section class="karte">
+        <h2>🏠 Gebäude</h2>
+        <div class="feldgrid">
+          <label>Baujahr Haus
+            <input type="number" id="g-baujahr" value="1975" min="1850" max="2026">
+          </label>
+          <label>Wohnfläche (m²)
+            <input type="number" id="g-wohnflaeche" value="150" min="20" max="2000">
+          </label>
+          <label>Etagen (beheizt)
+            <input type="number" id="g-etagen" value="2" min="1" max="6">
+          </label>
+          <label>Raumhöhe (m)
+            <input type="number" id="g-raumhoehe" value="2.6" min="2" max="4" step="0.1">
+          </label>
+          <label>Personen im Haushalt
+            <input type="number" id="g-personen" value="3" min="1" max="12">
+          </label>
+        </div>
+        <p class="hinweis" id="masse-hinweis">Beheiztes Volumen und Hüllfläche werden daraus berechnet.</p>
+      </section>
+
+      <section class="karte">
+        <h2>🏘 Dach &amp; Wände</h2>
+        <div class="feldgrid">
+          <label>Dachform
+            <select id="g-dachform">
+              <option value="satteldach">Satteldach</option>
+              <option value="flachdach">Flachdach</option>
+              <option value="pultdach">Pultdach</option>
+              <option value="walmdach">Walmdach</option>
+              <option value="mansarddach">Mansarddach</option>
+              <option value="zeltdach">Zeltdach</option>
+            </select>
+          </label>
+          <label>Dachdämmung
+            <select id="g-dach-daemmung">
+              <option value="keine">Keine / unbekannt</option>
+              <option value="maessig">Mäßig (4–8 cm)</option>
+              <option value="gut">Gut (12–16 cm)</option>
+              <option value="sehr_gut">Sehr gut (&gt; 20 cm / Neubau)</option>
+            </select>
+          </label>
+          <label>Mauerwerk / Wandaufbau
+            <select id="g-wand-aufbau">
+              <option value="massiv">Massiv (Ziegel/Stein)</option>
+              <option value="zweischalig">Zweischalig mit Luftschicht</option>
+              <option value="beton">Beton</option>
+              <option value="fachwerk">Fachwerk</option>
+              <option value="holz">Holzbau</option>
+            </select>
+          </label>
+          <label>Wanddämmung
+            <select id="g-wand-daemmung">
+              <option value="keine">Keine / unbekannt</option>
+              <option value="maessig">Mäßig (4–8 cm)</option>
+              <option value="gut">Gut (12–16 cm)</option>
+              <option value="sehr_gut">Sehr gut (&gt; 20 cm / Neubau)</option>
+            </select>
+          </label>
+          <label>Fenster
+            <select id="g-fenster">
+              <option value="einfach">Einfachverglasung</option>
+              <option value="zweifach_alt" selected>2-fach alt (Isolierglas)</option>
+              <option value="zweifach_neu">2-fach neu (Wärmeschutz)</option>
+              <option value="dreifach">3-fach</option>
+            </select>
+          </label>
+          <label>Keller / Boden
+            <select id="g-keller">
+              <option value="unbeheizt">Unbeheizter Keller</option>
+              <option value="beheizt">Beheizter Keller</option>
+              <option value="bodenplatte">Bodenplatte (kein Keller)</option>
+            </select>
+          </label>
+          <label>Kellerdecken-/Bodendämmung
+            <select id="g-keller-daemmung">
+              <option value="keine">Keine / unbekannt</option>
+              <option value="maessig">Mäßig</option>
+              <option value="gut">Gut</option>
+              <option value="sehr_gut">Sehr gut</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="karte">
+        <h2>♨ Aktuelle Heizungsanlage</h2>
+        <div class="feldgrid">
+          <label>Heizart (Bestand)
+            <select id="b-art">
+              <option value="oel">Ölheizung</option>
+              <option value="gas" selected>Gasheizung</option>
+              <option value="waermepumpe_luft">Luft-Wärmepumpe</option>
+              <option value="waermepumpe_sole">Sole-Wärmepumpe</option>
+              <option value="pellets">Pellet-/Holzheizung</option>
+              <option value="fernwaerme">Fernwärme</option>
+              <option value="nachtspeicher">Nachtspeicher / Strom</option>
+            </select>
+          </label>
+          <label>Baujahr der Anlage
+            <input type="number" id="b-baujahr" value="1998" min="1950" max="2026">
+          </label>
+        </div>
+        <h3>Förderung (BEG)</h3>
+        <label class="check"><input type="checkbox" id="f-klimabonus" checked>
+          Klimageschwindigkeits-Bonus (+20 %, Austausch funktionsfähiger fossiler Heizung)</label>
+        <label class="check"><input type="checkbox" id="f-einkommensbonus">
+          Einkommensbonus (+30 %, zu verst. Haushaltseinkommen &lt; 40.000 €)</label>
+      </section>
+
+      <section class="karte karte-breit">
+        <h2>🚪 Räume &amp; Wärmeübergabe</h2>
+        <p class="hinweis">Welcher Raum wird wie beheizt? Das bestimmt die nötige
+          Vorlauftemperatur – und damit besonders die Effizienz einer Wärmepumpe.</p>
+        <table class="raum-tabelle" id="raum-tabelle">
+          <thead><tr><th>Raum</th><th>Fläche (m²)</th><th>Heizart</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="knopfleiste">
+          <button type="button" class="knopf sekundaer" id="raum-plus">＋ Raum hinzufügen</button>
+          <button type="button" class="knopf sekundaer" id="raum-standard">⌂ Standardräume aus Wohnfläche</button>
+          <span class="hinweis" id="raum-summe"></span>
+        </div>
+      </section>
+    </div>
+
+    <div class="aktionen">
+      <button type="submit" class="knopf primaer" id="btn-berechnen">🧮 Berechnen</button>
+      <button type="button" class="knopf" id="btn-pdf" disabled>📄 PDF-Bericht herunterladen</button>
+      <span id="status" class="hinweis"></span>
+    </div>
+  </form>
+
+  <!-- ================= Ergebnis ================= -->
+  <div id="ergebnis" hidden>
+    <section class="karte empfehlung" id="empfehlung-karte">
+      <h2>✅ Empfehlung</h2>
+      <div class="empfehlung-chips">
+        <div class="chip"><span>Wärmeerzeuger</span><strong id="e-system"></strong></div>
+        <div class="chip"><span>Wärmeübergabe</span><strong id="e-heizart"></strong></div>
+        <div class="chip"><span>Ersparnis vs. Bestand</span><strong id="e-ersparnis"></strong></div>
+        <div class="chip"><span>Amortisation</span><strong id="e-amortisation"></strong></div>
+      </div>
+      <p id="e-text"></p>
+    </section>
+
+    <section class="karte">
+      <h2>📊 Gebäude-Kennzahlen</h2>
+      <div class="kacheln" id="kennzahlen"></div>
+      <h3>Wo die Wärme verloren geht</h3>
+      <div class="chart" id="chart-verluste"></div>
+    </section>
+
+    <section class="karte">
+      <h2>⚖ Vergleich der Wärmeerzeuger</h2>
+      <p class="hinweis">Vollkosten pro Jahr = Energie + Wartung + Investition
+        (abzüglich Förderung) verteilt auf die Lebensdauer. Grün = Empfehlung.</p>
+      <div class="chart" id="chart-vollkosten"></div>
+      <h3>Kumulierte Kosten &amp; Amortisation (20 Jahre)</h3>
+      <p class="hinweis">Wo eine Linie die gestrichelte Bestandslinie schneidet,
+        hat sich die neue Heizung amortisiert.</p>
+      <div class="chart" id="chart-kumuliert"></div>
+      <div class="tabelle-wrap"><table class="daten" id="tab-systeme"></table></div>
+    </section>
+
+    <section class="karte">
+      <h2>🌡 Heizkörper vs. Fußbodenheizung</h2>
+      <div class="tabelle-wrap"><table class="daten" id="tab-heizarten"></table></div>
+      <h3>CO₂-Ausstoß pro Jahr</h3>
+      <div class="chart" id="chart-co2"></div>
+    </section>
+
+    <section class="karte">
+      <h2>🛠 Maßnahmen &amp; Ersparnis</h2>
+      <p class="hinweis">Jährliche Ersparnis bewertet mit Preis und Wirkungsgrad der
+        Bestandsanlage; Dämm-Maßnahmen mit 15 % BEG-Förderung gerechnet.</p>
+      <div class="chart" id="chart-massnahmen"></div>
+      <div class="tabelle-wrap"><table class="daten" id="tab-massnahmen"></table></div>
+    </section>
+
+    <p class="hinweis fussnote">Alle Werte sind überschlägige Richtwerte (Stand 2026,
+      Gradtagzahl-/Hüllflächenverfahren) und ersetzen keine Heizlastberechnung nach
+      DIN EN 12831 oder Energieberatung nach GEG.</p>
+  </div>
+</main>
+
+<div id="tooltip" class="tooltip" hidden></div>
+<script src="/static/heizung.js"></script>
+</body>
+</html>

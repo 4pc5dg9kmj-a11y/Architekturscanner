@@ -1,0 +1,162 @@
+/* Heizungsrechner – Layout & Theme (light + dark) */
+
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --accent: #2a78d6;
+  --accent-weich: #e8f2fc;
+  --good: #0ca30c;
+  --good-text: #006300;
+  --good-weich: #e9f6e9;
+  --s1: #2a78d6; --s2: #008300; --s3: #e87ba4; --s4: #eda100;
+  --s5: #1baf7a; --s6: #eb6834; --s7: #4a3aa7; --s8: #e34948;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+    --accent-weich: #16273c;
+    --good: #0ca30c;
+    --good-text: #0ca30c;
+    --good-weich: #12250f;
+    --s1: #3987e5; --s2: #008300; --s3: #d55181; --s4: #c98500;
+    --s5: #199e70; --s6: #d95926; --s7: #9085e9; --s8: #e66767;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); }
+.topbar-inner {
+  max-width: 1100px; margin: 0 auto; padding: 14px 20px;
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+}
+.topbar h1 { margin: 0; font-size: 20px; }
+.topbar .sub { color: var(--ink2); font-size: 13px; flex: 1; }
+.topbar nav a { color: var(--accent); text-decoration: none; font-size: 13px; }
+
+main { max-width: 1100px; margin: 0 auto; padding: 18px 20px 60px; }
+
+.karten { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.karte {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 18px; margin-bottom: 14px;
+}
+.karten .karte { margin-bottom: 0; }
+.karte-breit { grid-column: 1 / -1; }
+.karte h2 { margin: 0 0 10px; font-size: 15.5px; }
+.karte h3 { margin: 16px 0 6px; font-size: 13.5px; color: var(--ink2); }
+
+.feldgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+label { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--ink2); }
+input, select {
+  font: inherit; color: var(--ink); background: var(--page);
+  border: 1px solid var(--border); border-radius: 6px; padding: 7px 9px;
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+label.check { flex-direction: row; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; }
+label.check input { width: 16px; height: 16px; }
+
+.hinweis { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
+.fussnote { margin-top: 18px; }
+
+.raum-tabelle { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.raum-tabelle th {
+  text-align: left; font-size: 12px; color: var(--muted);
+  font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--grid);
+}
+.raum-tabelle td { padding: 4px 6px; }
+.raum-tabelle input, .raum-tabelle select { width: 100%; padding: 6px 8px; }
+.raum-tabelle td:nth-child(2) { width: 120px; }
+.raum-tabelle td:nth-child(3) { width: 190px; }
+.raum-tabelle td:last-child { width: 36px; text-align: center; }
+.raum-loeschen {
+  border: none; background: none; color: var(--muted);
+  font-size: 15px; cursor: pointer; padding: 4px;
+}
+.raum-loeschen:hover { color: var(--s8); }
+
+.knopfleiste { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.knopf {
+  font: inherit; font-size: 14px; padding: 9px 16px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface);
+  color: var(--ink); cursor: pointer;
+}
+.knopf:hover { border-color: var(--accent); }
+.knopf.primaer { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.knopf.primaer:hover { filter: brightness(1.08); }
+.knopf.sekundaer { font-size: 13px; padding: 7px 12px; }
+.knopf:disabled { opacity: 0.5; cursor: not-allowed; }
+.aktionen { display: flex; gap: 12px; align-items: center; margin: 16px 0 26px; flex-wrap: wrap; }
+
+/* --- Ergebnis --- */
+.empfehlung { border-left: 4px solid var(--good); }
+.empfehlung-chips { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
+.chip {
+  background: var(--good-weich); border-radius: 8px; padding: 8px 14px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.chip span { font-size: 11.5px; color: var(--ink2); }
+.chip strong { font-size: 15px; color: var(--good-text); }
+#e-text { color: var(--ink2); margin: 4px 0 0; }
+
+.kacheln { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kachel { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.kachel .k-label { font-size: 11.5px; color: var(--muted); }
+.kachel .k-wert { font-size: 18px; font-weight: 600; }
+.kachel .k-einheit { font-size: 12px; color: var(--ink2); font-weight: 400; }
+
+.chart { margin: 10px 0 4px; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+.legende { display: flex; gap: 14px; flex-wrap: wrap; margin: 2px 0 6px; font-size: 12.5px; color: var(--ink2); }
+.legende .l-eintrag { display: flex; align-items: center; gap: 6px; }
+.legende .l-farbe { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+
+.tabelle-wrap { overflow-x: auto; margin-top: 12px; }
+table.daten { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.daten th {
+  text-align: right; font-weight: 600; color: var(--ink2); font-size: 12px;
+  padding: 6px 8px; border-bottom: 1px solid var(--baseline); white-space: nowrap;
+}
+table.daten th:first-child, table.daten td:first-child { text-align: left; }
+table.daten td {
+  padding: 6px 8px; border-bottom: 1px solid var(--grid);
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+table.daten tr.best td { background: var(--good-weich); font-weight: 600; }
+
+.tooltip {
+  position: fixed; z-index: 10; pointer-events: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  padding: 8px 11px; font-size: 12.5px; color: var(--ink);
+  max-width: 280px;
+}
+.tooltip .t-titel { font-weight: 600; margin-bottom: 3px; }
+.tooltip .t-zeile { display: flex; gap: 8px; justify-content: space-between; color: var(--ink2); }
+.tooltip .t-zeile strong { color: var(--ink); font-variant-numeric: tabular-nums; }
