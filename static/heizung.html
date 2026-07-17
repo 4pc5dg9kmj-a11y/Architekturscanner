@@ -146,6 +146,56 @@
           <span class="hinweis" id="raum-summe"></span>
         </div>
       </section>
+      <section class="karte karte-breit">
+        <details id="preise-details">
+          <summary><h2>💶 Preise &amp; Baukosten anpassen (optional)</h2></summary>
+          <p class="hinweis">Leere Felder verwenden die Richtwerte (Stand 2026).
+            Alle Kosten fließen in Vollkosten, Amortisation und Rentabilität ein.</p>
+          <h3>Energiepreise (ct/kWh)</h3>
+          <div class="feldgrid">
+            <label>Strom Wärmepumpen-Tarif
+              <input type="number" id="p-strom-wp" placeholder="26" min="1" step="0.1"></label>
+            <label>Strom Haushalt
+              <input type="number" id="p-strom" placeholder="32" min="1" step="0.1"></label>
+            <label>Erdgas
+              <input type="number" id="p-gas" placeholder="11,5" min="1" step="0.1"></label>
+            <label>Heizöl
+              <input type="number" id="p-oel" placeholder="11,3" min="1" step="0.1"></label>
+            <label>Pellets
+              <input type="number" id="p-pellets" placeholder="8" min="1" step="0.1"></label>
+            <label>Fernwärme
+              <input type="number" id="p-fernwaerme" placeholder="15" min="1" step="0.1"></label>
+          </div>
+          <h3>Investition gesamt je System (€, inkl. Einbau – leer = automatisch aus Heizlast &amp; Umfeld berechnet)</h3>
+          <div class="feldgrid">
+            <label>Luft-Wärmepumpe
+              <input type="number" id="i-waermepumpe_luft" placeholder="auto" min="1000" step="500"></label>
+            <label>Sole-Wärmepumpe
+              <input type="number" id="i-waermepumpe_sole" placeholder="auto" min="1000" step="500"></label>
+            <label>Gas-Brennwert
+              <input type="number" id="i-gas_brennwert" placeholder="auto" min="1000" step="500"></label>
+            <label>Öl-Brennwert
+              <input type="number" id="i-oel_brennwert" placeholder="auto" min="1000" step="500"></label>
+            <label>Pelletheizung
+              <input type="number" id="i-pellets" placeholder="auto" min="1000" step="500"></label>
+            <label>Fernwärme
+              <input type="number" id="i-fernwaerme" placeholder="auto" min="1000" step="500"></label>
+          </div>
+          <h3>Baukosten-Sätze (€/m²)</h3>
+          <div class="feldgrid">
+            <label>Fußbodenheizung nachrüsten
+              <input type="number" id="bk-fbh_m2" placeholder="95" min="10" step="5"></label>
+            <label>Dachdämmung
+              <input type="number" id="bk-dach_m2" placeholder="190" min="10" step="5"></label>
+            <label>Fassadendämmung (WDVS)
+              <input type="number" id="bk-fassade_m2" placeholder="180" min="10" step="5"></label>
+            <label>Fenstertausch
+              <input type="number" id="bk-fenster_m2" placeholder="750" min="50" step="10"></label>
+            <label>Kellerdeckendämmung
+              <input type="number" id="bk-kellerdecke_m2" placeholder="80" min="10" step="5"></label>
+          </div>
+        </details>
+      </section>
     </div>
 
     <div class="aktionen">
@@ -185,6 +235,16 @@
         hat sich die neue Heizung amortisiert.</p>
       <div class="chart" id="chart-kumuliert"></div>
       <div class="tabelle-wrap"><table class="daten" id="tab-systeme"></table></div>
+    </section>
+
+    <section class="karte optimum" id="rentabilitaet-karte">
+      <h2>🎯 Rentabilität &amp; optimale Variante</h2>
+      <p class="hinweis" id="r-definition"></p>
+      <div class="empfehlung-chips" id="optimum-chips"></div>
+      <p id="r-referenz" class="hinweis"></p>
+      <h3>Nettovorteil der Varianten über 20 Jahre (★ = Optimum)</h3>
+      <div class="chart" id="chart-rentabilitaet"></div>
+      <div class="tabelle-wrap"><table class="daten" id="tab-rentabilitaet"></table></div>
     </section>
 
     <section class="karte">

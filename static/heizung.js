@@ -70,7 +70,25 @@ function eingabeSammeln() {
     heizart: tr.querySelector(".r-heizart").value,
   })).filter((r) => r.flaeche > 0);
 
+  // Preis-/Kosten-Overrides: nur gefuellte Felder senden
+  const wert = (id) => {
+    const e = $(id);
+    if (!e || e.value === "") return null;
+    const v = Number(String(e.value).replace(",", "."));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  };
+  const preise = { energie: {}, invest: {}, baukosten: {} };
+  [["strom_wp", "#p-strom-wp"], ["strom", "#p-strom"], ["gas", "#p-gas"],
+   ["oel", "#p-oel"], ["pellets", "#p-pellets"], ["fernwaerme", "#p-fernwaerme"]]
+    .forEach(([k, id]) => { const v = wert(id); if (v != null) preise.energie[k] = v / 100; });
+  ["waermepumpe_luft", "waermepumpe_sole", "gas_brennwert", "oel_brennwert",
+   "pellets", "fernwaerme"]
+    .forEach((k) => { const v = wert("#i-" + k); if (v != null) preise.invest[k] = v; });
+  ["fbh_m2", "dach_m2", "fassade_m2", "fenster_m2", "kellerdecke_m2"]
+    .forEach((k) => { const v = wert("#bk-" + k); if (v != null) preise.baukosten[k] = v; });
+
   return {
+    preise,
     gebaeude: {
       baujahr: Number($("#g-baujahr").value),
       wohnflaeche: Number($("#g-wohnflaeche").value),
@@ -193,8 +211,10 @@ function hBarChart(container, items, { einheit = "", xLabel = "" } = {}) {
 }
 
 /* Liniendiagramm kumulierte Kosten mit Crosshair-Tooltip.
-   serien: [{label, farbe, werte[], gestrichelt}] – werte[j] = Jahr j */
-function lineChart(container, serien, { yEinheit = "€" } = {}) {
+   serien: [{label, farbe, werte[], gestrichelt}] – werte[j] = Jahr j.
+   breakEvenGegen: Index der Referenzserie (Bestand) – Schnittpunkte werden
+   als Amortisationspunkte markiert. */
+function lineChart(container, serien, { breakEvenGegen = null } = {}) {
   container.innerHTML = "";
   // Legende (immer vorhanden bei >= 2 Serien)
   const legende = document.createElement("div");
@@ -244,6 +264,18 @@ function lineChart(container, serien, { yEinheit = "€" } = {}) {
       ...(s.gestrichelt ? { "stroke-dasharray": "6 5" } : {}),
     }, svg);
   });
+
+  // Amortisationspunkte: erster Schnitt mit der Referenzserie (Ring in Surface-Farbe)
+  if (breakEvenGegen != null) {
+    const ref = serien[breakEvenGegen].werte;
+    serien.forEach((s, i) => {
+      if (i === breakEvenGegen) return;
+      const j = s.werte.findIndex((v, jj) => jj > 0 && v <= ref[jj]);
+      if (j < 1) return;
+      el("circle", { cx: x(j), cy: y(s.werte[j]), r: 5, fill: s.farbe,
+                     stroke: css("--surface"), "stroke-width": 2 }, svg);
+    });
+  }
 
   // Crosshair + Tooltip
   const cursor = el("line", { y1: padT, y2: H - padB, stroke: css("--baseline"),
@@ -319,7 +351,7 @@ function ergebnisRendern(res) {
         <div class="t-zeile"><span>Verlustleistung</span><strong>${zahl(v.watt_pro_k, 1)} W/K</strong></div>`,
     })), { xLabel: "Anteil an den Wärmeverlusten (%)" });
 
-  // Vollkosten
+  // Vollkosten (Tooltip inkl. Baukosten-Aufschlüsselung)
   hBarChart($("#chart-vollkosten"),
     res.systeme.map((s) => ({
       label: s.label, wert: s.vollkosten_jahr,
@@ -329,17 +361,23 @@ function ergebnisRendern(res) {
         <div class="t-zeile"><span>Effizienz</span><strong>${s.effizienz_text}</strong></div>
         <div class="t-zeile"><span>Energie</span><strong>${eur(s.energiekosten_jahr)}/a</strong></div>
         <div class="t-zeile"><span>Wartung</span><strong>${eur(s.wartung)}/a</strong></div>
-        <div class="t-zeile"><span>Invest (nach Förderung)</span><strong>${eur(s.invest_netto)}</strong></div>
-        <div class="t-zeile"><span>Vollkosten</span><strong>${eur(s.vollkosten_jahr)}/a</strong></div>`,
+        <div style="margin-top:5px;color:var(--muted)">Bau-/Investitionskosten:</div>` +
+        Object.entries(s.invest_komponenten).map(([k, v]) =>
+          `<div class="t-zeile"><span>${k}</span><strong>${eur(v)}</strong></div>`).join("") +
+        `<div class="t-zeile"><span><b>Summe</b></span><strong>${eur(s.invest)}</strong></div>
+        <div class="t-zeile"><span>Förderung</span><strong>−${eur(s.foerderung)}</strong></div>
+        <div class="t-zeile"><span>Invest netto</span><strong>${eur(s.invest_netto)}</strong></div>`,
     })), { xLabel: "Vollkosten pro Jahr (€)" });
 
-  // Kumulierte Kosten
+  // Kumulierte Kosten (mit markierten Amortisationspunkten)
   const auswahl = res.systeme.filter((s) => s.key !== "strom_direkt").slice(0, 5);
   lineChart($("#chart-kumuliert"), [
     { label: `Bestand: ${bestand.label} (${bestand.baujahr})`, farbe: css("--muted"),
       werte: bestand.kostenverlauf, gestrichelt: true },
     ...auswahl.map((s, i) => ({ label: s.label, farbe: S[i % S.length], werte: s.kostenverlauf })),
-  ]);
+  ], { breakEvenGegen: 0 });
+
+  rentabilitaetRendern(res);
 
   // Systemtabelle
   $("#tab-systeme").innerHTML =
@@ -405,6 +443,71 @@ function ergebnisRendern(res) {
         <td>${eur(m.ersparnis_euro)}</td>
         <td>${m.ersparnis_kwh ? zahl(m.ersparnis_kwh) : "–"}</td>
         <td>${m.amortisation != null ? zahl(m.amortisation, 1) + " J." : "> 20 J."}</td>
+      </tr>`).join("") + "</tbody>";
+}
+
+/* ==================== Rentabilität & Optimum ==================== */
+
+const SYSTEM_KURZ = {
+  waermepumpe_luft: "Luft-WP", waermepumpe_sole: "Sole-WP",
+  gas_brennwert: "Gas", oel_brennwert: "Öl", pellets: "Pellets",
+  fernwaerme: "Fernwärme", strom_direkt: "Strom",
+};
+
+function varianteKurz(v) {
+  let s = SYSTEM_KURZ[v.system_key] || v.system;
+  s += v.uebergabe_key === "fbh" ? " · FBH" : " · Ist-Übergabe";
+  if (v.paket_key !== "ohne") s += " + Dämmung";
+  return s;
+}
+
+function rentabilitaetRendern(res) {
+  const rent = res.rentabilitaet;
+  if (!rent) return;
+  const o = rent.optimum;
+  $("#r-definition").textContent = rent.definition;
+  $("#r-referenz").textContent = "Referenz („nichts tun“): " + rent.referenz +
+    ` · ${rent.anzahl_varianten} Varianten verglichen` +
+    (rent.daemmpaket.length ? ` · Dämmpaket: ${rent.daemmpaket.join(", ")}` : "");
+
+  const chip = (l, w) => `<div class="chip"><span>${l}</span><strong>${w}</strong></div>`;
+  $("#optimum-chips").innerHTML =
+    chip("★ Optimale Variante", varianteKurz(o)) +
+    chip("Investition gesamt", eur(o.invest_gesamt)) +
+    chip("Ersparnis", eur(o.ersparnis_jahr) + "/Jahr") +
+    chip("Amortisation", o.amortisation != null ? "≈ " + o.amortisation + " Jahre" : "> 20 J.") +
+    chip("Nettovorteil 20 J.", eur(o.netto_20a)) +
+    chip("Rendite", (o.rendite * 100).toFixed(1).replace(".", ",") + " %/Jahr");
+
+  const S = SERIEN();
+  hBarChart($("#chart-rentabilitaet"),
+    rent.varianten.slice(0, 8).map((v) => ({
+      label: (v.ist_optimum ? "★ " : "") + varianteKurz(v),
+      wert: Math.max(0, v.netto_20a),
+      farbe: v.ist_optimum ? css("--good") : S[0],
+      note: eur(v.netto_20a) +
+        (v.amortisation != null ? " · amort. " + v.amortisation + " J." : ""),
+      tooltipHtml: `<div class="t-titel">${v.label}</div>
+        <div class="t-zeile"><span>Effizienz</span><strong>${v.effizienz_text}</strong></div>
+        <div class="t-zeile"><span>Anlage (nach Förderung)</span><strong>${eur(v.invest_anlage)}</strong></div>
+        ${v.kosten_fbh ? `<div class="t-zeile"><span>Fußbodenheizung</span><strong>${eur(v.kosten_fbh)}</strong></div>` : ""}
+        ${v.kosten_daemmung ? `<div class="t-zeile"><span>Dämmpaket</span><strong>${eur(v.kosten_daemmung)}</strong></div>` : ""}
+        <div class="t-zeile"><span>Investition gesamt</span><strong>${eur(v.invest_gesamt)}</strong></div>
+        <div class="t-zeile"><span>Ersparnis</span><strong>${eur(v.ersparnis_jahr)}/a</strong></div>
+        <div class="t-zeile"><span>Nettovorteil 20 J.</span><strong>${eur(v.netto_20a)}</strong></div>
+        <div class="t-zeile"><span>Rendite</span><strong>${(v.rendite * 100).toFixed(1)} %/a</strong></div>`,
+    })), { xLabel: "Nettovorteil gegenüber Weiterbetrieb (€ über 20 Jahre)" });
+
+  $("#tab-rentabilitaet").innerHTML =
+    `<thead><tr><th>Variante</th><th>Invest gesamt</th><th>Ersparnis €/a</th>
+      <th>Amortisation</th><th>Nettovorteil 20 J.</th><th>Rendite %/a</th></tr></thead><tbody>` +
+    rent.varianten.map((v) => `
+      <tr class="${v.ist_optimum ? "best" : ""}">
+        <td>${v.ist_optimum ? "★ " : ""}${v.label}</td>
+        <td>${eur(v.invest_gesamt)}</td><td>${eur(v.ersparnis_jahr)}</td>
+        <td>${v.amortisation != null ? "≈ " + v.amortisation + " J." : "> 20 J."}</td>
+        <td>${eur(v.netto_20a)}</td>
+        <td>${(v.rendite * 100).toFixed(1).replace(".", ",")}</td>
       </tr>`).join("") + "</tbody>";
 }
 
@@ -480,6 +583,13 @@ function wiederherstellen() {
   setze("#b-art", b.art); setze("#b-baujahr", b.baujahr);
   if (f.klimabonus != null) $("#f-klimabonus").checked = f.klimabonus;
   if (f.einkommensbonus != null) $("#f-einkommensbonus").checked = f.einkommensbonus;
+  const p = daten.preise || {};
+  Object.entries(p.energie || {}).forEach(([k, v]) =>
+    setze("#p-" + k.replace("_", "-"), Math.round(v * 1000) / 10));
+  Object.entries(p.invest || {}).forEach(([k, v]) => setze("#i-" + k, v));
+  Object.entries(p.baukosten || {}).forEach(([k, v]) => setze("#bk-" + k, v));
+  if (Object.keys(p.energie || {}).length || Object.keys(p.invest || {}).length ||
+      Object.keys(p.baukosten || {}).length) $("#preise-details").open = true;
   if (daten.raeume && daten.raeume.length) {
     daten.raeume.forEach((r) => raumZeile(r.name, r.flaeche, r.heizart));
     raumSummeAktualisieren();

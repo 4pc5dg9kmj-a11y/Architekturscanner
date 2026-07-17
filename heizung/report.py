@@ -100,9 +100,17 @@ def chart_kumuliert(res: dict) -> bytes:
     ax.plot(jahre, bestand["kostenverlauf"], color=MUTED, linewidth=2,
             linestyle="--", label=f"Bestand: {bestand['label']} ({bestand['baujahr']})",
             zorder=3)
+    ref = bestand["kostenverlauf"]
     for i, s in enumerate(systeme):
-        ax.plot(jahre, s["kostenverlauf"], color=SERIES[i % len(SERIES)],
-                linewidth=2, solid_capstyle="round", label=s["label"], zorder=4)
+        farbe = SERIES[i % len(SERIES)]
+        ax.plot(jahre, s["kostenverlauf"], color=farbe, linewidth=2,
+                solid_capstyle="round", label=s["label"], zorder=4)
+        # Amortisationspunkt: erster Schnitt mit der Bestandslinie
+        be = next((j for j, (neu, alt) in enumerate(zip(s["kostenverlauf"], ref))
+                   if j > 0 and neu <= alt), None)
+        if be is not None:
+            ax.plot(be, s["kostenverlauf"][be], "o", color=farbe, markersize=7,
+                    markeredgecolor=SURFACE, markeredgewidth=2, zorder=5)
     ax.set_xlim(0, BETRACHTUNG_JAHRE)
     ax.set_xlabel("Jahre ab Einbau", fontsize=9, color=INK2)
     ax.set_ylabel("Kumulierte Kosten (€)", fontsize=9, color=INK2)
@@ -152,6 +160,41 @@ def chart_verluste(res: dict) -> bytes:
                 f"{w:.0f} %", va="center", fontsize=8.5, color=INK2)
     ax.set_xlim(0, max(werte) * 1.15)
     ax.set_xlabel("Anteil an den Wärmeverlusten", fontsize=9, color=INK2)
+    return _fig_png(fig)
+
+
+def _variante_kurz(v: dict) -> str:
+    kurz = {"waermepumpe_luft": "Luft-WP", "waermepumpe_sole": "Sole-WP",
+            "gas_brennwert": "Gas", "oel_brennwert": "Öl", "pellets": "Pellets",
+            "fernwaerme": "Fernwärme", "strom_direkt": "Strom"}
+    s = kurz.get(v["system_key"], v["system"])
+    s += " · FBH" if v["uebergabe_key"] == "fbh" else " · Ist-Übergabe"
+    if v["paket_key"] != "ohne":
+        s += " + Dämmung"
+    return s
+
+
+def chart_rentabilitaet(res: dict) -> bytes:
+    varianten = res["rentabilitaet"]["varianten"][:8]
+    labels = [("★ " if v.get("ist_optimum") else "") + _variante_kurz(v)
+              for v in varianten][::-1]
+    werte = [max(0, v["netto_20a"]) for v in varianten][::-1]
+    farben = [GOOD if v.get("ist_optimum") else ACCENT for v in varianten][::-1]
+    amort = [v["amortisation"] for v in varianten][::-1]
+
+    fig, ax = plt.subplots(figsize=(7.4, 3.4))
+    bars = ax.barh(labels, werte, color=farben, height=0.62, zorder=3)
+    _mpl_style(ax)
+    ax.xaxis.grid(True, color=GRID, linewidth=0.8)
+    ax.yaxis.grid(False)
+    ax.tick_params(axis="y", labelsize=9, labelcolor=INK)
+    for bar, w, a in zip(bars, werte, amort):
+        txt = _eur(w) + (f"  ·  amort. {a} J." if a is not None else "")
+        ax.text(w + max(werte) * 0.012, bar.get_y() + bar.get_height() / 2,
+                txt, va="center", fontsize=8, color=INK2)
+    ax.set_xlim(0, max(werte) * 1.32)
+    ax.set_xlabel("Nettovorteil gegenüber Weiterbetrieb der Bestandsanlage "
+                  f"(€ über {BETRACHTUNG_JAHRE} Jahre)", fontsize=9, color=INK2)
     return _fig_png(fig)
 
 
@@ -340,11 +383,23 @@ def report_pdf(res: dict, eingabe: dict | None = None) -> bytes:
         [52, 20, 22, 22, 24, 26, 12],
         highlight_row=best_idx,
     )
+    pdf.h2("Bau- und Investitionskosten im Detail")
+    pdf.p("Enthalten sind Gerät, Installation, Speicher und Umfeldkosten (Demontage, "
+          "Bohrung, Hausanschluss, Öltank-Entsorgung usw.), skaliert mit der Heizlast. "
+          "Alle Sätze sind im Rechner anpassbar.", size=8.5)
+    for s in systeme[:3]:
+        teile = " + ".join(f"{name} {_eur(wert)}"
+                           for name, wert in s["invest_komponenten"].items())
+        pdf.p(f"• {s['label']}: {teile}  =  {_eur(s['invest'])}"
+              + (f" (Förderung −{_eur(s['foerderung'])} → {_eur(s['invest_netto'])})"
+                 if s["foerderung"] else ""), size=8.5)
+
     pdf.h2("Jährliche Vollkosten")
     pdf.bild(chart_vollkosten(res))
     pdf.h2("Kumulierte Kosten und Amortisation")
-    pdf.p("Schnittpunkt mit der gestrichelten Linie (Weiterbetrieb der Bestandsanlage) "
-          "= Amortisationszeitpunkt.", size=8.5)
+    pdf.p("Der Punkt auf jeder Linie markiert den Amortisationszeitpunkt: Dort schneidet "
+          "die Variante die gestrichelte Linie des Weiterbetriebs der Bestandsanlage.",
+          size=8.5)
     pdf.bild(chart_kumuliert(res))
 
     # ---------------- Seite 3: Heizart + CO2 ----------------
@@ -378,7 +433,46 @@ def report_pdf(res: dict, eingabe: dict | None = None) -> bytes:
         [70, 25, 60],
     )
 
-    # ---------------- Seite 4: Maßnahmen + Hinweise ----------------
+    # ---------------- Seite 4: Rentabilität & Optimum ----------------
+    pdf.add_page()
+    pdf.h1("Rentabilität und optimale Variante")
+    rent = res["rentabilitaet"]
+    o = rent["optimum"]
+    pdf.p(rent["definition"], size=8.5)
+    pdf.p("Referenz („nichts tun“): " + rent["referenz"]
+          + f" · {rent['anzahl_varianten']} Varianten verglichen"
+          + (f" · Dämmpaket: {', '.join(rent['daemmpaket'])}" if rent["daemmpaket"] else ""),
+          size=8.5)
+
+    pdf.set_fill_color(232, 242, 252)
+    pdf.set_font("dejavu", "B", 10.5)
+    pdf.set_text_color(11, 11, 11)
+    pdf.multi_cell(0, 6.5, f"  ★ Optimum: {o['label']}", fill=True,
+                   new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(1.5)
+    pdf.kv_grid([
+        ("Investition gesamt", _eur(o["invest_gesamt"])),
+        ("Ersparnis pro Jahr", _eur(o["ersparnis_jahr"])),
+        ("Amortisation", _amort_text(o["amortisation"])),
+        (f"Nettovorteil {BETRACHTUNG_JAHRE} J.", _eur(o["netto_20a"])),
+        ("Rendite aufs Kapital", f"{o['rendite'] * 100:.1f} %/Jahr".replace(".", ",")),
+        ("Effizienz", o["effizienz_text"]),
+    ])
+    pdf.h2("Nettovorteil der Varianten")
+    pdf.bild(chart_rentabilitaet(res))
+    pdf.tabelle(
+        ["Variante", "Invest ges.", "Ersparnis €/a", "Amort.", f"Netto {BETRACHTUNG_JAHRE} J.", "Rendite"],
+        [[("★ " if v.get("ist_optimum") else "") + _variante_kurz(v),
+          _eur(v["invest_gesamt"]), _eur(v["ersparnis_jahr"]),
+          _amort_text(v["amortisation"]), _eur(v["netto_20a"]),
+          f"{v['rendite'] * 100:.1f} %".replace(".", ",")]
+         for v in rent["varianten"]],
+        [58, 24, 24, 18, 30, 20],
+        highlight_row=next((i for i, v in enumerate(rent["varianten"])
+                            if v.get("ist_optimum")), None),
+    )
+
+    # ---------------- Seite 5: Maßnahmen + Hinweise ----------------
     pdf.add_page()
     pdf.h1("Sanierungsmaßnahmen und Ersparnis")
     pdf.p("Ersparnis bewertet mit Preis und Wirkungsgrad der Bestandsanlage; Förderung: "

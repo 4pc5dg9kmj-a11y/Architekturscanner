@@ -112,8 +112,18 @@ label.check input { width: 16px; height: 16px; }
 .knopf:disabled { opacity: 0.5; cursor: not-allowed; }
 .aktionen { display: flex; gap: 12px; align-items: center; margin: 16px 0 26px; flex-wrap: wrap; }
 
+/* --- Preise-Details --- */
+details summary { cursor: pointer; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary h2 { display: inline; }
+details summary::after { content: " ▸"; color: var(--muted); }
+details[open] summary::after { content: " ▾"; }
+
 /* --- Ergebnis --- */
 .empfehlung { border-left: 4px solid var(--good); }
+.optimum { border-left: 4px solid var(--accent); }
+.optimum .chip { background: var(--accent-weich); }
+.optimum .chip strong { color: var(--accent); }
 .empfehlung-chips { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0 10px; }
 .chip {
   background: var(--good-weich); border-radius: 8px; padding: 8px 14px;

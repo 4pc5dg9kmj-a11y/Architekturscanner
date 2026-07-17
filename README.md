@@ -114,6 +114,10 @@ Web-Oberfläche unter <http://localhost:8000/heizung> (gleicher Server,
   Wand-/Deckenheizung, Konvektor) – daraus ergibt sich die mittlere
   Vorlauftemperatur und damit insbesondere die Wärmepumpen-Effizienz (JAZ).
 - **Förderung**: BEG-Boni (Klimageschwindigkeit, Einkommen) zuschaltbar.
+- **Preise & Baukosten (anpassbar)**: Energiepreise je Träger,
+  Gesamtinvestition je System und Baukosten-Sätze (€/m² für Fußbodenheizung,
+  Dach-/Fassaden-/Kellerdeckendämmung, Fenster) – leere Felder nutzen
+  Richtwerte, die automatisch mit der Heizlast skalieren.
 
 ## Ergebnisse
 
@@ -129,10 +133,21 @@ Web-Oberfläche unter <http://localhost:8000/heizung> (gleicher Server,
 - **Maßnahmen**: Dach-/Fassaden-/Kellerdeckendämmung, Fenstertausch,
   hydraulischer Abgleich, Fußbodenheizungs-Nachrüstung – jeweils Kosten,
   Ersparnis pro Jahr und Amortisationszeit.
+- **Bau-/Investitionskosten aufgeschlüsselt**: Gerät, Installation, Speicher,
+  Umfeldkosten (Demontage, Erdbohrung, Hausanschluss, Öltank-Entsorgung …) –
+  sichtbar im Chart-Tooltip und im PDF.
+- **Rentabilität & Optimum**: Alle Varianten (Wärmeerzeuger × Wärmeübergabe ×
+  Dämmpaket) werden gegen „nichts tun“ gerechnet. **Optimum-Definition:**
+  höchster Nettovorteil über 20 Jahre (Bestandskosten − Variantenkosten
+  inkl. aller Bau-/Investitionskosten), sofern die Variante sich im
+  Betrachtungszeitraum amortisiert. Das Optimum ist mit ★ markiert, die
+  Amortisationspunkte sind in den Kostenverläufen als Punkte eingezeichnet;
+  je Variante werden Kapitaleinsatz, Ersparnis/Jahr und Rendite (%/Jahr)
+  ausgewiesen.
 - **Empfehlung**: bester Wärmeerzeuger + beste Wärmeübergabe.
-- **📄 PDF-Bericht**: vierseitiger Bericht mit allen Kennzahlen, Charts,
-  Tabellen, Empfehlung und Rentabilitätsbetrachtung
-  (`POST /api/heizung/report`).
+- **📄 PDF-Bericht**: mehrseitiger Bericht mit allen Kennzahlen, Charts,
+  Tabellen, Kosten-Aufschlüsselung, Empfehlung und eigener Rentabilitätsseite
+  samt markiertem Optimum (`POST /api/heizung/report`).
 
 Alle Preise/Förderwerte sind Richtwerte (Stand 2026); die Berechnung ersetzt
 keine Heizlastberechnung nach DIN EN 12831 oder GEG-Energieberatung.

@@ -66,6 +66,28 @@ F_BODEN = {"bodenplatte": 0.60, "unbeheizt": 0.55, "beheizt": 0.15}
 
 FENSTERANTEIL = 0.16  # Fensterflaeche ~16 % der Wohnflaeche (Richtwert)
 
+# Baukosten-Richtwerte (EUR/m2, Stand 2026, inkl. Montage) – per Eingabe
+# ueberschreibbar ("preise.baukosten")
+BAUKOSTEN = {
+    "fbh_m2": 95.0,          # Fussbodenheizung nachruesten (Frästechnik)
+    "dach_m2": 190.0,        # Dachdaemmung
+    "fassade_m2": 180.0,     # WDVS Fassade
+    "fenster_m2": 750.0,     # Fenstertausch 3-fach
+    "kellerdecke_m2": 80.0,  # Kellerdeckendaemmung
+}
+
+
+def _baukosten(preise: dict | None) -> dict:
+    bk = dict(BAUKOSTEN)
+    for k, v in ((preise or {}).get("baukosten") or {}).items():
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            continue
+        if k in bk and v > 0:
+            bk[k] = v
+    return bk
+
 # ---------------------------------------------------------------------------
 # Uebergabesysteme (Heizart je Raum) -> benoetigte Vorlauftemperatur
 # ---------------------------------------------------------------------------
@@ -409,7 +431,8 @@ def system_effizienz(key: str, system: dict, vl_info: dict) -> tuple[float, str]
 # Foerderung (BEG, vereinfacht)
 # ---------------------------------------------------------------------------
 
-def foerderung_berechnen(key: str, system: dict, optionen: dict) -> tuple[float, float]:
+def foerderung_berechnen(key: str, system: dict, optionen: dict,
+                         invest: float) -> tuple[float, float]:
     """Foerdersatz und Foerderbetrag (BEG EM, max. 70 %, foerderfaehig 30.000 EUR)."""
     if not system.get("foerderfaehig"):
         return 0.0, 0.0
@@ -421,8 +444,86 @@ def foerderung_berechnen(key: str, system: dict, optionen: dict) -> tuple[float,
     if system.get("effizienzbonus"):
         satz += 0.05
     satz = min(0.70, satz)
-    betrag = min(system["invest"], 30000.0) * satz
+    betrag = min(invest, 30000.0) * satz
     return satz, round(betrag)
+
+
+# ---------------------------------------------------------------------------
+# Investitions-/Baukosten je System (aufgeschluesselt)
+# ---------------------------------------------------------------------------
+
+# Zuordnung System -> Energiepreis-Schluessel in "preise.energie" (EUR/kWh)
+ENERGIE_PREIS_KEY = {
+    "waermepumpe_luft": "strom_wp", "waermepumpe_sole": "strom_wp",
+    "gas_brennwert": "gas", "oel_brennwert": "oel", "pellets": "pellets",
+    "fernwaerme": "fernwaerme", "strom_direkt": "strom",
+}
+
+
+def _energie_preis(preise: dict | None, system_key: str, standard: float) -> float:
+    e = (preise or {}).get("energie") or {}
+    try:
+        v = float(e.get(ENERGIE_PREIS_KEY.get(system_key, ""), 0) or 0)
+    except (TypeError, ValueError):
+        return standard
+    return v if v > 0 else standard
+
+
+def invest_aufschluesselung(key: str, heizlast_kw: float, bestand_art: str,
+                            invest_override: float | None = None) -> dict[str, float]:
+    """Baukosten-Aufschluesselung einer Neuanlage (Richtwerte inkl. Montage).
+
+    Groessenabhaengig ueber die Heizlast; enthaelt Umfeldkosten wie Demontage,
+    Speicher, Bohrung, Hausanschluss oder Oeltank-Entsorgung.
+    """
+    kw = max(6.0, heizlast_kw)
+    k: dict[str, float] = {}
+    if key == "waermepumpe_luft":
+        k["Wärmepumpe (Gerät)"] = 12000 + 450 * kw
+        k["Installation & Hydraulik"] = 6000
+        k["Puffer-/Warmwasserspeicher"] = 3500
+        k["Elektroinstallation & Zähler"] = 2500
+    elif key == "waermepumpe_sole":
+        k["Wärmepumpe (Gerät)"] = 11000 + 450 * kw
+        k["Erdsonden-Bohrung"] = max(9000.0, 950 * kw)
+        k["Installation & Hydraulik"] = 6000
+        k["Puffer-/Warmwasserspeicher"] = 3500
+        k["Elektroinstallation & Zähler"] = 2500
+    elif key == "gas_brennwert":
+        k["Brennwertkessel"] = 5500 + 150 * kw
+        k["Installation"] = 2500
+        k["Abgas-/Schornsteinsanierung"] = 1500
+        k["Warmwasserspeicher"] = 1200
+        if bestand_art != "gas":
+            k["Gas-Hausanschluss"] = 2500
+    elif key == "oel_brennwert":
+        k["Brennwertkessel"] = 7000 + 150 * kw
+        k["Installation"] = 2500
+        k["Abgas-/Schornsteinsanierung"] = 1500
+        k["Warmwasserspeicher"] = 1200
+        if bestand_art != "oel":
+            k["Tankanlage"] = 3000
+    elif key == "pellets":
+        k["Pelletkessel"] = 14000 + 250 * kw
+        k["Pelletlager & Austragung"] = 4500
+        k["Installation"] = 3000
+        k["Pufferspeicher"] = 2000
+        k["Schornsteinsanierung"] = 1500
+    elif key == "fernwaerme":
+        k["Übergabestation"] = 4500
+        if bestand_art != "fernwaerme":
+            k["Hausanschluss Fernwärme"] = 5000
+        k["Installation"] = 2000
+    elif key == "strom_direkt":
+        k["Heizgeräte"] = 3500
+        k["Elektroinstallation"] = 1500
+    k["Demontage Altanlage"] = 1200
+    if bestand_art == "oel" and key != "oel_brennwert":
+        k["Öltank-Stilllegung/-Entsorgung"] = 1300
+    if invest_override and invest_override > 0:
+        faktor = invest_override / sum(k.values())
+        k = {name: wert * faktor for name, wert in k.items()}
+    return {name: round(wert) for name, wert in k.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -452,26 +553,29 @@ def _co2_gesamt(verbrauch_kwh: float, co2: float, trend: float,
     return summe / 1000.0  # Tonnen
 
 
-def bestand_bewerten(inp: dict, geb: dict, vl_info: dict) -> dict:
+def bestand_bewerten(inp: dict, geb: dict, vl_info: dict,
+                     preise: dict | None = None) -> dict:
     b = inp.get("heizung_bestand", {})
     art = _norm(b.get("art"), BESTAND_ARTEN, "gas")
     baujahr = int(b.get("baujahr", 1995))
-    ref = SYSTEME[BESTAND_ARTEN[art]["system"]]
+    ref_key = BESTAND_ARTEN[art]["system"]
+    ref = SYSTEME[ref_key]
+    preis = _energie_preis(preise, ref_key, ref["preis"])
 
     if ref["typ"] == "waermepumpe":
         eff = wp_jaz(ref, vl_info["vl_mittel"]) * _wp_altersfaktor(baujahr)
         eff_text = f"JAZ {eff:.1f}"
-        preis = ref["preis"]
     elif art == "nachtspeicher":
-        eff, eff_text, preis = 0.95, "η 95 %", 0.30
+        eff, eff_text = 0.95, "η 95 %"
+        preis = _energie_preis(preise, "strom_direkt", 0.30)
     elif art == "fernwaerme":
-        eff, eff_text, preis = 0.95, "η 95 %", ref["preis"]
+        eff, eff_text = 0.95, "η 95 %"
     elif art == "pellets":
         eff = 0.78 if baujahr < 2005 else 0.85
-        eff_text, preis = f"η {eff * 100:.0f} %", ref["preis"]
+        eff_text = f"η {eff * 100:.0f} %"
     else:  # gas / oel
         eff = _kessel_eta_bestand(baujahr)
-        eff_text, preis = f"η {eff * 100:.0f} %", ref["preis"]
+        eff_text = f"η {eff * 100:.0f} %"
 
     verbrauch = geb["nutzenergie"] / eff
     wartung = ref["wartung"] * 1.2  # aeltere Anlagen: mehr Wartung/Schornsteinfeger
@@ -498,30 +602,40 @@ def bestand_bewerten(inp: dict, geb: dict, vl_info: dict) -> dict:
     }
 
 
+def _amortisation_gegen_bestand(verlauf: list[float], bestand: dict) -> int | None:
+    for jahr, (neu, alt) in enumerate(zip(verlauf, bestand["kostenverlauf"])):
+        if neu <= alt:
+            return jahr
+    return None
+
+
 def systeme_vergleichen(geb: dict, vl_info: dict, bestand: dict, optionen: dict,
                         preise: dict | None = None) -> list[dict]:
     """Alle Neuanlagen mit dem Ist-Uebergabesystem durchrechnen."""
     ergebnisse = []
     q = geb["nutzenergie"]
+    invest_over = (preise or {}).get("invest") or {}
     for key, sys0 in SYSTEME.items():
         system = deepcopy(sys0)
-        if preise and key in preise:
-            system.update({k: v for k, v in preise[key].items() if k in system})
+        system["preis"] = _energie_preis(preise, key, system["preis"])
         eff, eff_text = system_effizienz(key, system, vl_info)
         verbrauch = q / eff
-        satz, foerderung = foerderung_berechnen(key, system, optionen)
-        invest_netto = system["invest"] - foerderung
+
+        try:
+            override = float(invest_over.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            override = 0.0
+        komponenten = invest_aufschluesselung(
+            key, geb["heizlast_kw"], bestand["art"],
+            invest_override=override if override > 0 else None)
+        invest = sum(komponenten.values())
+
+        satz, foerderung = foerderung_berechnen(key, system, optionen, invest)
+        invest_netto = invest - foerderung
         kosten_jahr = verbrauch * system["preis"] + system["wartung"]
         vollkosten_jahr = kosten_jahr + invest_netto / system["lebensdauer"]
         verlauf = _kostenverlauf(invest_netto, verbrauch, system["preis"],
                                  system["preissteigerung"], system["wartung"])
-
-        # Amortisation gegenueber Weiterbetrieb der Bestandsanlage
-        amortisation = None
-        for jahr, (neu, alt) in enumerate(zip(verlauf, bestand["kostenverlauf"])):
-            if neu <= alt:
-                amortisation = jahr
-                break
 
         ergebnisse.append({
             "key": key,
@@ -530,7 +644,8 @@ def systeme_vergleichen(geb: dict, vl_info: dict, bestand: dict, optionen: dict,
             "effizienz": round(eff, 2),
             "effizienz_text": eff_text,
             "verbrauch_kwh": round(verbrauch),
-            "invest": round(system["invest"]),
+            "invest": round(invest),
+            "invest_komponenten": komponenten,
             "foerdersatz": satz,
             "foerderung": round(foerderung),
             "invest_netto": round(invest_netto),
@@ -542,7 +657,7 @@ def systeme_vergleichen(geb: dict, vl_info: dict, bestand: dict, optionen: dict,
             "gesamt_20a": verlauf[-1],
             "co2_jahr": round(verbrauch * system["co2"] / 1000.0, 1),
             "co2_20a": round(_co2_gesamt(verbrauch, system["co2"], system["co2_trend"]), 1),
-            "amortisation": amortisation,
+            "amortisation": _amortisation_gegen_bestand(verlauf, bestand),
         })
     ergebnisse.sort(key=lambda e: e["gesamt_20a"])
     return ergebnisse
@@ -587,9 +702,11 @@ def heizarten_vergleichen(inp: dict, geb: dict, bestand: dict, optionen: dict,
 FOERDERSATZ_DAEMMUNG = 0.15  # BEG EM Einzelmassnahme Gebaeudehuelle
 
 
-def massnahmen_bewerten(inp: dict, geb: dict, bestand: dict) -> list[dict]:
+def massnahmen_bewerten(inp: dict, geb: dict, bestand: dict,
+                        preise: dict | None = None) -> list[dict]:
     """Einzelmassnahmen: Kosten, Energie-/Kostenersparnis, Amortisation."""
     g = inp.get("gebaeude", {})
+    bk = _baukosten(preise)
     kandidaten = []
 
     def variante(name: str, aenderung: dict, kosten: float, foerderbar: bool = True,
@@ -606,6 +723,7 @@ def massnahmen_bewerten(inp: dict, geb: dict, bestand: dict) -> list[dict]:
         netto = kosten - foerderung
         kandidaten.append({
             "name": name,
+            "aenderung": aenderung,
             "kosten": round(kosten),
             "foerderung": round(foerderung),
             "kosten_netto": round(netto),
@@ -619,16 +737,16 @@ def massnahmen_bewerten(inp: dict, geb: dict, bestand: dict) -> list[dict]:
 
     if _norm(g.get("dach_daemmung"), U_DACH, "keine") != "sehr_gut":
         variante("Dach dämmen (U ≈ 0,14)", {"dach_daemmung": "sehr_gut"},
-                 geb["dachflaeche"] * 190.0)
+                 geb["dachflaeche"] * bk["dach_m2"])
     if _norm(g.get("wand_daemmung"), U_WAND_GEDAEMMT, "keine") not in ("gut", "sehr_gut"):
         variante("Fassade dämmen / WDVS (U ≈ 0,18)", {"wand_daemmung": "sehr_gut"},
-                 geb["wandflaeche"] * 180.0)
+                 geb["wandflaeche"] * bk["fassade_m2"])
     if _norm(g.get("fenster"), U_FENSTER, "zweifach_alt") != "dreifach":
         variante("Fenster tauschen (3-fach, U ≈ 0,9)", {"fenster": "dreifach"},
-                 geb["fensterflaeche"] * 750.0)
+                 geb["fensterflaeche"] * bk["fenster_m2"])
     if _norm(g.get("keller_daemmung"), U_BODEN, "keine") in ("keine", "maessig"):
         variante("Kellerdecke dämmen (U ≈ 0,30)", {"keller_daemmung": "gut"},
-                 geb["bodenflaeche"] * 80.0)
+                 geb["bodenflaeche"] * bk["kellerdecke_m2"])
 
     # Hydraulischer Abgleich: pauschal ~7 % des Heizwaermebedarfs
     ersparnis_kwh = geb["heizwaermebedarf"] * 0.07
@@ -661,7 +779,7 @@ def fbh_nachruestung_bewerten(inp: dict, geb: dict, bestand: dict, optionen: dic
     if not hk_raeume:
         return None
     flaeche = sum(r["flaeche"] for r in hk_raeume)
-    kosten = flaeche * 95.0
+    kosten = flaeche * _baukosten(preise)["fbh_m2"]
 
     vl_ist = vorlauftemperatur(geb, raeume)
     vl_neu = vorlauftemperatur(geb, [dict(r, heizart="fussbodenheizung")
@@ -688,6 +806,110 @@ def fbh_nachruestung_bewerten(inp: dict, geb: dict, bestand: dict, optionen: dic
 
 
 # ---------------------------------------------------------------------------
+# Rentabilitaet: alle Varianten durchrechnen und das Optimum bestimmen
+# ---------------------------------------------------------------------------
+
+OPTIMUM_DEFINITION = (
+    "Als optimal gilt die Variante mit dem höchsten Nettovorteil über "
+    f"{BETRACHTUNG_JAHRE} Jahre: Gesamtkosten des Weiterbetriebs der Bestandsanlage "
+    "minus Gesamtkosten der Variante – inklusive aller Bau- und Investitionskosten "
+    "(Anlage, Umfeldmaßnahmen, ggf. Fußbodenheizung und Dämmung, abzüglich Förderung). "
+    "Die Variante muss sich innerhalb des Betrachtungszeitraums amortisieren; "
+    "der Amortisationspunkt ist in den Verläufen markiert."
+)
+
+
+def rentabilitaet_analyse(inp: dict, geb: dict, bestand: dict, optionen: dict,
+                          preise: dict | None, massnahmen: list[dict]) -> dict:
+    """Varianten (System x Uebergabe x Daemmpaket) vergleichen.
+
+    Referenz ist immer der Weiterbetrieb der unsanierten Bestandsanlage.
+    Nettovorteil = Bestandskosten(20a) - Variantenkosten(20a) inkl. aller
+    Bau-/Investitionskosten. Rendite = mittlere Jahresersparnis / Kapitaleinsatz.
+    """
+    bk = _baukosten(preise)
+    raeume = raeume_normalisieren(inp, geb)
+    bestand20 = bestand["kostenverlauf"][-1]
+
+    # "Wirtschaftliches Daemmpaket": Gebaeude-Massnahmen mit Amortisation <= 15 a
+    paket = [m for m in massnahmen
+             if m.get("aenderung") and m.get("amortisation") and m["amortisation"] <= 15]
+    paket_kosten = sum(m["kosten_netto"] for m in paket)
+    paket_namen = [m["name"].split(" (")[0] for m in paket]
+
+    hk_raeume = [r for r in raeume if not HEIZARTEN[r["heizart"]]["flaechenheizung"]
+                 and r["heizart"] != "keine"]
+    fbh_kosten = sum(r["flaeche"] for r in hk_raeume) * bk["fbh_m2"]
+    alles_fbh = [dict(r, heizart="fussbodenheizung")
+                 if not HEIZARTEN[r["heizart"]]["flaechenheizung"] and r["heizart"] != "keine"
+                 else r for r in raeume]
+
+    pakete = [("ohne", "ohne Dämmung", [], 0.0)]
+    if paket:
+        pakete.append(("daemmung", "mit Dämmpaket", paket, paket_kosten))
+    uebergaben = [("ist", "Übergabe wie eingegeben", raeume, 0.0)]
+    if hk_raeume:
+        uebergaben.append(("fbh", "alles Fußbodenheizung", alles_fbh, fbh_kosten))
+
+    varianten = []
+    for p_key, p_label, p_ms, p_kosten in pakete:
+        inp2 = deepcopy(inp)
+        for m in p_ms:
+            inp2.setdefault("gebaeude", {}).update(m["aenderung"])
+        geb2 = gebaeude_analyse(inp2) if p_ms else geb
+        for u_key, u_label, rr, u_kosten in uebergaben:
+            vl = vorlauftemperatur(geb2, rr)
+            zusatz = p_kosten + u_kosten
+            for s in systeme_vergleichen(geb2, vl, bestand, optionen, preise):
+                if s["key"] == "strom_direkt":
+                    continue
+                verlauf = [round(v + zusatz) for v in s["kostenverlauf"]]
+                netto = bestand20 - verlauf[-1]
+                invest_gesamt = s["invest_netto"] + zusatz
+                ersparnis_jahr = bestand["kosten_jahr"] - s["kosten_jahr"]
+                rendite = (netto / BETRACHTUNG_JAHRE) / invest_gesamt if invest_gesamt > 0 else 0.0
+                varianten.append({
+                    "system": s["label"],
+                    "system_key": s["key"],
+                    "uebergabe": u_label,
+                    "uebergabe_key": u_key,
+                    "paket": p_label,
+                    "paket_key": p_key,
+                    "label": f"{s['label']} · {u_label}" + (f" · {p_label}" if p_key != "ohne" else ""),
+                    "effizienz_text": s["effizienz_text"],
+                    "invest_anlage": s["invest_netto"],
+                    "kosten_fbh": round(u_kosten),
+                    "kosten_daemmung": round(p_kosten),
+                    "invest_gesamt": round(invest_gesamt),
+                    "ersparnis_jahr": round(ersparnis_jahr),
+                    "netto_20a": round(netto),
+                    "amortisation": _amortisation_gegen_bestand(verlauf, bestand),
+                    "rendite": round(rendite, 4),
+                    "kostenverlauf": verlauf,
+                })
+
+    varianten.sort(key=lambda v: -v["netto_20a"])
+    amortisierende = [v for v in varianten if v["amortisation"] is not None]
+    optimum = (amortisierende or varianten)[0]
+    optimum["ist_optimum"] = True
+
+    top = varianten[:10]
+    if optimum not in top:
+        top = top[:9] + [optimum]
+
+    return {
+        "definition": OPTIMUM_DEFINITION,
+        "referenz": f"Weiterbetrieb {bestand['label']} ({bestand['baujahr']}): "
+                    f"{bestand20:,.0f} € über {BETRACHTUNG_JAHRE} Jahre".replace(",", "."),
+        "bestand_20a": bestand20,
+        "daemmpaket": paket_namen,
+        "varianten": [{k: v for k, v in var.items() if k != "kostenverlauf"} for var in top],
+        "optimum": optimum,
+        "anzahl_varianten": len(varianten),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Hauptfunktion
 # ---------------------------------------------------------------------------
 
@@ -699,10 +921,11 @@ def berechnen(inp: dict) -> dict:
     geb = gebaeude_analyse(inp)
     raeume = raeume_normalisieren(inp, geb)
     vl_info = vorlauftemperatur(geb, raeume)
-    bestand = bestand_bewerten(inp, geb, vl_info)
+    bestand = bestand_bewerten(inp, geb, vl_info, preise)
     systeme = systeme_vergleichen(geb, vl_info, bestand, optionen, preise)
     heizarten = heizarten_vergleichen(inp, geb, bestand, optionen, preise)
-    massnahmen = massnahmen_bewerten(inp, geb, bestand)
+    massnahmen = massnahmen_bewerten(inp, geb, bestand, preise)
+    rentabilitaet = rentabilitaet_analyse(inp, geb, bestand, optionen, preise, massnahmen)
     fbh = fbh_nachruestung_bewerten(inp, geb, bestand, optionen, preise)
     if fbh:
         massnahmen.append(fbh)
@@ -742,7 +965,9 @@ def berechnen(inp: dict) -> dict:
         "systeme": systeme,
         "heizarten": heizarten,
         "massnahmen": massnahmen,
+        "rentabilitaet": rentabilitaet,
         "empfehlung": empfehlung,
+        "baukosten": _baukosten(preise),
         "parameter": {
             "gradtagzahl": GRADTAGZAHL,
             "betrachtung_jahre": BETRACHTUNG_JAHRE,
