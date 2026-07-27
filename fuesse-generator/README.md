@@ -14,6 +14,14 @@ Server und keine Installation** – alles läuft lokal, nichts wird hochgeladen.
 - **Personen mit Name und Alter** beliebig hinzufügen/entfernen.
 - **Fußgröße maßstäblich zum Alter**: realistische Kurve von ~7,5 cm (Baby) bis
   ~26 cm (Erwachsener). Jedes Paar wird proportional gezeichnet.
+- **5 Fußform-Varianten** je Person (Rund, Schmal, Breit, Zierlich, Kräftig).
+  „Automatisch" gibt jeder Person eine andere Form, damit die Paare sich
+  natürlich unterscheiden.
+- **3 Posen** je Person:
+  - **Aufrecht** – Zehen nach oben (Standard).
+  - **Parallel schräg** – beide Füße parallel, leicht geneigt nebeneinander.
+  - **Liegend 90°** – das Paar liegt waagerecht (Zehen zur Seite), wie das
+    mittlere Paar auf der Vorlage.
 - **Anordnung**: „Große Füße außen" (Eltern außen, Kinder in die Mitte – wie die
   Vorlage), Eingabereihenfolge oder klein → groß.
 - **Beschriftung**: eigener Untertitel (Standard „WE ARE GOOD TOGETHER"),

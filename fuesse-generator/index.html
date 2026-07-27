@@ -54,8 +54,12 @@
   .card h2{ margin:0 0 12px; font-size:13px; text-transform:uppercase; letter-spacing:1.4px; color:var(--muted); font-weight:700 }
 
   .person{
-    display:grid; grid-template-columns:1fr 78px 34px; gap:8px; align-items:center; margin-bottom:8px;
+    display:flex; flex-direction:column; gap:8px; padding:10px;
+    border:1px solid var(--line); border-radius:11px; margin-bottom:10px; background:var(--panel);
   }
+  .person .top{ display:grid; grid-template-columns:1fr 66px 30px; gap:8px; align-items:center }
+  .person .opts{ display:grid; grid-template-columns:1fr 1fr; gap:8px }
+  .person .opts select{ padding:7px 8px; font-size:12.5px }
   .person input{ width:100% }
   label.field{ display:block; font-size:12px; color:var(--muted); margin:10px 0 4px }
   input[type=text], input[type=number], select{
@@ -124,9 +128,7 @@
   <div class="controls">
     <div class="card">
       <h2>Personen</h2>
-      <div class="person" style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px">
-        <span>Name</span><span>Alter</span><span></span>
-      </div>
+      <p style="margin:0 0 12px;font-size:12px;color:var(--muted)">Name, Alter, Fußform und Pose je Person – <b>Auto</b> gibt jeder Person automatisch eine andere Form.</p>
       <div id="people"></div>
       <button class="btn ghost" id="addPerson" style="width:100%;margin-top:6px">＋ Person hinzufügen</button>
     </div>
@@ -210,8 +212,55 @@ function smoothClosed(pts, t){
   }
   return d+"Z";
 }
-const PATH_RIGHT=smoothClosed(RIGHT,0.9);
-const PATH_LEFT =smoothClosed(RIGHT.map(p=>[MIRROR_AXIS-p[0],p[1]]),0.9);
+/* ---------- 5 Fußform-Varianten ---------- */
+const VARIANTS=[
+  {name:'Rund',     sx:1.00, sy:1.00, toe:1.00, heel:1.00, arch:0},
+  {name:'Schmal',   sx:0.86, sy:1.05, toe:1.08, heel:0.92, arch:5},
+  {name:'Breit',    sx:1.15, sy:0.97, toe:0.92, heel:1.10, arch:-4},
+  {name:'Zierlich', sx:0.90, sy:0.95, toe:1.13, heel:0.88, arch:3},
+  {name:'Kräftig',  sx:1.09, sy:1.04, toe:0.90, heel:1.14, arch:-3},
+];
+function variantPoints(v){
+  const cx=LOCAL_CX, cy=LOCAL_CY, toeBaseY=84, heelTopY=250;
+  return RIGHT.map(([x,y])=>{
+    let nx=cx+(x-cx)*v.sx, ny=cy+(y-cy)*v.sy;
+    if(ny<toeBaseY) ny = toeBaseY-(toeBaseY-ny)*v.toe;   // Zehen heben/senken
+    if(ny>heelTopY) nx = cx+(nx-cx)*v.heel;              // Ferse schmaler/breiter
+    if(nx<cx && ny>150 && ny<250) nx += v.arch;          // Fußgewölbe einziehen
+    return [nx,ny];
+  });
+}
+const VARIANT_CACHE=VARIANTS.map(v=>{
+  const ptsR=variantPoints(v), ptsL=ptsR.map(([x,y])=>[MIRROR_AXIS-x,y]);
+  return {name:v.name, ptsR, ptsL, dR:smoothClosed(ptsR,0.9), dL:smoothClosed(ptsL,0.9)};
+});
+
+/* ---------- Posen: aufrecht / parallel schräg / liegend (90°) ---------- */
+function poseParams(pose, angle){
+  if(pose==='parallel') return {footRotL:-(angle+4), footRotR:-(angle+4), poseRot:0,  offF:0.40};
+  if(pose==='lying')    return {footRotL:0,           footRotR:0,           poseRot:90, offF:0.19};
+  return                       {footRotL:-angle,      footRotR:angle,       poseRot:0,  offF:0.30}; // upright
+}
+// lokalen Umrisspunkt in das Paar-Koordinatensystem (relativ zum Paarzentrum) abbilden
+function txPoint(x, y, side, pp, sc, off){
+  let px=(x-LOCAL_CX)*sc, py=(y-LOCAL_CY)*sc;
+  const fr=(side==='L'?pp.footRotL:pp.footRotR)*Math.PI/180;
+  let rx=px*Math.cos(fr)-py*Math.sin(fr), ry=px*Math.sin(fr)+py*Math.cos(fr);
+  rx += (side==='L'?-off:off);
+  const pr=pp.poseRot*Math.PI/180;
+  return [rx*Math.cos(pr)-ry*Math.sin(pr), rx*Math.sin(pr)+ry*Math.cos(pr)];
+}
+function pairMetrics(L, vi, pose, angle){
+  const sc=L/LOCAL_H, pp=poseParams(pose,angle), off=pp.offF*L, V=VARIANT_CACHE[vi];
+  let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+  const acc=(pts,side)=>pts.forEach(([x,y])=>{const[gx,gy]=txPoint(x,y,side,pp,sc,off);
+    if(gx<minx)minx=gx; if(gx>maxx)maxx=gx; if(gy<miny)miny=gy; if(gy>maxy)maxy=gy;});
+  acc(V.ptsR,'R'); acc(V.ptsL,'L');
+  const m=1.04; // kleine Reserve für die Kurvenwölbung
+  return {halfW:Math.max(-minx,maxx)*m, halfTop:(-miny)*m, halfBot:maxy*m};
+}
+function autoVariant(idx){ return idx%VARIANTS.length; }
+function resolveVariant(p){ return p.shape==null||p.shape==='auto' ? autoVariant(p.idx) : (+p.shape)%VARIANTS.length; }
 
 /* ---------- Alter → Fußlänge (cm), realistische Kurve ---------- */
 const AGE_CM=[[0,7.5],[1,11.5],[2,13.5],[3,14.8],[4,15.8],[5,16.8],[6,17.7],
@@ -230,30 +279,47 @@ function ageToCm(age){
 
 /* ---------- State ---------- */
 let people=[
-  {name:"Mama",  age:38},
-  {name:"Papa",  age:40},
-  {name:"Emma",  age:8},
-  {name:"Ben",   age:5},
-  {name:"Mia",   age:1},
+  {name:"Mama",  age:38, shape:'auto', pose:'upright'},
+  {name:"Papa",  age:40, shape:'auto', pose:'upright'},
+  {name:"Emma",  age:8,  shape:'auto', pose:'upright'},
+  {name:"Ben",   age:5,  shape:'auto', pose:'lying'},
+  {name:"Mia",   age:1,  shape:'auto', pose:'upright'},
 ];
 
 /* ---------- Personen-UI ---------- */
+const SHAPE_OPTS=[['auto','Form: automatisch'],['0','Form: Rund'],['1','Form: Schmal'],
+                  ['2','Form: Breit'],['3','Form: Zierlich'],['4','Form: Kräftig']];
+const POSE_OPTS=[['upright','Aufrecht'],['parallel','Parallel schräg'],['lying','Liegend 90°']];
 const peopleEl=document.getElementById('people');
+function mkSelect(opts, val, on){
+  const s=document.createElement('select');
+  s.innerHTML=opts.map(([v,t])=>`<option value="${v}">${t}</option>`).join('');
+  s.value=val; s.addEventListener('change',()=>{on(s.value); render();});
+  return s;
+}
 function renderPeople(){
   peopleEl.innerHTML='';
   people.forEach((p,i)=>{
-    const row=document.createElement('div'); row.className='person';
+    if(p.shape==null)p.shape='auto'; if(p.pose==null)p.pose='upright';
+    const card=document.createElement('div'); card.className='person';
+    const top=document.createElement('div'); top.className='top';
     const n=document.createElement('input'); n.type='text'; n.placeholder='Name'; n.value=p.name;
     n.addEventListener('input',()=>{people[i].name=n.value; render();});
     const a=document.createElement('input'); a.type='number'; a.min='0'; a.max='110'; a.placeholder='Alter'; a.value=(p.age===''||p.age==null)?'':p.age;
     a.addEventListener('input',()=>{people[i].age=a.value===''?'':Math.max(0,parseInt(a.value,10)); render();});
     const x=document.createElement('button'); x.className='btn icon'; x.textContent='✕'; x.title='Entfernen';
     x.addEventListener('click',()=>{people.splice(i,1); renderPeople(); render();});
-    row.append(n,a,x); peopleEl.appendChild(row);
+    top.append(n,a,x);
+    const opts=document.createElement('div'); opts.className='opts';
+    opts.append(
+      mkSelect(SHAPE_OPTS, p.shape, v=>people[i].shape=v),
+      mkSelect(POSE_OPTS,  p.pose,  v=>people[i].pose=v)
+    );
+    card.append(top,opts); peopleEl.appendChild(card);
   });
 }
 document.getElementById('addPerson').addEventListener('click',()=>{
-  people.push({name:'',age:''}); renderPeople(); render();
+  people.push({name:'',age:'',shape:'auto',pose:'upright'}); renderPeople(); render();
   peopleEl.lastChild.querySelector('input').focus();
 });
 
@@ -274,20 +340,21 @@ Object.values(els).forEach(el=>el.addEventListener('input',render));
 /* ---------- SVG-Aufbau ---------- */
 const FONT='"Courier New",ui-monospace,"SFMono-Regular",Menlo,monospace';
 
-function buildPairGroup(cx, cy, L, angle, color, stroke){
-  const sc=L/LOCAL_H;
-  const off=0.30*L;                         // halber Abstand der beiden Füße
-  const sw=(stroke/10)/sc;                   // Strichbreite in lokale Einheiten
-  function foot(pathD, tx, rot){
-    return `<path d="${pathD}" transform="translate(${tx.toFixed(2)},${cy.toFixed(2)}) rotate(${rot}) scale(${sc.toFixed(4)}) translate(${-LOCAL_CX},${-LOCAL_CY})" `+
+function buildPair(cx, cy, L, vi, pose, angle, color, stroke){
+  const sc=L/LOCAL_H, pp=poseParams(pose,angle), off=pp.offF*L;
+  const sw=(stroke/10)/sc, V=VARIANT_CACHE[vi];
+  function foot(d, side){
+    const fr=(side==='L'?pp.footRotL:pp.footRotR), ox=(side==='L'?-off:off);
+    return `<path d="${d}" transform="translate(${cx.toFixed(2)},${cy.toFixed(2)}) rotate(${pp.poseRot}) translate(${ox.toFixed(2)},0) rotate(${fr}) scale(${sc.toFixed(4)}) translate(${-LOCAL_CX},${-LOCAL_CY})" `+
            `fill="none" stroke="${color}" stroke-width="${sw.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
-  return foot(PATH_LEFT, cx-off, -angle) + foot(PATH_RIGHT, cx+off, angle);
+  return foot(V.dL,'L')+foot(V.dR,'R');
 }
 
 function orderedPeople(){
   const list=people
-    .map((p,idx)=>({name:(p.name||'').trim(), age:p.age===''?null:p.age, idx}))
+    .map((p,idx)=>({name:(p.name||'').trim(), age:p.age===''?null:p.age,
+                    shape:p.shape||'auto', pose:p.pose||'upright', idx}))
     .filter(p=>p.name!=='' || p.age!==null);
   const mode=els.arrange.value;
   if(mode==='order') return list;
@@ -311,33 +378,33 @@ function buildSVG(forExport){
   const showAges=els.showAges.checked;
   const caption=(els.caption.value||'').trim();
 
-  // Größen
+  // Größen + exakte Maße je Paar (Variante + Pose)
   const items=list.map(p=>{
     const cm=ageToCm(p.age);
     const L=cm*PX_PER_CM;
-    return {...p, L, halfW:0.60*L, halfH:0.52*L};
+    const vi=resolveVariant(p);
+    const m=pairMetrics(L, vi, p.pose, angle);
+    return {...p, L, vi, halfW:m.halfW, halfTop:m.halfTop, halfBot:m.halfBot};
   });
 
   // Horizontale Platzierung
-  let x=PAD, maxHalfH=0, positions=[];
+  let x=PAD, maxTop=0, maxBot=0, positions=[];
   if(items.length){
     x=PAD+items[0].halfW;
     for(let i=0;i<items.length;i++){
       const it=items[i];
-      if(i>0){
-        const prev=items[i-1];
-        x += (prev.halfW+it.halfW)*spacingF;
-      }
+      if(i>0) x += (items[i-1].halfW+it.halfW)*spacingF;
       positions.push(x);
-      maxHalfH=Math.max(maxHalfH,it.halfH);
+      maxTop=Math.max(maxTop,it.halfTop);
+      maxBot=Math.max(maxBot,it.halfBot);
     }
   }
   const contentW = items.length ? (positions[positions.length-1]+items[items.length-1].halfW+PAD) : 600;
-  const cy = PAD + maxHalfH;
+  const cy = PAD + maxTop;                         // gemeinsame Mittellinie der Paare
 
   const nameGap=42, nameH=showNames?46:0;
   const capGap=caption?54:0, capH=caption?40:0;
-  const baseFeet = cy + maxHalfH;                 // untere Kante der Füße
+  const baseFeet = cy + maxBot;                    // untere Kante der Füße
   const nameY = baseFeet + nameGap;
   const capY  = baseFeet + (showNames?nameH:0) + capGap;
   const contentH = capY + (caption? capH: (showNames?10:PAD));
@@ -347,7 +414,7 @@ function buildSVG(forExport){
     svg+=`<rect x="0" y="0" width="${contentW.toFixed(0)}" height="${contentH.toFixed(0)}" fill="#ffffff"/>`;
   }
   // Füße
-  items.forEach((it,i)=>{ svg+=buildPairGroup(positions[i], cy, it.L, angle, color, stroke); });
+  items.forEach((it,i)=>{ svg+=buildPair(positions[i], cy, it.L, it.vi, it.pose, angle, color, stroke); });
   // Namen
   if(showNames){
     items.forEach((it,i)=>{
