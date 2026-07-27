@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Familien-Füße Generator</title>
+<style>
+  :root{
+    --bg:#eceae3; --panel:#ffffff; --ink:#2b2b2b; --muted:#87806f;
+    --line:#e0dacd; --accent:#4a4033; --accent-ink:#ffffff; --accent2:#b7ad9a;
+    --field:#ffffff; --btnbg:#ffffff; --hover:#f7f4ee;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#1b1815; --panel:#252019; --ink:#ece6db; --muted:#a09787;
+      --line:#38322a; --accent:#e6d8bd; --accent-ink:#201c16; --accent2:#6f6656;
+      --field:#2c2720; --btnbg:#2c2720; --hover:#332e26;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eceae3; --panel:#ffffff; --ink:#2b2b2b; --muted:#87806f;
+    --line:#e0dacd; --accent:#4a4033; --accent-ink:#ffffff; --accent2:#b7ad9a;
+    --field:#ffffff; --btnbg:#ffffff; --hover:#f7f4ee;
+  }
+  :root[data-theme="dark"]{
+    --bg:#1b1815; --panel:#252019; --ink:#ece6db; --muted:#a09787;
+    --line:#38322a; --accent:#e6d8bd; --accent-ink:#201c16; --accent2:#6f6656;
+    --field:#2c2720; --btnbg:#2c2720; --hover:#332e26;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink); line-height:1.5;
+  }
+  header.app{
+    text-align:center; padding:26px 16px 10px;
+  }
+  header.app h1{
+    margin:0; font-weight:600; font-size:clamp(20px,3vw,28px); letter-spacing:.5px;
+  }
+  header.app p{ margin:6px 0 0; color:var(--muted); font-size:14px }
+  .layout{
+    display:grid; grid-template-columns:360px 1fr; gap:22px;
+    max-width:1240px; margin:14px auto 60px; padding:0 18px;
+  }
+  @media (max-width:880px){ .layout{ grid-template-columns:1fr } }
+
+  .controls{ display:flex; flex-direction:column; gap:16px }
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.03);
+  }
+  .card h2{ margin:0 0 12px; font-size:13px; text-transform:uppercase; letter-spacing:1.4px; color:var(--muted); font-weight:700 }
+
+  .person{
+    display:grid; grid-template-columns:1fr 78px 34px; gap:8px; align-items:center; margin-bottom:8px;
+  }
+  .person input{ width:100% }
+  label.field{ display:block; font-size:12px; color:var(--muted); margin:10px 0 4px }
+  input[type=text], input[type=number], select{
+    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:9px;
+    font-size:14px; background:var(--field); color:var(--ink); font-family:inherit;
+  }
+  input[type=text]:focus, input[type=number]:focus, select:focus{ outline:2px solid var(--accent2); outline-offset:0 }
+  .btn{
+    appearance:none; border:1px solid var(--line); background:var(--btnbg); color:var(--ink);
+    padding:9px 12px; border-radius:9px; font-size:14px; cursor:pointer; font-family:inherit;
+  }
+  .btn:hover{ background:var(--hover) }
+  .btn.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent) }
+  .btn.primary:hover{ background:#3a3226 }
+  .btn.ghost{ background:transparent }
+  .btn.icon{ padding:6px 0; line-height:1; font-size:18px; color:var(--muted) }
+  .btn.icon:hover{ color:#c0392b }
+  .row{ display:flex; gap:8px; flex-wrap:wrap }
+  .row > *{ flex:1 }
+  .check{ display:flex; align-items:center; gap:9px; font-size:14px; margin:9px 0; cursor:pointer }
+  .check input{ width:16px; height:16px; accent-color:var(--accent) }
+  .slider{ display:flex; align-items:center; gap:10px; margin:6px 0 }
+  .slider label{ font-size:12px; color:var(--muted); flex:0 0 88px }
+  .slider input[type=range]{ flex:1; accent-color:var(--accent) }
+  .slider .val{ flex:0 0 42px; text-align:right; font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums }
+  .colorrow{ display:flex; align-items:center; gap:14px; margin-top:6px; flex-wrap:wrap }
+  .colorrow label{ font-size:12px; color:var(--muted); display:flex; align-items:center; gap:8px }
+  input[type=color]{ width:34px; height:26px; padding:0; border:1px solid var(--line); border-radius:6px; background:var(--field) }
+
+  /* Preview */
+  .stage{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:22px; display:flex; flex-direction:column; align-items:center; gap:18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.03); min-height:420px;
+  }
+  .paper{
+    width:100%; background:#fff; border-radius:8px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .paper.checkerboard{
+    background-image:linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%);
+    background-size:18px 18px; background-position:0 0,0 9px,9px -9px,-9px 0;
+  }
+  .paper svg{ width:100%; height:auto; display:block }
+  .exports{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center }
+  .hint{ font-size:12px; color:var(--muted); text-align:center; max-width:520px }
+  footer.app{ text-align:center; color:var(--muted); font-size:12px; padding:0 16px 40px }
+
+  @media print{
+    body{ background:#fff }
+    header.app, footer.app, .controls, .exports, .hint{ display:none !important }
+    .layout{ display:block; margin:0; padding:0; max-width:none }
+    .stage{ border:none; box-shadow:none; padding:0 }
+    .paper{ box-shadow:none }
+  }
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>Familien-Füße Generator</h1>
+  <p>Namen &amp; Alter eingeben – dein Familienbild aus Füßen entsteht automatisch. Große Füße für Erwachsene, kleinere für Kinder – maßstäblich zum Alter. Perfekt zum Ausdrucken.</p>
+</header>
+
+<div class="layout">
+  <!-- CONTROLS -->
+  <div class="controls">
+    <div class="card">
+      <h2>Personen</h2>
+      <div class="person" style="color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.6px">
+        <span>Name</span><span>Alter</span><span></span>
+      </div>
+      <div id="people"></div>
+      <button class="btn ghost" id="addPerson" style="width:100%;margin-top:6px">＋ Person hinzufügen</button>
+    </div>
+
+    <div class="card">
+      <h2>Text &amp; Beschriftung</h2>
+      <label class="field" for="caption">Untertitel</label>
+      <input type="text" id="caption" value="WE ARE GOOD TOGETHER" maxlength="60">
+      <label class="check"><input type="checkbox" id="showNames" checked> Namen unter den Füßen anzeigen</label>
+      <label class="check"><input type="checkbox" id="showAges"> Alter neben den Namen anzeigen</label>
+    </div>
+
+    <div class="card">
+      <h2>Stil</h2>
+      <label class="field" for="arrange">Anordnung</label>
+      <select id="arrange">
+        <option value="outside">Große Füße außen (wie Vorlage)</option>
+        <option value="order">Eingabereihenfolge</option>
+        <option value="ascending">Klein → Groß</option>
+      </select>
+      <div class="slider"><label>Abstand</label><input type="range" id="spacing" min="55" max="100" value="82"><span class="val" id="spacingV"></span></div>
+      <div class="slider"><label>Neigung</label><input type="range" id="angle" min="0" max="16" value="8"><span class="val" id="angleV"></span></div>
+      <div class="slider"><label>Linienstärke</label><input type="range" id="stroke" min="10" max="40" value="22"><span class="val" id="strokeV"></span></div>
+      <div class="colorrow">
+        <label>Linie <input type="color" id="lineColor" value="#2b2b2b"></label>
+        <label><input type="checkbox" id="transparent"> transparenter Hintergrund</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- PREVIEW -->
+  <div class="stage">
+    <div class="paper" id="paper"></div>
+    <div class="exports">
+      <button class="btn primary" id="dlSvg">⬇ SVG (Vektor)</button>
+      <button class="btn" id="dlPng">⬇ PNG (Druck, 300 dpi)</button>
+      <button class="btn" id="print">🖨 Drucken</button>
+    </div>
+    <p class="hint">Tipp: <b>SVG</b> ist verlustfrei skalierbar und ideal fürs Druckhaus. <b>PNG</b> ist hochauflösend für zu Hause. „Groß außen“ ordnet Eltern nach außen, Kinder in die Mitte – wie auf der Vorlage.</p>
+  </div>
+</div>
+
+<footer class="app">Alles läuft lokal im Browser · nichts wird hochgeladen</footer>
+
+<script>
+/* ---------- Fuß-Geometrie (Linienzeichnung im Stil der Vorlage) ---------- */
+// Rechter Fuß (Zehen nach oben), großer Zeh links. Lokale Einheiten.
+const RIGHT=[
+ [14,60],[15,30],[27,12],[43,33],[57,23],[71,37],[86,29],[100,43],[113,37],
+ [125,50],[135,45],[143,72],[145,120],[143,178],[132,232],[109,280],[70,302],
+ [30,282],[17,230],[21,168],[15,110],[13,82]
+];
+const MIRROR_AXIS=158;              // 158 - x  → linker Fuß
+const LOCAL_CX=79, LOCAL_CY=157;    // Mittelpunkt des lokalen Fußes
+const LOCAL_H=302;                  // Bezugslänge (entspricht ~26 cm Erwachsenenfuß)
+
+function smoothClosed(pts, t){
+  t=(t==null)?1:t; const n=pts.length;
+  let d="M"+pts[0][0].toFixed(2)+","+pts[0][1].toFixed(2);
+  for(let i=0;i<n;i++){
+    const p0=pts[(i-1+n)%n],p1=pts[i],p2=pts[(i+1)%n],p3=pts[(i+2)%n];
+    const c1x=p1[0]+(p2[0]-p0[0])/6*t, c1y=p1[1]+(p2[1]-p0[1])/6*t;
+    const c2x=p2[0]-(p3[0]-p1[0])/6*t, c2y=p2[1]-(p3[1]-p1[1])/6*t;
+    d+="C"+c1x.toFixed(2)+","+c1y.toFixed(2)+" "+c2x.toFixed(2)+","+c2y.toFixed(2)+" "+p2[0].toFixed(2)+","+p2[1].toFixed(2);
+  }
+  return d+"Z";
+}
+const PATH_RIGHT=smoothClosed(RIGHT,1.0);
+const PATH_LEFT =smoothClosed(RIGHT.map(p=>[MIRROR_AXIS-p[0],p[1]]),1.0);
+
+/* ---------- Alter → Fußlänge (cm), realistische Kurve ---------- */
+const AGE_CM=[[0,7.5],[1,11.5],[2,13.5],[3,14.8],[4,15.8],[5,16.8],[6,17.7],
+  [7,18.6],[8,19.5],[9,20.4],[10,21.3],[11,22.2],[12,23.2],[13,24.0],[14,24.6],
+  [15,25.1],[16,25.5],[17,25.8],[18,26.2]];
+function ageToCm(age){
+  if(age==null||isNaN(age)) age=30;
+  age=Math.max(0,age);
+  if(age>=18) return 26.2 + Math.min(age-18,60)*0.02; // Erwachsene ~26–27 cm
+  for(let i=0;i<AGE_CM.length-1;i++){
+    const [a0,c0]=AGE_CM[i], [a1,c1]=AGE_CM[i+1];
+    if(age>=a0 && age<=a1){ const f=(age-a0)/(a1-a0); return c0+(c1-c0)*f; }
+  }
+  return 26;
+}
+
+/* ---------- State ---------- */
+let people=[
+  {name:"Mama",  age:38},
+  {name:"Papa",  age:40},
+  {name:"Emma",  age:8},
+  {name:"Ben",   age:5},
+  {name:"Mia",   age:1},
+];
+
+/* ---------- Personen-UI ---------- */
+const peopleEl=document.getElementById('people');
+function renderPeople(){
+  peopleEl.innerHTML='';
+  people.forEach((p,i)=>{
+    const row=document.createElement('div'); row.className='person';
+    const n=document.createElement('input'); n.type='text'; n.placeholder='Name'; n.value=p.name;
+    n.addEventListener('input',()=>{people[i].name=n.value; render();});
+    const a=document.createElement('input'); a.type='number'; a.min='0'; a.max='110'; a.placeholder='Alter'; a.value=(p.age===''||p.age==null)?'':p.age;
+    a.addEventListener('input',()=>{people[i].age=a.value===''?'':Math.max(0,parseInt(a.value,10)); render();});
+    const x=document.createElement('button'); x.className='btn icon'; x.textContent='✕'; x.title='Entfernen';
+    x.addEventListener('click',()=>{people.splice(i,1); renderPeople(); render();});
+    row.append(n,a,x); peopleEl.appendChild(row);
+  });
+}
+document.getElementById('addPerson').addEventListener('click',()=>{
+  people.push({name:'',age:''}); renderPeople(); render();
+  peopleEl.lastChild.querySelector('input').focus();
+});
+
+/* ---------- Optionen ---------- */
+const els={
+  caption:document.getElementById('caption'),
+  showNames:document.getElementById('showNames'),
+  showAges:document.getElementById('showAges'),
+  arrange:document.getElementById('arrange'),
+  spacing:document.getElementById('spacing'),
+  angle:document.getElementById('angle'),
+  stroke:document.getElementById('stroke'),
+  lineColor:document.getElementById('lineColor'),
+  transparent:document.getElementById('transparent'),
+};
+Object.values(els).forEach(el=>el.addEventListener('input',render));
+
+/* ---------- SVG-Aufbau ---------- */
+const FONT='"Courier New",ui-monospace,"SFMono-Regular",Menlo,monospace';
+
+function buildPairGroup(cx, cy, L, angle, color, stroke){
+  const sc=L/LOCAL_H;
+  const off=0.31*L;                         // halber Abstand der beiden Füße
+  const sw=(stroke/10)/sc;                   // Strichbreite in lokale Einheiten
+  function foot(pathD, tx, rot){
+    return `<path d="${pathD}" transform="translate(${tx.toFixed(2)},${cy.toFixed(2)}) rotate(${rot}) scale(${sc.toFixed(4)}) translate(${-LOCAL_CX},${-LOCAL_CY})" `+
+           `fill="none" stroke="${color}" stroke-width="${sw.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+  return foot(PATH_LEFT, cx-off, -angle) + foot(PATH_RIGHT, cx+off, angle);
+}
+
+function orderedPeople(){
+  const list=people
+    .map((p,idx)=>({name:(p.name||'').trim(), age:p.age===''?null:p.age, idx}))
+    .filter(p=>p.name!=='' || p.age!==null);
+  const mode=els.arrange.value;
+  if(mode==='order') return list;
+  const sorted=list.slice().sort((a,b)=>ageToCm(b.age)-ageToCm(a.age)); // groß→klein
+  if(mode==='ascending') return sorted.slice().reverse();
+  // 'outside': größte außen, kleinste Mitte
+  const left=[], right=[];
+  sorted.forEach((p,i)=>{ (i%2===0?left:right).push(p); });
+  return left.concat(right.reverse());
+}
+
+function buildSVG(forExport){
+  const list=orderedPeople();
+  const angle=+els.angle.value;
+  const stroke=+els.stroke.value;
+  const color=els.lineColor.value;
+  const spacingF=(+els.spacing.value)/100;   // 0.55–1.0
+  const PX_PER_CM=302/26;                     // 26cm = LOCAL_H
+  const PAD=48;
+  const showNames=els.showNames.checked;
+  const showAges=els.showAges.checked;
+  const caption=(els.caption.value||'').trim();
+
+  // Größen
+  const items=list.map(p=>{
+    const cm=ageToCm(p.age);
+    const L=cm*PX_PER_CM;
+    return {...p, L, halfW:0.60*L, halfH:0.52*L};
+  });
+
+  // Horizontale Platzierung
+  let x=PAD, maxHalfH=0, positions=[];
+  if(items.length){
+    x=PAD+items[0].halfW;
+    for(let i=0;i<items.length;i++){
+      const it=items[i];
+      if(i>0){
+        const prev=items[i-1];
+        x += (prev.halfW+it.halfW)*spacingF;
+      }
+      positions.push(x);
+      maxHalfH=Math.max(maxHalfH,it.halfH);
+    }
+  }
+  const contentW = items.length ? (positions[positions.length-1]+items[items.length-1].halfW+PAD) : 600;
+  const cy = PAD + maxHalfH;
+
+  const nameGap=42, nameH=showNames?46:0;
+  const capGap=caption?54:0, capH=caption?40:0;
+  const baseFeet = cy + maxHalfH;                 // untere Kante der Füße
+  const nameY = baseFeet + nameGap;
+  const capY  = baseFeet + (showNames?nameH:0) + capGap;
+  const contentH = capY + (caption? capH: (showNames?10:PAD));
+
+  let svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${contentW.toFixed(0)} ${contentH.toFixed(0)}" width="${contentW.toFixed(0)}" height="${contentH.toFixed(0)}" font-family='${FONT}'>`;
+  if(forExport && !els.transparent.checked){
+    svg+=`<rect x="0" y="0" width="${contentW.toFixed(0)}" height="${contentH.toFixed(0)}" fill="#ffffff"/>`;
+  }
+  // Füße
+  items.forEach((it,i)=>{ svg+=buildPairGroup(positions[i], cy, it.L, angle, color, stroke); });
+  // Namen
+  if(showNames){
+    items.forEach((it,i)=>{
+      let label=(it.name||'').toUpperCase();
+      if(showAges && it.age!==null) label += `  ·  ${it.age}`;
+      if(!label) return;
+      const fs=Math.max(13, Math.min(20, it.L*0.075));
+      svg+=`<text x="${positions[i].toFixed(1)}" y="${nameY.toFixed(1)}" text-anchor="middle" `+
+           `font-size="${fs.toFixed(1)}" letter-spacing="2.5" fill="${color}" style="font-family:${FONT}">${escapeXml(label)}</text>`;
+    });
+  }
+  // Untertitel
+  if(caption){
+    svg+=`<text x="${(contentW/2).toFixed(1)}" y="${capY.toFixed(1)}" text-anchor="middle" `+
+         `font-size="26" letter-spacing="7" fill="${color}" style="font-family:${FONT}">${escapeXml(caption.toUpperCase())}</text>`;
+  }
+  svg+=`</svg>`;
+  return svg;
+}
+function escapeXml(s){ return s.replace(/[<>&'"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c])); }
+
+/* ---------- Render ---------- */
+const paper=document.getElementById('paper');
+function render(){
+  document.getElementById('spacingV').textContent=(+els.spacing.value)+'%';
+  document.getElementById('angleV').textContent=(+els.angle.value)+'°';
+  document.getElementById('strokeV').textContent=((+els.stroke.value)/10).toFixed(1);
+  paper.classList.toggle('checkerboard', els.transparent.checked);
+  paper.innerHTML=buildSVG(false);
+}
+
+/* ---------- Export ---------- */
+function download(filename, blob){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+document.getElementById('dlSvg').addEventListener('click',()=>{
+  const svg=buildSVG(true);
+  download('familie-fuesse.svg', new Blob([svg],{type:'image/svg+xml'}));
+});
+document.getElementById('dlPng').addEventListener('click',()=>{
+  const svgStr=buildSVG(true);
+  const m=svgStr.match(/viewBox="0 0 (\d+) (\d+)"/);
+  const w=+m[1], h=+m[2];
+  const targetW=Math.min(4000, Math.max(2400, w));   // ~Druckauflösung
+  const scale=targetW/w;
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.round(w*scale); canvas.height=Math.round(h*scale);
+  const ctx=canvas.getContext('2d');
+  if(!els.transparent.checked){ ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+  const img=new Image();
+  const blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  img.onload=()=>{
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    URL.revokeObjectURL(url);
+    canvas.toBlob(b=>download('familie-fuesse.png', b), 'image/png');
+  };
+  img.onerror=()=>{ URL.revokeObjectURL(url); alert('PNG-Export fehlgeschlagen.'); };
+  img.src=url;
+});
+document.getElementById('print').addEventListener('click',()=>window.print());
+
+/* ---------- Init ---------- */
+renderPeople();
+render();
+</script>
+</body>
+</html>
