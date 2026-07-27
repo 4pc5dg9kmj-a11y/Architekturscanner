@@ -17,11 +17,16 @@ Server und keine Installation** – alles läuft lokal, nichts wird hochgeladen.
 - **5 Fußform-Varianten** je Person (Rund, Schmal, Breit, Zierlich, Kräftig).
   „Automatisch" gibt jeder Person eine andere Form, damit die Paare sich
   natürlich unterscheiden.
-- **3 Posen** je Person:
+- **5 Posen** je Person:
   - **Aufrecht** – Zehen nach oben (Standard).
+  - **Oben auseinander** – die Zehen spreizen sich, Fersen bleiben zusammen (V).
+  - **Unten auseinander** – die Fersen spreizen sich, Zehen bleiben zusammen (A).
   - **Parallel schräg** – beide Füße parallel, leicht geneigt nebeneinander.
   - **Liegend 90°** – das Paar liegt waagerecht (Zehen zur Seite), wie das
     mittlere Paar auf der Vorlage.
+
+  Jedes Paar wird exakt über seine Bounding-Box zentriert, damit auch
+  gespreizte, gedrehte oder liegende Paare sauber in einer Reihe sitzen.
 - **Anordnung**: „Große Füße außen" (Eltern außen, Kinder in die Mitte – wie die
   Vorlage), Eingabereihenfolge oder klein → groß.
 - **Beschriftung**: eigener Untertitel (Standard „WE ARE GOOD TOGETHER"),

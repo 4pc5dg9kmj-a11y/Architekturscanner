@@ -235,29 +235,35 @@ const VARIANT_CACHE=VARIANTS.map(v=>{
   return {name:v.name, ptsR, ptsL, dR:smoothClosed(ptsR,0.9), dL:smoothClosed(ptsL,0.9)};
 });
 
-/* ---------- Posen: aufrecht / parallel schräg / liegend (90°) ---------- */
+/* ---------- Posen ----------
+   frL/frR: Drehung des linken/rechten Fußes · pvx/pvy: lokaler Drehpunkt
+   (Ferse bzw. Zehen für ein sauberes Spreizen) · offF: halber Fußabstand
+   · poseRot: Drehung des ganzen Paars (90° = liegend). */
 function poseParams(pose, angle){
-  if(pose==='parallel') return {footRotL:-(angle+4), footRotR:-(angle+4), poseRot:0,  offF:0.31};
-  if(pose==='lying')    return {footRotL:0,           footRotR:0,           poseRot:90, offF:0.15};
-  return                       {footRotL:-angle,      footRotR:angle,       poseRot:0,  offF:0.24}; // upright
+  const S=angle+8;
+  if(pose==='spreadTop')    return {frL:+S, frR:-S, poseRot:0,  offF:0.06, oyF:0, pvx:LOCAL_CX, pvy:300}; // Zehen auf, Fersen zu (V)
+  if(pose==='spreadBottom') return {frL:-S, frR:+S, poseRot:0,  offF:0.05, oyF:0, pvx:LOCAL_CX, pvy:46};  // Fersen auf, Zehen zu (A)
+  if(pose==='parallel')     return {frL:-(angle+4), frR:-(angle+4), poseRot:0,  offF:0.31, oyF:0, pvx:LOCAL_CX, pvy:LOCAL_CY};
+  if(pose==='lying')        return {frL:0, frR:0, poseRot:90, offF:0.15, oyF:0, pvx:LOCAL_CX, pvy:LOCAL_CY};
+  return                          {frL:-angle, frR:angle, poseRot:0, offF:0.24, oyF:0, pvx:LOCAL_CX, pvy:LOCAL_CY}; // aufrecht
 }
-// lokalen Umrisspunkt in das Paar-Koordinatensystem (relativ zum Paarzentrum) abbilden
-function txPoint(x, y, side, pp, sc, off){
-  let px=(x-LOCAL_CX)*sc, py=(y-LOCAL_CY)*sc;
-  const fr=(side==='L'?pp.footRotL:pp.footRotR)*Math.PI/180;
+// lokalen Umrisspunkt in das Paar-Koordinatensystem (relativ zum Paar-Ursprung) abbilden
+function txPoint(x, y, side, pp, sc, off, oy){
+  let px=(x-pp.pvx)*sc, py=(y-pp.pvy)*sc;
+  const fr=(side==='L'?pp.frL:pp.frR)*Math.PI/180;
   let rx=px*Math.cos(fr)-py*Math.sin(fr), ry=px*Math.sin(fr)+py*Math.cos(fr);
-  rx += (side==='L'?-off:off);
+  rx += (side==='L'?-off:off); ry += oy;
   const pr=pp.poseRot*Math.PI/180;
   return [rx*Math.cos(pr)-ry*Math.sin(pr), rx*Math.sin(pr)+ry*Math.cos(pr)];
 }
 function pairMetrics(L, vi, pose, angle){
-  const sc=L/LOCAL_H, pp=poseParams(pose,angle), off=pp.offF*L, V=VARIANT_CACHE[vi];
+  const sc=L/LOCAL_H, pp=poseParams(pose,angle), off=pp.offF*L, oy=pp.oyF*L, V=VARIANT_CACHE[vi];
   let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
-  const acc=(pts,side)=>pts.forEach(([x,y])=>{const[gx,gy]=txPoint(x,y,side,pp,sc,off);
+  const acc=(pts,side)=>pts.forEach(([x,y])=>{const[gx,gy]=txPoint(x,y,side,pp,sc,off,oy);
     if(gx<minx)minx=gx; if(gx>maxx)maxx=gx; if(gy<miny)miny=gy; if(gy>maxy)maxy=gy;});
   acc(V.ptsR,'R'); acc(V.ptsL,'L');
   const m=1.04; // kleine Reserve für die Kurvenwölbung
-  return {halfW:Math.max(-minx,maxx)*m, halfTop:(-miny)*m, halfBot:maxy*m};
+  return {w:(maxx-minx)*m, h:(maxy-miny)*m, cxc:(minx+maxx)/2, cyc:(miny+maxy)/2};
 }
 function autoVariant(idx){ return idx%VARIANTS.length; }
 function resolveVariant(p){ return p.shape==null||p.shape==='auto' ? autoVariant(p.idx) : (+p.shape)%VARIANTS.length; }
@@ -281,15 +287,16 @@ function ageToCm(age){
 let people=[
   {name:"Mama",  age:38, shape:'auto', pose:'upright'},
   {name:"Papa",  age:40, shape:'auto', pose:'upright'},
-  {name:"Emma",  age:8,  shape:'auto', pose:'upright'},
+  {name:"Emma",  age:8,  shape:'auto', pose:'spreadTop'},
   {name:"Ben",   age:5,  shape:'auto', pose:'lying'},
-  {name:"Mia",   age:1,  shape:'auto', pose:'upright'},
+  {name:"Mia",   age:1,  shape:'auto', pose:'spreadBottom'},
 ];
 
 /* ---------- Personen-UI ---------- */
 const SHAPE_OPTS=[['auto','Form: automatisch'],['0','Form: Rund'],['1','Form: Schmal'],
                   ['2','Form: Breit'],['3','Form: Zierlich'],['4','Form: Kräftig']];
-const POSE_OPTS=[['upright','Aufrecht'],['parallel','Parallel schräg'],['lying','Liegend 90°']];
+const POSE_OPTS=[['upright','Aufrecht'],['spreadTop','Oben auseinander'],
+                 ['spreadBottom','Unten auseinander'],['parallel','Parallel schräg'],['lying','Liegend 90°']];
 const peopleEl=document.getElementById('people');
 function mkSelect(opts, val, on){
   const s=document.createElement('select');
@@ -340,12 +347,14 @@ Object.values(els).forEach(el=>el.addEventListener('input',render));
 /* ---------- SVG-Aufbau ---------- */
 const FONT='"Courier New",ui-monospace,"SFMono-Regular",Menlo,monospace';
 
-function buildPair(cx, cy, L, vi, pose, angle, color, stroke){
-  const sc=L/LOCAL_H, pp=poseParams(pose,angle), off=pp.offF*L;
-  const sw=(stroke/10)/sc, V=VARIANT_CACHE[vi];
+function buildPair(slotX, midY, L, vi, pose, angle, color, stroke){
+  const sc=L/LOCAL_H, pp=poseParams(pose,angle), off=pp.offF*L, oy=pp.oyF*L, V=VARIANT_CACHE[vi];
+  const met=pairMetrics(L, vi, pose, angle);
+  const cx=slotX-met.cxc, cy=midY-met.cyc;          // Paar über seine Bounding-Box zentrieren
+  const sw=(stroke/10)/sc;
   function foot(d, side){
-    const fr=(side==='L'?pp.footRotL:pp.footRotR), ox=(side==='L'?-off:off);
-    return `<path d="${d}" transform="translate(${cx.toFixed(2)},${cy.toFixed(2)}) rotate(${pp.poseRot}) translate(${ox.toFixed(2)},0) rotate(${fr}) scale(${sc.toFixed(4)}) translate(${-LOCAL_CX},${-LOCAL_CY})" `+
+    const fr=(side==='L'?pp.frL:pp.frR), ox=(side==='L'?-off:off);
+    return `<path d="${d}" transform="translate(${cx.toFixed(2)},${cy.toFixed(2)}) rotate(${pp.poseRot}) translate(${ox.toFixed(2)},${oy.toFixed(2)}) rotate(${fr}) scale(${sc.toFixed(4)}) translate(${(-pp.pvx).toFixed(2)},${(-pp.pvy).toFixed(2)})" `+
            `fill="none" stroke="${color}" stroke-width="${sw.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
   return foot(V.dL,'L')+foot(V.dR,'R');
@@ -384,27 +393,26 @@ function buildSVG(forExport){
     const L=cm*PX_PER_CM;
     const vi=resolveVariant(p);
     const m=pairMetrics(L, vi, p.pose, angle);
-    return {...p, L, vi, halfW:m.halfW, halfTop:m.halfTop, halfBot:m.halfBot};
+    return {...p, L, vi, halfW:m.w/2, halfH:m.h/2};
   });
 
   // Horizontale Platzierung
-  let x=PAD, maxTop=0, maxBot=0, positions=[];
+  let x=PAD, maxH=0, positions=[];
   if(items.length){
     x=PAD+items[0].halfW;
     for(let i=0;i<items.length;i++){
       const it=items[i];
       if(i>0) x += (items[i-1].halfW+it.halfW)*spacingF;
       positions.push(x);
-      maxTop=Math.max(maxTop,it.halfTop);
-      maxBot=Math.max(maxBot,it.halfBot);
+      maxH=Math.max(maxH,it.halfH);
     }
   }
   const contentW = items.length ? (positions[positions.length-1]+items[items.length-1].halfW+PAD) : 600;
-  const cy = PAD + maxTop;                         // gemeinsame Mittellinie der Paare
+  const cy = PAD + maxH;                            // gemeinsame Mittellinie der Paare
 
   const nameGap=42, nameH=showNames?46:0;
   const capGap=caption?54:0, capH=caption?40:0;
-  const baseFeet = cy + maxBot;                    // untere Kante der Füße
+  const baseFeet = cy + maxH;                       // untere Kante der Füße
   const nameY = baseFeet + nameGap;
   const capY  = baseFeet + (showNames?nameH:0) + capGap;
   const contentH = capY + (caption? capH: (showNames?10:PAD));
