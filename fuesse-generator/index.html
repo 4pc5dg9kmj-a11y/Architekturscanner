@@ -149,7 +149,7 @@
         <option value="order">Eingabereihenfolge</option>
         <option value="ascending">Klein → Groß</option>
       </select>
-      <div class="slider"><label>Abstand</label><input type="range" id="spacing" min="55" max="100" value="82"><span class="val" id="spacingV"></span></div>
+      <div class="slider"><label>Abstand</label><input type="range" id="spacing" min="72" max="112" value="96"><span class="val" id="spacingV"></span></div>
       <div class="slider"><label>Neigung</label><input type="range" id="angle" min="0" max="16" value="8"><span class="val" id="angleV"></span></div>
       <div class="slider"><label>Linienstärke</label><input type="range" id="stroke" min="10" max="40" value="22"><span class="val" id="strokeV"></span></div>
       <div class="colorrow">
@@ -237,9 +237,9 @@ const VARIANT_CACHE=VARIANTS.map(v=>{
 
 /* ---------- Posen: aufrecht / parallel schräg / liegend (90°) ---------- */
 function poseParams(pose, angle){
-  if(pose==='parallel') return {footRotL:-(angle+4), footRotR:-(angle+4), poseRot:0,  offF:0.40};
-  if(pose==='lying')    return {footRotL:0,           footRotR:0,           poseRot:90, offF:0.19};
-  return                       {footRotL:-angle,      footRotR:angle,       poseRot:0,  offF:0.30}; // upright
+  if(pose==='parallel') return {footRotL:-(angle+4), footRotR:-(angle+4), poseRot:0,  offF:0.31};
+  if(pose==='lying')    return {footRotL:0,           footRotR:0,           poseRot:90, offF:0.15};
+  return                       {footRotL:-angle,      footRotR:angle,       poseRot:0,  offF:0.24}; // upright
 }
 // lokalen Umrisspunkt in das Paar-Koordinatensystem (relativ zum Paarzentrum) abbilden
 function txPoint(x, y, side, pp, sc, off){
