@@ -175,13 +175,29 @@
 /* ---------- Fuß-Geometrie (Linienzeichnung im Stil der Vorlage) ---------- */
 // Rechter Fuß (Zehen nach oben), großer Zeh links. Lokale Einheiten.
 const RIGHT=[
- [14,60],[15,30],[27,12],[43,33],[57,23],[71,37],[86,29],[100,43],[113,37],
- [125,50],[135,45],[143,72],[145,120],[143,178],[132,232],[109,280],[70,302],
- [30,282],[17,230],[21,168],[15,110],[13,82]
+ [16,62],   // medialer Ansatz des großen Zehs
+ [18,36],[40,36],   // großer Zeh: breite runde Kuppe
+ [50,66],           // Kerbe großer Zeh / 2. Zeh
+ [58,50],[69,50],   // 2. Zeh (runde Locke)
+ [77,64],           // Tal 2-3
+ [82,55],[92,55],   // 3. Zeh
+ [99,67],           // Tal 3-4
+ [104,61],[113,61], // 4. Zeh
+ [118,72],          // Tal 4-kleiner Zeh
+ [122,67],[130,68], // kleiner Zeh
+ [138,92],          // seitlich unter dem kleinen Zeh
+ [143,140],         // Fußballen (breiteste Stelle)
+ [139,200],[124,255],
+ [100,297],         // Ferse seitlich
+ [72,309],          // Ferse unten (rund)
+ [44,299],          // Ferse innen
+ [26,257],
+ [24,197],          // Fußgewölbe (sanft eingezogen)
+ [16,139],[14,94]   // Innenkante zurück zum großen Zeh
 ];
-const MIRROR_AXIS=158;              // 158 - x  → linker Fuß
-const LOCAL_CX=79, LOCAL_CY=157;    // Mittelpunkt des lokalen Fußes
-const LOCAL_H=302;                  // Bezugslänge (entspricht ~26 cm Erwachsenenfuß)
+const MIRROR_AXIS=157;                // 157 - x  → linker Fuß
+const LOCAL_CX=78.5, LOCAL_CY=172.5;  // Mittelpunkt des lokalen Fußes
+const LOCAL_H=273;                    // Bezugslänge (entspricht ~26 cm Erwachsenenfuß)
 
 function smoothClosed(pts, t){
   t=(t==null)?1:t; const n=pts.length;
@@ -194,8 +210,8 @@ function smoothClosed(pts, t){
   }
   return d+"Z";
 }
-const PATH_RIGHT=smoothClosed(RIGHT,1.0);
-const PATH_LEFT =smoothClosed(RIGHT.map(p=>[MIRROR_AXIS-p[0],p[1]]),1.0);
+const PATH_RIGHT=smoothClosed(RIGHT,0.9);
+const PATH_LEFT =smoothClosed(RIGHT.map(p=>[MIRROR_AXIS-p[0],p[1]]),0.9);
 
 /* ---------- Alter → Fußlänge (cm), realistische Kurve ---------- */
 const AGE_CM=[[0,7.5],[1,11.5],[2,13.5],[3,14.8],[4,15.8],[5,16.8],[6,17.7],
@@ -260,7 +276,7 @@ const FONT='"Courier New",ui-monospace,"SFMono-Regular",Menlo,monospace';
 
 function buildPairGroup(cx, cy, L, angle, color, stroke){
   const sc=L/LOCAL_H;
-  const off=0.31*L;                         // halber Abstand der beiden Füße
+  const off=0.30*L;                         // halber Abstand der beiden Füße
   const sw=(stroke/10)/sc;                   // Strichbreite in lokale Einheiten
   function foot(pathD, tx, rot){
     return `<path d="${pathD}" transform="translate(${tx.toFixed(2)},${cy.toFixed(2)}) rotate(${rot}) scale(${sc.toFixed(4)}) translate(${-LOCAL_CX},${-LOCAL_CY})" `+
@@ -289,7 +305,7 @@ function buildSVG(forExport){
   const stroke=+els.stroke.value;
   const color=els.lineColor.value;
   const spacingF=(+els.spacing.value)/100;   // 0.55–1.0
-  const PX_PER_CM=302/26;                     // 26cm = LOCAL_H
+  const PX_PER_CM=LOCAL_H/26;                     // 26cm = LOCAL_H
   const PAD=48;
   const showNames=els.showNames.checked;
   const showAges=els.showAges.checked;
