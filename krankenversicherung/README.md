@@ -64,6 +64,12 @@ Gerätewechsel gibt es unter „Einstellungen“ einen JSON-Export/-Import
 5. Nach Bescheid/Leistungsabrechnung die **Erstattungen** eintragen – der
    Soll-Ist-Vergleich zeigt sofort, ob und wo etwas fehlt.
 
+## Weiterentwicklung
+
+Konkrete Ausbauvorschläge – automatische Beleg-Benennung und Cloud-Ablage
+(pCloud/Google Drive), Kostendämpfungspauschale, Sammelanträge, Fristen –
+stehen in [VERBESSERUNGEN.md](VERBESSERUNGEN.md).
+
 ## Wichtiger Hinweis
 
 Die Erwartungswerte sind eine **Plausibilitätsrechnung** (Satz × Betrag).
