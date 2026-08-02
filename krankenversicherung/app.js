@@ -75,6 +75,11 @@ const BUNDESLAENDER = [
 ];
 const landName = id => (BUNDESLAENDER.find(b => b.id === id) || { name: id }).name;
 
+/* Dienstherren mit Kostendämpfungspauschale: ein jährlicher Eigenbehalt, der
+   vom errechneten Beihilfe-Erstattungsbetrag abgezogen wird. Höhe richtet sich
+   nach der Besoldungsgruppe und wird je Person eingetragen. */
+const LAENDER_MIT_KDP = new Set(["hb", "he", "nw", "rp", "sl"]);
+
 const PERSON_FARBEN = ["#1a6fb0", "#1d8a4b", "#b07a12", "#8e44ad", "#c0392b",
                        "#16a085", "#d35400", "#2c3e50", "#7f8c8d", "#c2185b"];
 
@@ -86,7 +91,13 @@ const LS_KEY = "kvpruefer-v1";
 
 function defaultStore() {
   return {
-    settings: { bundesland: "bund" },
+    settings: {
+      bundesland: "bund",
+      bagatellgrenze: 200,      // € – darunter wird kein Beihilfeantrag gestellt (0 = aus)
+      antragsfristMonate: 12,   // Frist für den Beihilfeantrag ab Rechnungsdatum
+      widerspruchsfristTage: 30,// Widerspruch gegen den Beihilfebescheid
+      nachfrageTage: 42,        // ohne Erstattung nach Einreichung → nachhaken
+    },
     persons: [],
     vertraege: [],
     rechnungen: [],
@@ -194,7 +205,7 @@ function analyseRechnung(r, usage) {
   const person = personById(r.personId);
   const jahr = (r.datum || todayISO()).slice(0, 4);
   const positionen = [];
-  let sumBetrag = 0, erwBeihilfe = 0, erwPKV = 0;
+  let sumBetrag = 0, sumBeihilfefaehig = 0, erwBeihilfe = 0, erwPKV = 0;
   const hinweise = [];
 
   for (const pos of r.positionen || []) {
@@ -244,9 +255,38 @@ function analyseRechnung(r, usage) {
       hinweise: posHinweise,
     });
     sumBetrag += betrag;
+    if (pos.beihilfefaehig) sumBeihilfefaehig += betrag;
     erwBeihilfe += eB;
     erwPKV += eP;
   }
+
+  /* Jahres-Eigenbehalte: Die Kostendämpfungspauschale (Beihilfe) und der
+     PKV-Selbstbehalt sind Jahresbeträge, keine Kürzung je Position. Sie werden
+     chronologisch über alle Rechnungen des Jahres verbraucht – deshalb läuft
+     die Analyse über `usage` und muss nach Datum sortiert aufgerufen werden. */
+  const erwBeihilfeBrutto = erwBeihilfe;
+  const erwPKVBrutto = erwPKV;
+  let kdpAbzug = 0, sbAbzug = 0;
+  if (person && usage) {
+    const kdpJahr = person.kostendaempfung || 0;
+    if (kdpJahr > 0 && erwBeihilfe > EPS) {
+      const key = "kdp|" + person.id + "|" + jahr;
+      const frei = Math.max(0, kdpJahr - (usage.get(key) || 0));
+      kdpAbzug = Math.min(erwBeihilfe, frei);
+      erwBeihilfe -= kdpAbzug;
+      usage.set(key, (usage.get(key) || 0) + kdpAbzug);
+    }
+    const sbJahr = person.selbstbehalt || 0;
+    if (sbJahr > 0 && erwPKV > EPS) {
+      const key = "sb|" + person.id + "|" + jahr;
+      const frei = Math.max(0, sbJahr - (usage.get(key) || 0));
+      sbAbzug = Math.min(erwPKV, frei);
+      erwPKV -= sbAbzug;
+      usage.set(key, (usage.get(key) || 0) + sbAbzug);
+    }
+  }
+  if (kdpAbzug > EPS || sbAbzug > EPS)
+    hinweise.push("Jahres-Eigenbehalte wurden von der Gesamterwartung abgezogen – die Erwartungswerte je Position oben sind Bruttowerte ohne diesen Abzug.");
 
   const istBeihilfe = (r.erstattungen || []).filter(e => e.quelle === "beihilfe").reduce((s, e) => s + (e.betrag || 0), 0);
   const istPKV      = (r.erstattungen || []).filter(e => e.quelle === "pkv").reduce((s, e) => s + (e.betrag || 0), 0);
@@ -270,9 +310,87 @@ function analyseRechnung(r, usage) {
   if (positionen.some(p => p.istP != null) && Math.abs(posIstP - istPKV) > 0.01)
     hinweise.push(`Summe der PKV-Ist-Werte je Position (${fmtEUR(posIstP)}) weicht von den erfassten PKV-Erstattungen (${fmtEUR(istPKV)}) ab.`);
 
-  return { person, positionen, sumBetrag, erwBeihilfe, erwPKV,
+  return { person, positionen, sumBetrag, sumBeihilfefaehig,
+           erwBeihilfe, erwPKV, erwBeihilfeBrutto, erwPKVBrutto, kdpAbzug, sbAbzug,
            istBeihilfe, istPKV, deltaBeihilfe, deltaPKV, eigenanteil,
-           status, hinweise };
+           status, hinweise, jahr };
+}
+
+/* ---------------------- Fristen und Einreich-Grenzen ---------------------- */
+
+const tagesDiff = (vonISO, bisISO) =>
+  Math.round((new Date(bisISO + "T00:00:00") - new Date(vonISO + "T00:00:00")) / 86400000);
+
+function plusMonate(iso, monate) {
+  const d = new Date(iso + "T00:00:00");
+  const tag = d.getDate();
+  d.setMonth(d.getMonth() + monate);
+  if (d.getDate() < tag) d.setDate(0);   // 31.01. + 1 Monat → 28./29.02.
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Fristen einer Rechnung: Antragsfrist Beihilfe, Widerspruchsfrist nach
+ * Bescheid, überfällige Erstattung nach Einreichung.
+ * Liefert Einträge mit `stufe`: "bad" (abgelaufen/dringend) oder "warn".
+ */
+function fristenFuer(r, a) {
+  const s = store.settings, heute = todayISO(), out = [];
+
+  if (r.datum && !r.eingereichtBeihilfe && (s.antragsfristMonate || 0) > 0 &&
+      a.person && (a.person.beihilfesatz || 0) > 0) {
+    const frist = plusMonate(r.datum, s.antragsfristMonate);
+    const rest = tagesDiff(heute, frist);
+    if (rest < 0)
+      out.push({ stufe: "bad", text: `Antragsfrist bei der Beihilfe am ${fmtDate(frist)} abgelaufen – Erstattung ist verfallen.` });
+    else if (rest <= 60)
+      out.push({ stufe: rest <= 21 ? "bad" : "warn", text: `Noch ${rest} Tage für den Beihilfeantrag (Frist ${fmtDate(frist)}).` });
+  }
+
+  if (a.deltaBeihilfe > EPS && (s.widerspruchsfristTage || 0) > 0) {
+    const bescheide = (r.erstattungen || []).filter(e => e.quelle === "beihilfe" && e.datum).map(e => e.datum).sort();
+    if (bescheide.length) {
+      const frist = new Date(new Date(bescheide[bescheide.length - 1] + "T00:00:00").getTime() +
+                             s.widerspruchsfristTage * 86400000).toISOString().slice(0, 10);
+      const rest = tagesDiff(heute, frist);
+      if (rest < 0)
+        out.push({ stufe: "warn", text: `Widerspruchsfrist gegen den Beihilfebescheid lief am ${fmtDate(frist)} ab.` });
+      else
+        out.push({ stufe: rest <= 10 ? "bad" : "warn", text: `Noch ${rest} Tage für einen Widerspruch gegen den Beihilfebescheid (Frist ${fmtDate(frist)}).` });
+    }
+  }
+
+  const nach = s.nachfrageTage || 0;
+  if (nach > 0) {
+    if (r.eingereichtBeihilfe && r.eingereichtBeihilfeDatum && a.istBeihilfe <= EPS) {
+      const d = tagesDiff(r.eingereichtBeihilfeDatum, heute);
+      if (d >= nach) out.push({ stufe: "warn", text: `Seit ${d} Tagen bei der Beihilfe eingereicht, noch keine Erstattung erfasst.` });
+    }
+    if (r.eingereichtPKV && r.eingereichtPKVDatum && a.istPKV <= EPS) {
+      const d = tagesDiff(r.eingereichtPKVDatum, heute);
+      if (d >= nach) out.push({ stufe: "warn", text: `Seit ${d} Tagen bei der PKV eingereicht, noch keine Erstattung erfasst.` });
+    }
+  }
+  return out;
+}
+
+/**
+ * Sammelstand bis zur Beihilfe-Bagatellgrenze: Aufwendungen aller noch nicht
+ * eingereichten Rechnungen einer Person.
+ */
+function bagatellStatus(person, analysen) {
+  const grenze = store.settings.bagatellgrenze || 0;
+  if (!grenze || !person) return null;
+  let summe = 0, anzahl = 0;
+  for (const r of store.rechnungen) {
+    if (r.personId !== person.id || r.eingereichtBeihilfe) continue;
+    const a = analysen.get(r.id);
+    if (!a || a.sumBeihilfefaehig <= 0) continue;
+    summe += a.sumBeihilfefaehig;
+    anzahl++;
+  }
+  if (!anzahl) return null;
+  return { summe, anzahl, grenze, fehlt: Math.max(0, grenze - summe), erreicht: summe + EPS >= grenze };
 }
 
 /** Analysiert alle Rechnungen chronologisch (für Jahres-Höchstgrenzen). */
@@ -399,10 +517,90 @@ function viewUebersicht() {
       <tbody>${rows}</tbody></table></div></div>`;
   }
 
+  /* Fristen über alle Rechnungen */
+  const fristenListe = [];
+  for (const r of store.rechnungen) {
+    const a = analysen.get(r.id);
+    if (!a) continue;
+    for (const f of fristenFuer(r, a)) fristenListe.push({ r, a, f });
+  }
+  fristenListe.sort((x, y) => (x.f.stufe === y.f.stufe ? 0 : x.f.stufe === "bad" ? -1 : 1));
+
+  if (fristenListe.length) {
+    html += `<div class="panel"><h2>Fristen im Blick</h2>
+      <div class="table-wrap"><table>
+      <thead><tr><th>Rechnung</th><th>Person</th><th>Hinweis</th></tr></thead><tbody>
+      ${fristenListe.map(({ r, a, f }) => `
+        <tr class="clickable" data-action="open-rechnung" data-id="${r.id}">
+          <td>${fmtDate(r.datum)} · ${esc(r.arzt || "–")}</td>
+          <td>${esc(a.person ? a.person.name : "?")}</td>
+          <td><span class="badge ${f.stufe === "bad" ? "b-bad" : "b-warn"}">${f.stufe === "bad" ? "dringend" : "beachten"}</span>
+              <span style="margin-left:8px">${esc(f.text)}</span></td>
+        </tr>`).join("")}
+      </tbody></table></div></div>`;
+  }
+
+  /* Sammelstand bis zur Beihilfe-Bagatellgrenze */
+  const sammel = store.persons.map(p => ({ p, b: bagatellStatus(p, analysen) })).filter(x => x.b);
+  if (sammel.length) {
+    html += `<div class="panel"><h2>Sammelstand für den Beihilfeantrag</h2>
+      <p class="panel-sub">Noch nicht eingereichte, beihilfefähige Aufwendungen gegen die Bagatellgrenze von ${fmtEUR(store.settings.bagatellgrenze || 0)}.</p>
+      <div class="table-wrap"><table>
+      <thead><tr><th>Person</th><th class="num">Rechnungen</th><th class="num">Gesammelt</th><th class="num">Fehlt noch</th><th>Stand</th></tr></thead><tbody>
+      ${sammel.map(({ p, b }) => `<tr>
+        <td><span class="person-dot" style="background:${personFarbe(p)}"></span><b>${esc(p.name)}</b></td>
+        <td class="num">${b.anzahl}</td>
+        <td class="num">${fmtEUR(b.summe)}</td>
+        <td class="num">${b.erreicht ? "–" : fmtEUR(b.fehlt)}</td>
+        <td style="min-width:170px">
+          ${b.erreicht ? '<span class="badge b-ok">Antrag lohnt sich</span>' : '<span class="badge b-mut">noch sammeln</span>'}
+          <div class="progress" style="margin-top:6px"><div class="${b.erreicht ? "p-full" : ""}" style="width:${Math.min(100, b.summe / b.grenze * 100)}%"></div></div>
+        </td>
+      </tr>`).join("")}
+      </tbody></table></div></div>`;
+  }
+
+  /* Jahres-Eigenbehalte (Kostendämpfungspauschale, Selbstbehalt) */
+  const jahrJetzt = todayISO().slice(0, 4);
+  const eigenbehalte = [];
+  for (const p of store.persons) {
+    if (!(p.kostendaempfung > 0) && !(p.selbstbehalt > 0)) continue;
+    let kdpVerbraucht = 0, sbVerbraucht = 0;
+    for (const r of store.rechnungen) {
+      if (r.personId !== p.id || (r.datum || "").slice(0, 4) !== jahrJetzt) continue;
+      const a = analysen.get(r.id);
+      if (!a) continue;
+      kdpVerbraucht += a.kdpAbzug; sbVerbraucht += a.sbAbzug;
+    }
+    eigenbehalte.push({ p, kdpVerbraucht, sbVerbraucht });
+  }
+  if (eigenbehalte.length) {
+    html += `<div class="panel"><h2>Jahres-Eigenbehalte ${jahrJetzt}</h2>
+      <p class="panel-sub">Kostendämpfungspauschale und PKV-Selbstbehalt werden einmal jährlich verrechnet. Ist der Topf aufgebraucht, erstatten Beihilfe und PKV wieder voll.</p>
+      <div class="table-wrap"><table>
+      <thead><tr><th>Person</th><th class="num">Kostendämpfungspauschale</th><th class="num">davon verbraucht</th>
+        <th class="num">PKV-Selbstbehalt</th><th class="num">davon verbraucht</th></tr></thead><tbody>
+      ${eigenbehalte.map(({ p, kdpVerbraucht, sbVerbraucht }) => `<tr>
+        <td><span class="person-dot" style="background:${personFarbe(p)}"></span><b>${esc(p.name)}</b></td>
+        <td class="num">${p.kostendaempfung > 0 ? fmtEUR(p.kostendaempfung) : "–"}</td>
+        <td class="num">${p.kostendaempfung > 0 ? fmtEUR(kdpVerbraucht) + (kdpVerbraucht + EPS >= p.kostendaempfung ? " ✓" : "") : "–"}</td>
+        <td class="num">${p.selbstbehalt > 0 ? fmtEUR(p.selbstbehalt) : "–"}</td>
+        <td class="num">${p.selbstbehalt > 0 ? fmtEUR(sbVerbraucht) + (sbVerbraucht + EPS >= p.selbstbehalt ? " ✓" : "") : "–"}</td>
+      </tr>`).join("")}
+      </tbody></table></div></div>`;
+  }
+
   /* Rechnungen mit Handlungsbedarf */
+  /* „offen“ zählt nur als Handlungsbedarf, wenn die Einreichgrenze erreicht ist –
+     sonst ist Sammeln der richtige Zustand und keine Aufgabe. */
+  const sammelErreicht = new Map(store.persons.map(p => {
+    const b = bagatellStatus(p, analysen);
+    return [p.id, !b || b.erreicht];
+  }));
   const kritisch = store.rechnungen
     .map(r => ({ r, a: analysen.get(r.id) }))
-    .filter(x => x.a && (x.a.status === "fehlt" || x.a.status === "offen" || !x.r.bezahltAnArzt))
+    .filter(x => x.a && (x.a.status === "fehlt" || !x.r.bezahltAnArzt ||
+                         (x.a.status === "offen" && sammelErreicht.get(x.r.personId) !== false)))
     .sort((x, y) => (y.r.datum || "").localeCompare(x.r.datum || ""));
   if (kritisch.length) {
     html += `<div class="panel"><h2>Handlungsbedarf</h2><div class="table-wrap"><table>
@@ -471,6 +669,8 @@ function viewPersonen() {
         <h2><span class="person-dot" style="background:${personFarbe(p)}"></span>${esc(p.name)}</h2>
         <span class="badge b-info">${esc(rolleName(p.rolle))}</span>
         <span class="badge b-mut">Beihilfesatz ${p.beihilfesatz} %</span>
+        ${p.kostendaempfung > 0 ? `<span class="badge b-warn">Kostendämpfung ${fmtEUR(p.kostendaempfung)}/Jahr</span>` : ""}
+        ${p.selbstbehalt > 0 ? `<span class="badge b-warn">Selbstbehalt ${fmtEUR(p.selbstbehalt)}/Jahr</span>` : ""}
         <div class="spacer"></div>
         <button class="small" data-action="person-edit" data-id="${p.id}">Bearbeiten</button>
         <button class="small danger" data-action="person-del" data-id="${p.id}">Löschen</button>
@@ -496,7 +696,8 @@ function personModal(person) {
   const isNew = !person;
   const p = person || {
     id: uid(), name: "", geburtsdatum: "", rolle: "selbst",
-    beihilfesatz: 50, vertragId: "", bausteinAktiv: {}, notiz: "",
+    beihilfesatz: 50, vertragId: "", bausteinAktiv: {},
+    kostendaempfung: 0, selbstbehalt: 0, notiz: "",
   };
   const land = BUNDESLAENDER.find(b => b.id === store.settings.bundesland);
 
@@ -531,6 +732,22 @@ function personModal(person) {
       </div>
       <div class="hint small">Beihilfe-Hinweis ${esc(land ? land.name : "")}: ${esc(land ? land.hinweis : "")}<br>
       <i>Ohne Gewähr – maßgeblich ist dein Beihilfebescheid. Der Satz oben ist frei einstellbar.</i></div>
+
+      <div class="frow">
+        <label class="f"><span>Kostendämpfungspauschale in € pro Jahr</span>
+          <input type="text" name="kostendaempfung" value="${fmtBetragInput(p.kostendaempfung || 0)}" placeholder="0,00">
+        </label>
+        <label class="f"><span>PKV-Selbstbehalt in € pro Jahr</span>
+          <input type="text" name="selbstbehalt" value="${fmtBetragInput(p.selbstbehalt || 0)}" placeholder="0,00">
+        </label>
+      </div>
+      <div class="${LAENDER_MIT_KDP.has(store.settings.bundesland) ? "warnbox" : "hint"} small">
+        ${LAENDER_MIT_KDP.has(store.settings.bundesland)
+          ? `In ${esc(landName(store.settings.bundesland))} gibt es eine <b>Kostendämpfungspauschale</b>: einen jährlichen Eigenbehalt nach Besoldungsgruppe, den die Beihilfestelle vom Erstattungsbetrag abzieht. Trage sie hier ein – sonst meldet die App zu Unrecht „Erstattung fehlt“.`
+          : `Für ${esc(landName(store.settings.bundesland))} ist keine Kostendämpfungspauschale hinterlegt – Feld auf 0 lassen.`}
+        Beide Beträge sind <b>Jahresbeträge</b> und werden chronologisch über die Rechnungen des Jahres verrechnet.
+      </div>
+
       <label class="f"><span>PKV-Vertrag</span>
         <select name="vertragId" id="person-vertrag">
           <option value="">– kein Vertrag –</option>
@@ -561,6 +778,8 @@ function personModal(person) {
     p.geburtsdatum = fd.get("geburtsdatum");
     p.rolle = fd.get("rolle");
     p.beihilfesatz = Math.min(100, Math.max(0, parseFloat(fd.get("beihilfesatz")) || 0));
+    p.kostendaempfung = Math.max(0, parseBetrag(fd.get("kostendaempfung")));
+    p.selbstbehalt = Math.max(0, parseBetrag(fd.get("selbstbehalt")));
     p.vertragId = fd.get("vertragId");
     const checked = new Set(fd.getAll("baustein"));
     p.bausteinAktiv = {};
@@ -807,7 +1026,8 @@ function rechnungNeu() {
 function viewRechnungDetail(id) {
   const r = rechnungById(id);
   if (!r) return `<h1>Rechnung nicht gefunden</h1><p><a href="#/rechnungen">← zurück zur Liste</a></p>`;
-  const a = analyseAlle().get(id);
+  const analysen = analyseAlle();
+  const a = analysen.get(id);
   const p = personById(r.personId);
 
   const posRows = a.positionen.map((ap, i) => {
@@ -848,6 +1068,8 @@ function viewRechnungDetail(id) {
   </tr>`).join("");
 
   const quote = a.sumBetrag > 0 ? Math.min(100, (a.istBeihilfe + a.istPKV) / a.sumBetrag * 100) : 0;
+  const fristen = fristenFuer(r, a);
+  const bagatell = !r.eingereichtBeihilfe ? bagatellStatus(p, analysen) : null;
 
   return `
     <a class="backlink" href="#/rechnungen">← Alle Rechnungen</a>
@@ -927,10 +1149,12 @@ function viewRechnungDetail(id) {
       <div class="table-wrap"><table>
         <thead><tr><th></th><th class="num">Erwartet (Soll)</th><th class="num">Erhalten (Ist)</th><th class="num">Delta</th></tr></thead>
         <tbody>
-          <tr><td><b>Beihilfe</b> (${esc(landName(store.settings.bundesland))}, Satz ${p ? p.beihilfesatz : "?"} %)</td>
+          <tr><td><b>Beihilfe</b> (${esc(landName(store.settings.bundesland))}, Satz ${p ? p.beihilfesatz : "?"} %)
+            ${a.kdpAbzug > EPS ? `<div class="small muted">${fmtEUR(a.erwBeihilfeBrutto)} abzgl. Kostendämpfungspauschale ${fmtEUR(a.kdpAbzug)}</div>` : ""}</td>
             <td class="num">${fmtEUR(a.erwBeihilfe)}</td><td class="num">${fmtEUR(a.istBeihilfe)}</td>
             <td class="num ${a.deltaBeihilfe > EPS ? "pos-neg" : "pos-ok"}">${fmtEUR(a.deltaBeihilfe)}</td></tr>
-          <tr><td><b>Private Krankenversicherung</b>${p && vertragById(p.vertragId) ? " (" + esc(vertragById(p.vertragId).name) + ")" : ""}</td>
+          <tr><td><b>Private Krankenversicherung</b>${p && vertragById(p.vertragId) ? " (" + esc(vertragById(p.vertragId).name) + ")" : ""}
+            ${a.sbAbzug > EPS ? `<div class="small muted">${fmtEUR(a.erwPKVBrutto)} abzgl. Selbstbehalt ${fmtEUR(a.sbAbzug)}</div>` : ""}</td>
             <td class="num">${fmtEUR(a.erwPKV)}</td><td class="num">${fmtEUR(a.istPKV)}</td>
             <td class="num ${a.deltaPKV > EPS ? "pos-neg" : "pos-ok"}">${fmtEUR(a.deltaPKV)}</td></tr>
           <tr><td><b>Erwarteter Eigenanteil</b></td>
@@ -945,8 +1169,20 @@ function viewRechnungDetail(id) {
       <div class="small muted" style="margin-top:4px">${quote.toFixed(0)} % des Rechnungsbetrags erstattet.</div>
       ${a.deltaBeihilfe > EPS ? `<div class="warnbox">▲ Von der <b>Beihilfe</b> fehlen noch <b>${fmtEUR(a.deltaBeihilfe)}</b> gegenüber der Erwartung${r.eingereichtBeihilfe ? "" : " – Rechnung ist noch nicht als bei der Beihilfe eingereicht markiert"}.</div>` : ""}
       ${a.deltaPKV > EPS ? `<div class="warnbox">▲ Von der <b>PKV</b> fehlen noch <b>${fmtEUR(a.deltaPKV)}</b> gegenüber der Erwartung${r.eingereichtPKV ? "" : " – Rechnung ist noch nicht als bei der PKV eingereicht markiert"}.</div>` : ""}
-      ${a.status === "pruefen" ? `<div class="hint">Es wurde <b>mehr erstattet als erwartet</b> – prüfe, ob Beihilfesatz und Vertragsbausteine korrekt hinterlegt sind.</div>` : ""}
+      ${(() => {
+        /* Überzahlung je Quelle melden – auch wenn die andere Quelle noch
+           offen ist und der Gesamtstatus deshalb „Erstattung fehlt“ lautet. */
+        const ueber = [];
+        if (a.deltaBeihilfe < -EPS) ueber.push(`Beihilfe ${fmtEUR(-a.deltaBeihilfe)}`);
+        if (a.deltaPKV < -EPS) ueber.push(`PKV ${fmtEUR(-a.deltaPKV)}`);
+        return ueber.length
+          ? `<div class="hint">Es wurde <b>mehr erstattet als erwartet</b> (${ueber.join(", ")}) – prüfe, ob Beihilfesatz, Vertragsbausteine und Jahres-Eigenbehalte korrekt hinterlegt sind.</div>`
+          : "";
+      })()}
       ${a.hinweise.map(h => `<div class="warnbox">${esc(h)}</div>`).join("")}
+      ${fristen.map(f => `<div class="${f.stufe === "bad" ? "warnbox fristbox-bad" : "warnbox"}">${esc(f.text)}</div>`).join("")}
+      ${bagatell && !bagatell.erreicht ? `<div class="hint">Noch nicht bei der Beihilfe eingereicht: ${bagatell.anzahl} Rechnung(en) mit zusammen <b>${fmtEUR(bagatell.summe)}</b> beihilfefähigen Aufwendungen. Bis zur Bagatellgrenze von ${fmtEUR(bagatell.grenze)} fehlen noch <b>${fmtEUR(bagatell.fehlt)}</b> – so lange lohnt ein Antrag in der Regel nicht.</div>` : ""}
+      ${bagatell && bagatell.erreicht ? `<div class="hint">Einreichgrenze erreicht: ${bagatell.anzahl} noch nicht eingereichte Rechnung(en) mit <b>${fmtEUR(bagatell.summe)}</b> – ein Beihilfeantrag lohnt sich jetzt.</div>` : ""}
       <div class="small muted" style="margin-top:8px">Hinweis: Erwartungswerte sind eine Plausibilitätsrechnung (Satz × Betrag). Beihilfe/PKV können nach Gebührenordnung (GOÄ/GOZ), Höchstbeträgen oder Eigenbehalten (z. B. Kostendämpfungspauschale) abweichend kürzen – solche Kürzungen als Bemerkung bei der Erstattung dokumentieren.</div>
     </div>
 
@@ -1001,7 +1237,29 @@ function viewEinstellungen() {
         </select>
       </label>
       <div class="hint" id="land-hinweis">${esc(land ? land.hinweis : "")}</div>
-      <div class="small muted">Die Hinweise sind unverbindliche Orientierung. Der tatsächliche Beihilfesatz wird pro Person unter „Personen“ eingestellt.</div>
+      <div class="small muted">Die Hinweise sind unverbindliche Orientierung. Der tatsächliche Beihilfesatz sowie Kostendämpfungspauschale und Selbstbehalt werden pro Person unter „Personen“ eingestellt.</div>
+    </div>
+    <div class="panel">
+      <h2>Fristen und Grenzwerte</h2>
+      <p class="panel-sub">Steuern Warnungen und den Sammelstand. Die Vorgaben orientieren sich am Bund – bitte an deinen Dienstherrn anpassen.</p>
+      <div class="frow">
+        <label class="f"><span>Bagatellgrenze Beihilfeantrag in € (0 = aus)</span>
+          <input type="text" data-setting="bagatellgrenze" value="${fmtBetragInput(store.settings.bagatellgrenze || 0)}">
+        </label>
+        <label class="f"><span>Antragsfrist in Monaten ab Rechnungsdatum</span>
+          <input type="number" min="0" step="1" data-setting="antragsfristMonate" value="${store.settings.antragsfristMonate || 0}">
+        </label>
+        <label class="f"><span>Widerspruchsfrist in Tagen ab Bescheid</span>
+          <input type="number" min="0" step="1" data-setting="widerspruchsfristTage" value="${store.settings.widerspruchsfristTage || 0}">
+        </label>
+        <label class="f"><span>Nachhaken nach … Tagen ohne Erstattung</span>
+          <input type="number" min="0" step="1" data-setting="nachfrageTage" value="${store.settings.nachfrageTage || 0}">
+        </label>
+      </div>
+      <div class="hint small">
+        <b>Bagatellgrenze:</b> Die Beihilfe zahlt vielerorts erst ab dieser Summe an Aufwendungen. Die App zeigt dann je Person, wie viel bis zur lohnenden Einreichung noch fehlt, statt jede Einzelrechnung anzumahnen.<br>
+        <b>Antragsfrist:</b> Beim Bund ein Jahr ab Rechnungsdatum – wird sie versäumt, verfällt die Beihilfe vollständig. Die Länder weichen ab.
+      </div>
     </div>
     <div class="panel">
       <h2>Datensicherung</h2>
@@ -1234,6 +1492,16 @@ document.addEventListener("change", e => {
     const h = $("#land-hinweis");
     if (h && land) h.textContent = land.hinweis;
     toast("Bundesland gespeichert: " + (land ? land.name : el.value));
+    return;
+  }
+
+  /* Fristen und Grenzwerte */
+  if (el.dataset.setting) {
+    const f = el.dataset.setting;
+    store.settings[f] = f === "bagatellgrenze"
+      ? Math.max(0, parseBetrag(el.value))
+      : Math.max(0, parseInt(el.value, 10) || 0);
+    save(); toast("Einstellung gespeichert.");
     return;
   }
 

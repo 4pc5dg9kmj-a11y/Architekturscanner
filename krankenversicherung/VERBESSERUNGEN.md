@@ -228,7 +228,7 @@ zugeordneten Rechnungen und Bescheid-Daten. Der Bescheidbetrag wird automatisch
 positionsweise verteilt; der Beihilfebescheid als PDF hängt am Antrag, nicht an
 einer willkürlich gewählten Rechnung. **Aufwand: M**
 
-### 2.2 Kostendämpfungspauschale und Selbstbehalte ⭐ Korrektheitsproblem
+### 2.2 Kostendämpfungspauschale und Selbstbehalte ✅ *umgesetzt*
 
 **Problem:** Bei NRW, Rheinland-Pfalz, Saarland, Bremen und Hessen zieht die
 Beihilfestelle eine jährliche Kostendämpfungspauschale (je nach
@@ -246,7 +246,7 @@ das Vertrauen in das Werkzeug zerstören.
 
 **Aufwand: M**
 
-### 2.3 Bagatellgrenze und Antragsfrist
+### 2.3 Bagatellgrenze und Antragsfrist ✅ *umgesetzt*
 
 - **Mindestgrenze:** Beihilfe wird vielerorts erst ab 200 € Aufwendungen
   gewährt. Die App sollte anzeigen: „Andreas: 143,20 € gesammelt — noch
@@ -336,20 +336,20 @@ Es geht um Gesundheitsdaten der ganzen Familie:
 
 ## Vorgeschlagene Reihenfolge
 
-| # | Thema | Abschnitt | Aufwand |
-|---|---|---|---|
-| 1 | Dokumenttypen + Benennung + Ablage (Variante A) | 1.2–1.5 | S–M |
-| 2 | Kostendämpfungspauschale & Selbstbehalte | 2.2 | M |
-| 3 | Anträge als eigenes Objekt | 2.1 | M |
-| 4 | Fristen, Bagatellgrenze, Warnungen | 2.3 | S–M |
-| 5 | Erfassungshilfen (Paste, Vorlagen, Duplikate) | 2.4 | S |
-| 6 | Verschlüsseltes Backup + Auto-Sicherung | 2.8 | S |
-| 7 | pCloud-API als Ausbaustufe (Variante B) | 1.5 B | M |
-| 8 | PDF-Textauswertung | 2.4 | M |
-| 9 | Auswertung & Steuer-Export | 2.7 | M |
+| # | Thema | Abschnitt | Aufwand | Stand |
+|---|---|---|---|---|
+| 1 | Kostendämpfungspauschale & Selbstbehalte | 2.2 | M | ✅ erledigt |
+| 2 | Fristen, Bagatellgrenze, Warnungen | 2.3 | S–M | ✅ erledigt |
+| 3 | Dokumenttypen + Benennung + Ablage (Variante A) | 1.2–1.5 | S–M | offen |
+| 4 | Anträge als eigenes Objekt | 2.1 | M | offen |
+| 5 | Erfassungshilfen (Paste, Vorlagen, Duplikate) | 2.4 | S | offen |
+| 6 | Verschlüsseltes Backup + Auto-Sicherung | 2.8 | S | offen |
+| 7 | pCloud-API als Ausbaustufe (Variante B) | 1.5 B | M | offen |
+| 8 | PDF-Textauswertung | 2.4 | M | offen |
+| 9 | Auswertung & Steuer-Export | 2.7 | M | offen |
 
-Punkt 1 und 2 zusammen bringen den größten Sprung: die Belege sind sauber
-archiviert, und die Erstattungsprüfung meldet keine Fehlalarme mehr.
+Die Erstattungsprüfung meldet damit keine Fehlalarme mehr. Nächster großer
+Schritt ist die Beleg-Ablage (Punkt 3).
 
 ---
 

@@ -329,6 +329,10 @@ td input[type=checkbox] { width: auto; }
   padding: 11px 14px; font-size: 13.5px; color: var(--warn); margin: 12px 0;
 }
 
+.warnbox.fristbox-bad {
+  background: var(--bad-bg); border-color: #f3c4be; color: var(--bad);
+}
+
 .muted { color: var(--muted); }
 .small { font-size: 12.5px; }
 .mt0 { margin-top: 0; }

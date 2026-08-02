@@ -43,8 +43,20 @@ Gerätewechsel gibt es unter „Einstellungen“ einen JSON-Export/-Import
   erwartete PKV-Erstattung (Betrag × Baustein-Satz, gedeckelt auf 100 % und
   auf Jahres-Höchstgrenzen) gegen die tatsächlich erfassten Auszahlungen.
   Deltas werden je Quelle und – bei Bedarf – **je Position** ausgewiesen.
+- **Jahres-Eigenbehalte**: **Kostendämpfungspauschale** (Beihilfe) und
+  **PKV-Selbstbehalt** je Person als Jahresbeträge. Sie werden chronologisch
+  über die Rechnungen eines Jahres verrechnet und im Soll-Ist-Vergleich
+  ausgewiesen – ohne sie meldet die Prüfung sonst fälschlich „Erstattung
+  fehlt". Die Übersicht zeigt, wie weit jeder Topf verbraucht ist.
+- **Bagatellgrenze**: Sammelstand der noch nicht eingereichten, beihilfefähigen
+  Aufwendungen je Person. Statt jede Kleinrechnung anzumahnen, zeigt die App,
+  wie viel bis zum lohnenden Beihilfeantrag fehlt.
+- **Fristen**: Antragsfrist ab Rechnungsdatum (Verfall der Beihilfe!),
+  Widerspruchsfrist nach Bescheid und Erinnerung, wenn nach dem Einreichen
+  zu lange nichts kommt. Alle Fristen und Grenzwerte sind einstellbar.
 - **Warnungen**: Deckungslücken (keine Baustein-Abdeckung einer Kategorie),
-  erreichte Jahres-Höchstgrenzen, Überzahlungen, nicht eingereichte Rechnungen.
+  erreichte Jahres-Höchstgrenzen, Überzahlungen je Quelle, nicht eingereichte
+  Rechnungen.
 - **Status selbst pflegen**: „an Arzt bezahlt“, „bei Beihilfe eingereicht“,
   „bei PKV eingereicht“ – jeweils mit Datum. Einzelne Positionen lassen sich
   **markieren** (🔖) und mit Notizen versehen; markierte Positionen erscheinen
