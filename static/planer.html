@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fahrradhäuschen-Planer · Hessen</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b6ea8'/%3E%3Cpath d='M5 22h22L27 12 5 15z' fill='%23fff'/%3E%3Ccircle cx='11' cy='25' r='3' fill='none' stroke='%23fff' stroke-width='1.6'/%3E%3Ccircle cx='22' cy='25' r='3' fill='none' stroke='%23fff' stroke-width='1.6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/planer.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <strong>Fahrradhäuschen-Planer</strong>
+    <span>Pultdach · Grenzbebauung in Hessen · Selbstbau aus Standardhölzern</span>
+  </div>
+  <div class="top-actions">
+    <button id="btn-optimize" class="ghost" title="Größtes noch verfahrensfreies Häuschen">
+      Maximal ausreizen
+    </button>
+    <button id="btn-dxf" class="ghost">DXF</button>
+    <button id="btn-pdf" class="primary">PDF-Bauunterlagen</button>
+  </div>
+</header>
+
+<div class="app">
+
+  <aside class="side">
+    <div id="verdict" class="verdict"><span class="dot"></span><span class="txt">berechne …</span></div>
+
+    <div class="gauges" id="gauges"></div>
+
+    <section class="grp">
+      <h3>Größe</h3>
+      <div class="ctl">
+        <label>Fahrradstellplätze<output id="o-bikes"></output></label>
+        <input type="range" id="s-bikes" min="0" max="12" step="1">
+        <small id="h-bikes"></small>
+      </div>
+      <div class="ctl">
+        <label>Geräteteil (lichte Breite)<output id="o-tool"></output></label>
+        <input type="range" id="s-tool" min="0" max="3000" step="50">
+        <small>0 = kein Geräteraum. Ab 60 cm entsteht ein abgetrennter Raum mit eigener Tür.</small>
+      </div>
+      <div class="ctl">
+        <label>Tiefe (außen)<output id="o-depth"></output></label>
+        <input type="range" id="s-depth" min="2000" max="3200" step="10">
+        <small id="h-depth"></small>
+      </div>
+      <div class="ctl">
+        <label>Lichte Höhe vorn (Traufe)<output id="o-eaves"></output></label>
+        <input type="range" id="s-eaves" min="1700" max="2600" step="10">
+      </div>
+      <div class="ctl">
+        <label>Dachneigung<output id="o-pitch"></output></label>
+        <input type="range" id="s-pitch" min="3" max="25" step="1">
+        <small id="h-pitch"></small>
+      </div>
+    </section>
+
+    <section class="grp">
+      <h3>Ausführung</h3>
+      <div class="ctl">
+        <label>Verschluss</label>
+        <select id="f-closure">
+          <option value="closed_double">rundum geschlossen, Doppeltür vorn</option>
+          <option value="side_doors">geschlossen, Türen an der Seite</option>
+          <option value="open_front">vorn offen (Unterstand)</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>Dachhaut</label>
+        <select id="f-roofing">
+          <option value="trapez">Trapezblech T-18/76</option>
+          <option value="shingle">Bitumenschindeln auf OSB</option>
+          <option value="epdm">EPDM-Bahn</option>
+          <option value="green">Extensives Gründach</option>
+        </select>
+        <small id="h-roofing"></small>
+      </div>
+      <div class="ctl">
+        <label>Gründung</label>
+        <select id="f-foundation">
+          <option value="slabs">Gehwegplatten auf Splitt</option>
+          <option value="point">Punktfundamente</option>
+          <option value="screw">Schraubfundamente</option>
+          <option value="concrete">vorhandene Betonfläche</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label>Fassade</label>
+        <select id="f-cladding">
+          <option value="rhombus">Rhombusleisten 20×65</option>
+          <option value="profil">Profilbretter Nut+Feder</option>
+        </select>
+      </div>
+      <div class="ctl row">
+        <label><input type="checkbox" id="c-gutter"> Dachrinne</label>
+        <label><input type="checkbox" id="c-floor"> Holzboden</label>
+      </div>
+      <div class="ctl row">
+        <label><input type="checkbox" id="c-bench"> Werkbank</label>
+        <label>Regale <input type="number" id="n-shelves" min="0" max="5" step="1"></label>
+      </div>
+    </section>
+
+    <section class="grp">
+      <h3>Standort</h3>
+      <div class="ctl">
+        <label>Lage</label>
+        <select id="f-site">
+          <option value="innenbereich">Innenbereich (§ 34 BauGB)</option>
+          <option value="aussenbereich">Außenbereich (§ 35 BauGB)</option>
+        </select>
+      </div>
+      <div class="ctl row">
+        <label>Schneelastzone
+          <select id="f-snow">
+            <option value="1">1</option><option value="1a">1a</option>
+            <option value="2">2</option><option value="2a">2a</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <label>Höhe ü. NN <input type="number" id="n-alt" min="0" max="1000" step="10"></label>
+      </div>
+      <div class="ctl">
+        <label>Preisniveau</label>
+        <select id="f-price">
+          <option value="guenstig">günstig</option>
+          <option value="mittel">mittel</option>
+          <option value="premium">premium</option>
+        </select>
+      </div>
+    </section>
+
+    <div class="side-foot" id="costbox"></div>
+  </aside>
+
+  <main class="main">
+    <nav class="tabs">
+      <button data-tab="v3d" class="on">3D-Ansicht</button>
+      <button data-tab="v2d">Zeichnungen</button>
+      <button data-tab="vholz">Holz &amp; Zuschnitt</button>
+      <button data-tab="vmat">Schrauben &amp; Material</button>
+      <button data-tab="vbau">Bauanleitung</button>
+      <button data-tab="vhbo">Hessen-Prüfung</button>
+    </nav>
+
+    <section class="view on" id="v3d">
+      <div class="canvas-wrap">
+        <canvas id="c3d"></canvas>
+        <div class="hint">Ziehen = drehen · Mausrad = zoomen · Shift+Ziehen = verschieben</div>
+        <div class="legend" id="legend3d"></div>
+        <div class="viewcube">
+          <button data-view="iso">ISO</button>
+          <button data-view="front">Vorn</button>
+          <button data-view="rear">Grenze</button>
+          <button data-view="side">Seite</button>
+          <button data-view="top">Oben</button>
+        </div>
+        <div class="tip" id="tip3d"></div>
+      </div>
+    </section>
+
+    <section class="view" id="v2d">
+      <div class="drawbar">
+        <select id="sel-draw"></select>
+        <span id="draw-sub" class="muted"></span>
+        <button id="btn-fit" class="ghost small">einpassen</button>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="c2d"></canvas>
+        <div class="hint">Ziehen = verschieben · Mausrad = zoomen</div>
+      </div>
+    </section>
+
+    <section class="view" id="vholz"></section>
+    <section class="view" id="vmat"></section>
+    <section class="view" id="vbau"></section>
+    <section class="view" id="vhbo"></section>
+  </main>
+</div>
+
+<div id="busy" class="busy"><div class="spin"></div></div>
+
+<script src="/static/planer.js"></script>
+</body>
+</html>

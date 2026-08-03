@@ -1,9 +1,13 @@
+# Fahrradhaeuschen-Planer
 fastapi>=0.110
 uvicorn>=0.29
+reportlab>=4.0
+ezdxf>=1.2
+
+# Architekturscanner (optional - nur fuer die Plan-Vektorisierung)
 python-multipart>=0.0.9
 numpy>=1.26
 opencv-contrib-python-headless>=4.9
-ezdxf>=1.2
 pymupdf>=1.24
 pillow>=10.0
 pytesseract>=0.3.10

@@ -1,3 +1,139 @@
+# 🚲 Fahrradhäuschen-Planer + 📐 Architekturscanner
+
+Dieses Repository enthält zwei Werkzeuge:
+
+| Seite | Werkzeug |
+|---|---|
+| `/` bzw. `/planer` | **Fahrradhäuschen-Planer** – parametrischer Selbstbau-Planer mit 3D, Werkzeichnungen, Holzliste und PDF |
+| `/scanner` | **Architekturscanner** – Altpläne vektorisieren und als DXF exportieren |
+
+```bash
+pip install -r requirements.txt
+python server.py          # http://localhost:8000
+```
+
+---
+
+# 🚲 Fahrradhäuschen-Planer
+
+Plant ein **Fahrradhäuschen mit Geräteraum und Pultdach**, das in **Hessen
+verfahrensfrei direkt an der Grundstücksgrenze** stehen darf – und liefert
+alles, was zum Bauen nötig ist: 3D-Modell, maßstäbliche Werkzeichnungen,
+Zuschnittplan, Schraubenliste und eine Schritt-für-Schritt-Bauanleitung als PDF.
+
+Jeder Slider verändert das komplette Paket sofort: Geometrie, Statik,
+Materiallisten, Zeichnungen und die Prüfung nach Hessischer Bauordnung.
+
+## Warum genau diese Konstruktion
+
+- **Pultdach, das von der Grenze wegfällt.** Der First liegt an der
+  Grenzwand, die Traufe mit Rinne auf der Gartenseite. So läuft kein
+  Niederschlagswasser zum Nachbarn, und an der Grenze ist der Dachüberstand
+  null – das Dach endet bündig mit der Fassadenaußenkante.
+- **Grenzwand zuerst fertigstellen.** Die Bauanleitung erzwingt diese
+  Reihenfolge, weil dort später kein Arbeitsraum mehr ist und niemand ohne
+  Absprache das Nachbargrundstück betreten darf.
+- **Plattformbauweise auf Schwellenrost**, Ständerraster 625 mm – passt zum
+  Plattenmaß 1250/2500 mm und hält den Verschnitt klein.
+
+## Prüfung nach Hessischer Bauordnung
+
+Der Planer rechnet die drei entscheidenden Grenzwerte live mit und zeigt sie
+als Ampel:
+
+| Kriterium | Grenzwert | Rechtsgrundlage |
+|---|---|---|
+| Brutto-Rauminhalt | 30 m³ → verfahrensfrei | § 63 Abs. 1 Nr. 1 a HBO |
+| Mittlere Wandhöhe an der Grenze | 3,00 m | § 6 Abs. 8 HBO |
+| Bebauungslänge je Grenze | 15,00 m | § 6 Abs. 8 HBO |
+| Brandwand an der Grenze | erst ab 50 m³ nötig | § 30 HBO |
+| Lage im Innen-/Außenbereich | Außenbereich nie verfahrensfrei | § 34/35 BauGB |
+
+Dazu geprüft: Dachüberstand zur Grenze (muss 0 sein), Ableitung des
+Niederschlagswassers und die Nutzung ohne Aufenthaltsraum oder Feuerstätte.
+
+**Wichtig:** verfahrensfrei heißt nicht anforderungsfrei (§ 63 Abs. 4 HBO).
+Bebauungsplan, örtliche Satzungen und Baulasten müssen zusätzlich geprüft
+werden. Diese Unterlagen sind eine Selbstbauplanung, keine geprüften
+Bauvorlagen und keine Rechtsberatung.
+
+## „Maximal ausreizen“
+
+Ein Knopf sucht die größte Variante, die noch verfahrensfrei **und**
+grenzständig zulässig ist: möglichst viele Fahrradstellplätze, danach ein
+möglichst breiter Geräteteil, danach möglichst großzügige lichte Höhe.
+Typisches Ergebnis: rund **5,03 m × 2,27 m, 29,4 m³** – sechs Räder plus
+1,50 m Geräteraum, Grenzwand 2,71 m.
+
+## Statik
+
+Die Sparren werden **automatisch dimensioniert**, nicht geraten. Nachgewiesen
+werden Biegespannung, Durchbiegung und Schub nach DIN EN 1995-1-1
+(Nutzungsklasse 2, k_mod = 0,90, γ_M = 1,30) für Schneelastzone und
+Geländehöhe des Standorts. Wer auf Gründach umstellt, sieht sofort einen
+stärkeren Querschnitt – 110 kg/m² gesättigtes Substrat sind kein Detail.
+
+## Standardhölzer und Zuschnitt
+
+Alle Querschnitte sind Handelsware (KVH 60×120, 60×60, Dachlatte 40×60,
+Latte 30×50, Rhombusleiste 20×65 …). Für jeden Querschnitt sucht ein
+First-Fit-Decreasing-Zuschnitt über alle lieferbaren Stangenlängen die
+günstigste Kombination – inklusive 5 mm Sägeblattbreite. Der Zuschnittplan
+zeigt jede einzelne Stange mit Belegung und Rest; der Verschnitt liegt
+typisch unter 20 %.
+
+## Ausgaben
+
+**PDF-Bauunterlagen** (ein Dokument, 25 Seiten):
+
+- Deckblatt mit allen Kennwerten und dem Prüfergebnis
+- 16 Zeichnungsblätter A3 quer mit Schriftfeld, echtem Maßstab und
+  Maßstabsleiste: Lageplan, Gründungsplan, Grundriss, vier Ansichten,
+  Schnitt A-A, Sparrenplan, vier Ständerwerkspläne, drei Details 1:5
+- Holzliste, Zuschnittplan, Schrauben- und Werkstoffliste, Werkzeugliste
+- Bauanleitung in 11 Schritten mit Dauer, Personenzahl und Kontrollpunkten
+- Prüfung nach HBO mit Einzelnachweisen und Lastannahmen
+
+**DXF-Export** des kompletten Zeichnungssatzes, layerweise getrennt, in Metern.
+
+## Bedienung
+
+| Bereich | Inhalt |
+|---|---|
+| Seitenleiste | Slider für Stellplätze, Geräteteil, Tiefe, lichte Höhe, Dachneigung; Ausführung, Standort, Preisniveau; Ampel und Kostenrahmen |
+| 3D-Ansicht | Ziehen = drehen, Mausrad = zoomen, Shift+Ziehen = verschieben; Bauteilgruppen einzeln ausblenden, Bauteil unter dem Zeiger wird benannt |
+| Zeichnungen | alle Blätter, Ziehen = verschieben, Mausrad = zoomen |
+| Holz & Zuschnitt | Einkaufsliste und Zuschnittplan je Stange |
+| Schrauben & Material | Verbindungsmittel, Werkstoffe, Werkzeug |
+| Bauanleitung | Schritte mit Kontrollpunkten zum Abhaken |
+| Hessen-Prüfung | Kennwerte, Einzelnachweise, Lastannahmen |
+
+## Technik
+
+- **Backend**: Python, FastAPI, reportlab (PDF), ezdxf (DXF). Keine Datenbank.
+- **Frontend**: Vanilla JS ohne Build-Schritt und ohne Fremdbibliotheken –
+  3D-Ansicht und Zeichnungen werden auf Canvas gerendert.
+- **Eine Geometriequelle**: aus `shed/model.py` entstehen 3D-Ansicht,
+  2D-Zeichnungen, PDF und DXF. Die Darstellungen können nicht auseinanderlaufen.
+- **Deutsche Schreibweise** zentral in `shed/text.py`, damit PDF und
+  Weboberfläche identische Texte zeigen.
+
+```
+shed/spec.py          Eingabeparameter und feste Konstruktionsmaße
+shed/statics.py       Lasten und Sparrennachweis nach EC5
+shed/model.py         parametrisches Bauwerk, jedes Holz mit Lage
+shed/compliance.py    HBO-Prüfung und Optimierer
+shed/bom.py           Holzliste, Zuschnitt, Schrauben, Werkstoffe
+shed/drawings.py      2D-Zeichnungssatz
+shed/instructions.py  Bauanleitung
+shed/pdf.py           PDF-Satz
+shed/dxf.py           DXF-Export
+```
+
+Tests: `python tests/test_shed.py` (oder `python -m pytest tests -q`).
+
+---
+
 # 📐 Architekturscanner
 
 Digitalisiert abfotografierte oder gescannte Altpläne (Foto/PDF) zu **exakten,
@@ -56,7 +192,7 @@ pip install -r requirements.txt
 python server.py
 ```
 
-Dann <http://localhost:8000> öffnen.
+Dann <http://localhost:8000/scanner> öffnen.
 
 ## Empfohlener Arbeitsablauf
 
