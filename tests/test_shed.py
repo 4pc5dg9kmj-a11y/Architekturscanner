@@ -20,9 +20,15 @@ from shed.dxf import export_dxf                                       # noqa: E4
 from shed.instructions import build_steps                             # noqa: E402
 from shed.model import build, compute_dims                            # noqa: E402
 from shed.pdf import build_pdf                                        # noqa: E402
-from shed.spec import (DACH_UEBERSTAND_GRENZE, FASSADE_LUFT,          # noqa: E402
-                       HBO_MAX_BRI, HBO_MAX_WANDHOEHE, ShedSpec)
-from shed.statics import check_rafter, select_rafter, snow_load       # noqa: E402
+from shed.spec import (BODENPLATTE_D, DACH_UEBERSTAND_GRENZE,          # noqa: E402
+                       FASSADE_LUFT, HBO_MAX_BRI, HBO_MAX_WANDHOEHE,
+                       ShedSpec)
+from shed.statics import (beam_proof, bearing_proof, column_proof,     # noqa: E402
+                          select_joist, select_lintel,
+                          select_lintel_with_posts, select_rafter,
+                          snow_load)
+from shed.structure import report as structural_report              # noqa: E402
+from shed.structure import summary as structural_summary
 from shed.text import de, nz                                          # noqa: E402
 
 
@@ -104,6 +110,58 @@ def test_dachaufbau_liegt_ueber_dem_tragwerk():
     assert max(v[2] for v in haut.verts) >= max(v[2] for v in latte.verts)
 
 
+def test_lastpfad_ist_eine_auflagerkette():
+    """Sparren, Staender und Deckenbalken stehen senkrecht uebereinander."""
+    b = build(optimize())
+    d = b.dims
+    # Achsen liegen in Staenderwerkskoordinaten, Bauteile in Weltkoordinaten
+    axes = [round(x + FASSADE_LUFT, 1) for x in d["axes_x"]]
+
+    def x_axes(pred):
+        return sorted({round((min(v[0] for v in m.verts)
+                              + max(v[0] for v in m.verts)) / 2, 1)
+                       for m in b.members if pred(m) and m.verts})
+
+    assert x_axes(lambda m: m.name in ("Sparren", "Aussensparren")) == axes
+    assert x_axes(lambda m: m.name == "Deckenbalken") == axes
+    staender = x_axes(lambda m: m.group == "wand_front" and "Ständer" in m.name)
+    assert set(staender) <= set(axes)
+
+    # jede Achse hat ein Fundament senkrecht darunter
+    sup_x = {round(x, 1) for x, _ in d["support_xy"]}
+    assert set(axes) <= sup_x
+
+
+def test_balken_liegen_auf_ihren_stuetzen():
+    """Keine Lage haengt in der Luft: Unterkante = Oberkante der Lage darunter."""
+    b = build(optimize())
+    d = b.dims
+    tol = 1.0
+
+    def zmin(name):
+        ms = [m for m in b.members if m.name.startswith(name) and m.verts]
+        return min(min(v[2] for v in m.verts) for m in ms)
+
+    def zmax(name):
+        ms = [m for m in b.members if m.name.startswith(name) and m.verts]
+        return max(max(v[2] for v in m.verts) for m in ms)
+
+    assert abs(zmin("Schwelle") - 0.0) < tol                 # auf dem Fundament
+    assert abs(zmin("Deckenbalken") - zmax("Schwelle")) < tol
+    assert abs(d["z_floor"] - (zmax("Deckenbalken")
+                               + (BODENPLATTE_D if b.spec.with_floor else 0))) < tol
+    # Sparrenunterkante muss beide Raehme beruehren
+    sp = [m for m in b.members if m.name == "Sparren"][0]
+    p0, p1 = sp.verts[0], sp.verts[4]        # Unterkante Anfang und Ende
+
+    def z_at(y):
+        return p0[2] + (p1[2] - p0[2]) * (y - p0[1]) / (p1[1] - p0[1])
+
+    oy, fd = FASSADE_LUFT, d["frame_d"]
+    assert abs(z_at(oy) - d["z_plate_top_rear"]) < tol
+    assert abs(z_at(oy + fd) - d["z_plate_top_front"]) < tol
+
+
 def test_tuerblatt_liegt_in_der_fassadenebene():
     b = build(optimize())
     d = b.dims
@@ -137,19 +195,76 @@ def test_sparren_wachsen_mit_spannweite_und_last():
     leicht = select_rafter(3000, 625, "trapez", 8, "2", 250)[0]
     assert weit[1] > klein[1]
     assert schwer[1] > leicht[1]
+    assert select_joist(2400, 625)[1].ok
+    assert select_lintel(3000, 1400, "trapez", 8, "2", 250)[1].ok
+    _, proof, posts = select_lintel_with_posts(
+        5400, 240, 1900, "green", 5, "2", 250)
+    assert posts >= 1 and proof.ok
 
 
 def test_durchbiegung_wird_wirklich_gerechnet():
     """Der Nachweis darf nicht durch einen Einheitenfehler bei null landen."""
-    r = check_rafter(60, 120, 3000, 625, 0.15, 0.85, 8)
-    assert 0.1 < r["eta_w"] <= 1.5
-    assert r["w_inst"] > 1.0
+    p = beam_proof("t", "Test", "Test", 60, 120, 3000, 0.63, 0.90)
+    durchbiegung = [r for r in p.results if "Durchbiegung" in r[0]][0]
+    assert 0.1 < durchbiegung[3] <= 1.5
 
 
-def test_gewaehlter_sparren_haelt():
-    d = build(optimize()).dims
-    assert d["sparren_check"]["ok"]
-    assert d["sparren_check"]["eta_max"] <= 1.0
+def test_alle_hoelzer_sind_nachgewiesen():
+    """Jedes tragende Holz und jedes Auflager braucht seinen Nachweis."""
+    b = build(optimize())
+    proofs = structural_report(b)
+    keys = {p.key for p in proofs}
+    for k in ("traglatte", "sparren", "auflager_sparren", "raehm", "sturz",
+              "staender", "auflager_staender", "deckenbalken",
+              "auflager_balken", "schwelle", "baugrund"):
+        assert k in keys, f"Nachweis fehlt: {k}"
+    assert structural_summary(proofs)["state"] == "ok"
+    for p in proofs:
+        assert p.results, p.key
+        assert p.util <= 1.0, f"{p.title} ueberlastet: {p.util}"
+
+
+def test_querdruck_an_jedem_auflager():
+    """Balken auf Stuetze heisst: die Auflagerpressung muss geprueft sein."""
+    proofs = structural_report(build(optimize()))
+    querdruck = [p for p in proofs if p.kind == "querdruck"]
+    assert len(querdruck) >= 3
+    for p in querdruck:
+        assert "N/mm" in p.results[0][1]
+
+
+def test_breite_oeffnung_bekommt_eine_zwischenstuetze():
+    """Was sich nicht ueberspannen laesst, wird abgestuetzt - nie ueberlastet."""
+    spec = ShedSpec(n_bikes=10, depth=3200, roofing="green", roof_pitch=3,
+                    closure="open_front", tool_width=0)
+    b = build(spec)
+    assert b.dims["lintel_posts"] >= 1
+    assert structural_summary(structural_report(b))["state"] == "ok"
+    stuetzen = [m for m in b.members if "Zwischenstuetze" in m.name]
+    assert stuetzen, "Zwischenstuetze fehlt im Modell"
+
+
+def test_jede_konfiguration_ist_nachgewiesen():
+    """Kein Reglerweg darf zu einem ueberlasteten Bauteil fuehren."""
+    for bikes in (0, 5, 10):
+        for depth in (2100, 2700, 3200):
+            for roofing in ("trapez", "green"):
+                for closure in ("closed_double", "open_front"):
+                    b = build(ShedSpec(n_bikes=bikes, depth=depth,
+                                       roofing=roofing, closure=closure,
+                                       tool_width=1500))
+                    st = structural_summary(structural_report(b))
+                    assert st["state"] == "ok", (bikes, depth, roofing,
+                                                 closure, st["fails"])
+
+
+def test_querschnitte_wachsen_mit_der_belastung():
+    klein = build(ShedSpec(n_bikes=4, depth=2300)).dims
+    gross = build(ShedSpec(n_bikes=4, depth=3200, roofing="green")).dims
+    assert gross["sparren"][1] >= klein["sparren"][1]
+    assert gross["joist"][1] >= klein["joist"][1]
+    weit = build(ShedSpec(n_bikes=8, tool_width=0, closure="open_front")).dims
+    assert weit["lintel"][1] >= klein["lintel"][1]
 
 
 # --------------------------------------------------------------------------

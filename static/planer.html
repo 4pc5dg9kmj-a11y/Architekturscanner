@@ -143,6 +143,7 @@
       <button data-tab="vholz">Holz &amp; Zuschnitt</button>
       <button data-tab="vmat">Schrauben &amp; Material</button>
       <button data-tab="vbau">Bauanleitung</button>
+      <button data-tab="vstatik">Statik</button>
       <button data-tab="vhbo">Hessen-Prüfung</button>
     </nav>
 
@@ -150,7 +151,20 @@
       <div class="canvas-wrap">
         <canvas id="c3d"></canvas>
         <div class="hint">Ziehen = drehen · Mausrad = zoomen · Shift+Ziehen = verschieben</div>
-        <div class="legend" id="legend3d"></div>
+        <div class="legend" id="legend3d">
+          <div class="legend-head">
+            <b>Schichten</b>
+            <span class="legend-btns">
+              <button data-preset="all" class="link">alle</button>
+              <button data-preset="struct" class="link">Tragwerk</button>
+            </span>
+          </div>
+          <div class="phase">
+            <label>Bauphase <output id="o-phase"></output></label>
+            <input type="range" id="s-phase" min="1" max="11" step="1" value="11">
+          </div>
+          <div id="legend-list"></div>
+        </div>
         <div class="viewcube">
           <button data-view="iso">ISO</button>
           <button data-view="front">Vorn</button>
@@ -177,6 +191,7 @@
     <section class="view" id="vholz"></section>
     <section class="view" id="vmat"></section>
     <section class="view" id="vbau"></section>
+    <section class="view" id="vstatik"></section>
     <section class="view" id="vhbo"></section>
   </main>
 </div>

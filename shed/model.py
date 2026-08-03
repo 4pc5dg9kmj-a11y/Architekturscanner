@@ -31,7 +31,8 @@ from .spec import (
     WAND_STIEL,
     ShedSpec,
 )
-from .statics import select_rafter
+from .statics import (Q_FLOOR, select_joist, select_lintel_with_posts,
+                      select_rafter, roof_dead_load, roof_snow)
 
 Vec = tuple[float, float, float]
 
@@ -174,8 +175,6 @@ def compute_dims(spec: ShedSpec) -> dict:
     pitch = math.radians(spec.roof_pitch)
 
     frame_d = spec.depth - 2 * FASSADE_LUFT
-    sparren, sparren_check = select_rafter(
-        frame_d, RASTER, spec.roofing, spec.roof_pitch, spec.snow_zone, spec.altitude)
     inner_d = frame_d - 2 * WAND_STIEL[0]
 
     bike_w = spec.bike_bay_width
@@ -184,8 +183,24 @@ def compute_dims(spec: ShedSpec) -> dict:
     frame_l = WAND_STIEL[0] + bike_w + partition + tool_w + WAND_STIEL[0]
     length_out = frame_l + 2 * FASSADE_LUFT
 
-    # Hoehenlage
-    z_rost_top = SCHWELLE[1]
+    # EIN Achsraster fuer Deckenbalken, Staender und Sparren: so steht jeder
+    # Sparren ueber einem Staender und jeder Staender ueber einem Deckenbalken.
+    # Der Lastpfad laeuft damit gerade nach unten, ohne Umlenkung ueber
+    # biegebeanspruchte Riegel.
+    axes_x = raster_positions(frame_l, RASTER, WAND_STIEL[1])
+    e_axis = (axes_x[1] - axes_x[0]) if len(axes_x) > 1 else RASTER
+
+    # Sparren: Stuetzweite = Wandabstand, Kragarm = Traufueberstand
+    sparren, sparren_proof = select_rafter(
+        frame_d, e_axis, spec.roofing, spec.roof_pitch, spec.snow_zone,
+        spec.altitude, cantilever_mm=DACH_UEBERSTAND_TRAUFE)
+
+    # Deckenbalken: Schwellen unter beiden Enden und in der Mitte
+    joist, joist_proof = select_joist(frame_d / 2.0, e_axis)
+
+    # Hoehenlage: Schwelle liegend, Deckenbalken hochkant darauf
+    z_sill_top = SCHWELLE[0]      # Schwelle liegt flach: 120 breit, 60 hoch
+    z_rost_top = z_sill_top + joist[1]
     z_floor = z_rost_top + (BODENPLATTE_D if spec.with_floor else 0.0)
     z_plate_bottom_front = z_floor + spec.eaves_height
     z_plate_top_front = z_plate_bottom_front + WAND_STIEL[1]
@@ -205,10 +220,28 @@ def compute_dims(spec: ShedSpec) -> dict:
     roof_w = length_out + 2 * DACH_UEBERSTAND_ORT
     roof_slope_len = sparren_len
 
+    # Sturz ueber der breitesten Oeffnung der Traufwand
+    door_w = _widest_opening(spec, bike_w, tool_w)
+    lintel, lintel_proof, lintel_posts = select_lintel_with_posts(
+        door_w, 2 * WAND_STIEL[1], frame_d / 2.0 + DACH_UEBERSTAND_TRAUFE,
+        spec.roofing, spec.roof_pitch, spec.snow_zone, spec.altitude)
+    max_lintel_span = door_w / (lintel_posts + 1) if door_w else 0.0
+
     return {
         "pitch_rad": pitch,
+        "axes_x": axes_x,
+        "e_axis": e_axis,
         "sparren": sparren,
-        "sparren_check": sparren_check,
+        "sparren_check": sparren_proof.to_dict(),
+        "sparren_proof": sparren_proof,
+        "joist": joist,
+        "joist_proof": joist_proof,
+        "lintel": lintel,
+        "lintel_proof": lintel_proof,
+        "lintel_posts": lintel_posts,
+        "max_lintel_span": max_lintel_span,
+        "widest_opening": door_w,
+        "z_sill_top": z_sill_top,
         "frame_l": frame_l,
         "frame_d": frame_d,
         "length_out": length_out,
@@ -243,6 +276,20 @@ def compute_dims(spec: ShedSpec) -> dict:
     }
 
 
+def _widest_opening(spec: ShedSpec, bike_w: float, tool_w: float) -> float:
+    """Lichte Breite der groessten Wandoeffnung - massgebend fuer den Sturz."""
+    widths = [0.0]
+    if spec.closure == "closed_double":
+        widths.append(min(bike_w - 120.0, 1800.0))
+    elif spec.closure == "open_front":
+        widths.append(bike_w)
+    else:
+        widths.append(1600.0)
+    if spec.has_tool_room:
+        widths.append(min(tool_w - 120.0, 900.0))
+    return max(widths)
+
+
 def _roofing_thickness(spec: ShedSpec) -> float:
     return {"trapez": 20.0, "shingle": 30.0, "green": 120.0, "epdm": 25.0}.get(
         spec.roofing, 20.0)
@@ -267,64 +314,91 @@ def build(spec: ShedSpec) -> Building:
 
 
 def _build_foundation(b: Building) -> None:
+    """Auflagerpunkte unter den Schwellen - nichts haengt, alles steht."""
     d, spec = b.dims, b.spec
-    fl, fd = d["frame_l"], d["frame_d"]
-    x_off, y_off = FASSADE_LUFT, FASSADE_LUFT
-
-    # Auflagerpunkte unter den Laengstraegern des Rostes
-    xs = _support_positions(fl, 800.0)
-    ys = [0.0, fd]
-    if fd > 1600:
-        ys = [0.0, fd / 2.0, fd]
-
-    size, thick = (400.0, 50.0) if spec.foundation == "slabs" else (300.0, 400.0)
     label = {"slabs": "Gehwegplatte 40x40x5 auf Splitt",
-             "point": "Punktfundament C25/30",
-             "screw": "Schraubfundament",
+             "point": "Punktfundament C25/30 mit Pfostentraeger",
+             "screw": "Schraubfundament mit Kopfplatte",
              "concrete": "vorhandene Betonflaeche"}.get(spec.foundation, "Auflager")
     if spec.foundation == "concrete":
+        d["support_xy"] = []
+        d["support_size"] = 0.0
+        d["support_spacing"] = 0.0
         return
 
+    size, thick = (400.0, 50.0) if spec.foundation == "slabs" else (300.0, 400.0)
+    xs = _support_axes(d["axes_x"])
+    ys = _sill_rows(d)
+
+    pts = []
     for yi in ys:
         for xi in xs:
-            # Auch unter Gelaende darf nichts die Grenze queren (§ 903 BGB):
-            # die Platte an der Grenzwand wird nach innen geschoben.
-            cy = min(max(y_off + yi, size / 2), spec.depth - size / 2)
-            cx = x_off + xi
+            # Auch unter Gelaende darf nichts die Grenze queren (§ 903 BGB)
+            cy = min(max(yi, size / 2), spec.depth - size / 2)
+            cx = FASSADE_LUFT + xi
+            pts.append((cx, cy))
             b.panels.append(Panel(
                 name=label, group="fundament",
                 verts=_box(cx - size / 2, cy - size / 2, -thick,
                            cx + size / 2, cy + size / 2, 0.0),
                 thickness=thick, material=label, area=size * size / 1e6))
+    d["support_xy"] = pts
+    d["support_size"] = size
+    d["support_spacing"] = (xs[1] - xs[0]) if len(xs) > 1 else 0.0
 
 
-def _support_positions(total: float, max_gap: float) -> list[float]:
-    n = max(1, math.ceil(total / max_gap))
-    return [i * total / n for i in range(n + 1)]
+def _support_axes(axes: list[float]) -> list[float]:
+    """Unter jeder Balkenachse steht ein Auflager.
+
+    Damit ist die Schwelle ein reines Auflagerholz und kein Biegetraeger:
+    jeder Deckenbalken - und damit jeder Staender und jeder Sparren darueber -
+    hat sein Fundament senkrecht unter sich. Das ist der Kern der
+    Auflagerkette; ein paar Platten mehr sind billiger als ein Rost, der
+    sich mit den Jahren durchbiegt.
+    """
+    return list(axes)
 
 
-# --- Schwellenrost ---------------------------------------------------------
+def _sill_rows(d: dict) -> list[float]:
+    """Mittellinien der drei Schwellen in Bauwerkskoordinaten (y)."""
+    oy, fd = FASSADE_LUFT, d["frame_d"]
+    t = SCHWELLE[1]
+    return [oy + t / 2, oy + fd / 2, oy + fd - t / 2]
 
 
 def _build_rost(b: Building) -> None:
+    """Schwellen auf den Fundamenten, Deckenbalken quer darueber.
+
+    Die Deckenbalken liegen auf den Schwellen auf - keine Balkenschuhe und
+    keine Verbindung im Hirnholz. Der Lastweg ist reine Auflagerung.
+    """
     d = b.dims
     fl, fd = d["frame_l"], d["frame_d"]
     ox, oy = FASSADE_LUFT, FASSADE_LUFT
-    bw, bh = SCHWELLE
+    sw, sh = SCHWELLE[1], SCHWELLE[0]        # liegend: 120 breit, 60 hoch
+    jb, jh = d["joist"]
 
-    # zwei Laengstraeger vorne/hinten
-    for yi, tag in ((0.0, "hinten"), (fd, "vorne")):
-        m = Member(f"Rost-Laengstraeger {tag}", "rost", SCHWELLE, fl,
-                   material="Konstruktionsholz kesseldruckimpraegniert", treated=True)
-        m.verts = _box(ox, oy + yi - bw / 2, 0, ox + fl, oy + yi + bw / 2, bh)
+    for i, yc in enumerate(_sill_rows(d)):
+        tag = ("hinten (Grenze)", "Mitte", "vorne")[i]
+        m = Member(f"Schwelle {tag}", "rost", (sw, sh), fl,
+                   material="Konstruktionsholz kesseldruckimpraegniert",
+                   treated=True,
+                   note="liegend auf den Fundamentplatten, Bitumen-Trennlage "
+                        "dazwischen")
+        m.verts = _box(ox, yc - sw / 2, 0, ox + fl, yc + sw / 2, sh)
         b.members.append(m)
 
-    # Querhoelzer im Raster
-    for xi in raster_positions(fl, RASTER, bw):
-        m = Member("Rost-Querholz", "rost", SCHWELLE, fd - bw,
-                   material="Konstruktionsholz kesseldruckimpraegniert", treated=True)
-        m.verts = _box(ox + xi - bw / 2, oy + bw / 2, 0,
-                       ox + xi + bw / 2, oy + fd - bw / 2, bh)
+    for xi in d["axes_x"]:
+        m = Member("Deckenbalken", "rost", (jb, jh), fd,
+                   note=f"liegt auf drei Schwellen auf, Stuetzweite je Feld "
+                        f"{fd / 2:.0f} mm")
+        m.verts = _box(ox + xi - jb / 2, oy, sh, ox + xi + jb / 2, oy + fd, sh + jh)
+        b.members.append(m)
+
+    for yc, tag in ((oy + jb / 2, "Grenzseite"), (oy + fd - jb / 2, "Traufseite")):
+        m = Member(f"Randbalken {tag}", "rost", (jb, jh), fl,
+                   note="liegt auf der Schwelle auf und fasst die Deckenbalken ein")
+        m.verts = _box(ox, yc - jb / 2, sh, ox + fl, yc + jb / 2, sh + jh)
         b.members.append(m)
 
 
@@ -408,7 +482,11 @@ def _build_walls(b: Building) -> None:
         stud_h0 = z_floor + 60
         stud_h1 = z_plate_bot
 
-        for u in raster_positions(wl, RASTER, sh):
+        # Vorder- und Rueckwand teilen sich das Achsraster mit Deckenbalken
+        # und Sparren; die Seitenwaende bekommen ihr eigenes Raster.
+        axes = (d["axes_x"] if wall in ("front", "rear")
+                else raster_positions(wl, RASTER, sh))
+        for u in axes:
             u0, u1 = u - sh / 2, u + sh / 2
             if any(o.x0 - sh < u1 and u0 < o.x0 + o.width + sh for o in ops):
                 continue
@@ -431,16 +509,29 @@ def _frame_opening(b: Building, wall: str, label: str, grp: str,
         _place(b, wall, f"{label}: Zargenständer {o.name}", grp,
                u, u + sh, stud_h0, stud_h1, (sw, sh), stud_h1 - stud_h0)
     z_head = o.z0 + o.height
-    # Sturz
+    # Sturz: Querschnitt aus dem Nachweis, liegt beidseitig auf den
+    # Zargenstaendern auf (keine Hirnholzverbindung)
+    lb, lh = b.dims["lintel"]
     _place(b, wall, f"{label}: Sturz {o.name}", grp,
-           o.x0 - sh, o.x0 + o.width + sh, z_head, z_head + sh,
-           (sw, sh), o.width + 2 * sh, note="Oeffnungssturz, doppelt ausfuehren")
-    # Fuellständer ueber dem Sturz
-    if stud_h1 - (z_head + sh) > 150:
+           o.x0 - sh, o.x0 + o.width + sh, z_head, z_head + lh,
+           (lb, lh), o.width + 2 * sh,
+           note="liegt beidseitig auf den Zargenstaendern auf")
+    # Zwischenstuetzen teilen zu breite Oeffnungen auf
+    max_span = b.dims.get("max_lintel_span") or o.width
+    n_posts = max(0, math.ceil(o.width / max_span) - 1) if max_span else 0
+    for k in range(1, n_posts + 1):
+        u = o.x0 + o.width * k / (n_posts + 1) - sh / 2
+        _place(b, wall, f"{label}: Zwischenstuetze {o.name}", grp,
+               u, u + sh, stud_h0, z_head, (sw, sh), z_head - stud_h0,
+               note="traegt den Sturz ab - die Oeffnung ist zu breit zum "
+                    "freien Ueberspannen")
+
+    # Fuellständer ueber dem Sturz uebertragen die Sparrenlast in den Sturz
+    if stud_h1 - (z_head + lh) > 150:
         for u in raster_positions(o.width, RASTER, sh):
             _place(b, wall, f"{label}: Fuellständer", grp,
-                   o.x0 + u - sh / 2, o.x0 + u + sh / 2, z_head + sh, stud_h1,
-                   (sw, sh), stud_h1 - z_head - sh)
+                   o.x0 + u - sh / 2, o.x0 + u + sh / 2, z_head + lh, stud_h1,
+                   (sw, sh), stud_h1 - z_head - lh)
     # Brüstungsriegel bei Lueftungsoeffnungen
     if o.kind != "door" and o.z0 > stud_h0 + 50:
         _place(b, wall, f"{label}: Brueckenriegel", grp,
@@ -535,12 +626,15 @@ def _build_roof(b: Building) -> None:
                 y_start + axis[1] * s_along + perp[1] * t_perp,
                 z_start + axis[2] * s_along + perp[2] * t_perp)
 
-    sparren_x = raster_positions(fl, RASTER, sw)
+    sparren_x = d["axes_x"]
     for i, xi in enumerate(sparren_x):
         edge = i in (0, len(sparren_x) - 1)
-        m = Member("Aussensparren" if edge else "Sparren", "dach", d["sparren"], length,
-                   note="Kerve auf Raehm vorn und hinten" if not edge else
-                        "Ortgangsparren, traegt zugleich das Giebelfeld")
+        m = Member("Aussensparren" if edge else "Sparren", "dach", d["sparren"],
+                   length,
+                   note=("liegt mit Kerve auf beiden Raehmen auf, jeweils "
+                         "senkrecht ueber einem Staender"
+                         if not edge else
+                         "Ortgangsparren, traegt zugleich das Giebelfeld"))
         m.verts = _prism((ox + xi, y_start, z_start), axis, wdir, length, sw, sh)
         b.members.append(m)
 
@@ -548,6 +642,7 @@ def _build_roof(b: Building) -> None:
     x_left = -DACH_UEBERSTAND_ORT
     x_right = d["length_out"] + DACH_UEBERSTAND_ORT
     n_latt = max(3, int(d["roof_slope_len"] // 800) + 1)
+    d["n_latt"] = n_latt
     latt_len = x_right - x_left
     # Achsen liegen um eine halbe Lattenbreite eingerueckt, damit die erste
     # Latte an der Grenze buendig abschliesst und nichts uebersteht

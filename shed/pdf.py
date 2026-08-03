@@ -20,7 +20,10 @@ from .compliance import check_all, summary
 from .drawings import LAYERS, Drawing, all_drawings
 from .instructions import build_steps, maintenance, prepare_notes, tool_list
 from .model import Building
+from .spec import SCHWELLE, WAND_STIEL
 from .statics import snow_load
+from .structure import report as structural_report
+from .structure import summary as structural_summary
 from .text import de, nz
 
 MM = 72.0 / 25.4
@@ -656,20 +659,58 @@ def _text_part(c: rl_canvas.Canvas, b: Building) -> None:
                          "fail": WARN, "info": ACCENT}[ch.status])
         tp.p(f"{ch.law}: {ch.hint}", 8.4)
 
+    tp.h1("Standsicherheit")
+    proofs = structural_report(b)
+    st = structural_summary(proofs)
+    tp.box("Ergebnis", [
+        de(st["text"])[0].upper() + de(st["text"])[1:] + ".",
+        "Der Lastweg ist eine durchgehende Auflagerkette: Traglatte auf "
+        "Sparren, Sparren auf Raehm, Raehm auf Staender, Staender auf "
+        "Fussriegel und Bodenplatte, Bodenplatte auf Deckenbalken, "
+        "Deckenbalken auf Schwelle, Schwelle auf Fundament. Kein Balken haengt "
+        "in einer Verbindung - jedes Holz liegt auf dem darunterliegenden auf.",
+        f"Sparren, Staender und Deckenbalken stehen im selben Achsraster von "
+        f"{d['e_axis']:.0f} mm senkrecht uebereinander, unter jeder Achse "
+        "steht ein Fundamentpunkt.",
+    ], OK if st["state"] == "ok" else WARN)
+
+    tp.table(["Nachweis", "Bauteil", "Querschnitt", "Stuetzweite", "Ausnutzung"],
+             [[p.title, p.member, p.profile, p.span,
+               nz(p.util, 2) + ("" if p.ok else "  NICHT ERFUELLT")]
+              for p in proofs],
+             [2.3, 1.2, 1.3, 1.2, 0.9])
+
+    for p in proofs:
+        tp.h2(p.title, OK if p.ok else WARN)
+        tp.p(f"{p.member} - {p.profile} - {p.span} - Last {p.load}", 7.8, color=MUTED)
+        for name, value, limit, util in p.results:
+            if limit == "-":
+                tp.p(f"{name}: {value}", 8.2, indent=5, bullet="-")
+            else:
+                tp.p(f"{name}: {value} gegen {limit} zulaessig "
+                     f"(Ausnutzung {nz(util, 2)})", 8.2, indent=5, bullet="-")
+        if p.note:
+            tp.p(p.note, 8.0, indent=5, color=MUTED)
+
     tp.h1("Lastannahmen")
-    sc = d["sparren_check"]
     tp.p(f"Schneelastzone {spec.snow_zone}, Gelaendehoehe {spec.altitude:.0f} m ueber NN, "
          f"charakteristische Schneelast sk = {nz(snow_load(spec.snow_zone, spec.altitude), 2)} kN/m2. "
          f"Formbeiwert 0,80 bei {spec.roof_pitch:.0f} Grad Dachneigung.")
-    tp.p(f"Sparren {d['sparren'][0]:.0f} x {d['sparren'][1]:.0f} mm C24, Stuetzweite "
-         f"{nz(sc['span_m'], 2)} m, Achsabstand {nz(sc['spacing_m'], 3)} m. "
-         f"Biegespannung {nz(sc['sigma'], 1)} N/mm2 gegen {nz(sc['f_m_d'], 1)} N/mm2 zulaessig "
-         f"(Ausnutzung {nz(sc['eta_m'], 2)}). Durchbiegung {nz(sc['w_inst'], 1)} mm gegen "
-         f"{nz(sc['lim_inst'], 1)} mm zulaessig (Ausnutzung {nz(sc['eta_w'], 2)}).")
-    tp.p("Nachweis nach DIN EN 1995-1-1 als Einfeldtraeger, Nutzungsklasse 2, "
-         "kmod = 0,90, gamma_M = 1,30. Windsog ist ueber die durchgehende "
-         "Verankerung jedes Sparrens mit Sparren-Pfettenankern und die "
-         "Verschraubung des Fussriegels im Schwellenrost abgedeckt.")
+    tp.p(f"Bauteile im Achsraster {d['e_axis']:.0f} mm: Sparren "
+         f"{d['sparren'][0]:.0f} x {d['sparren'][1]:.0f} mm, Deckenbalken "
+         f"{d['joist'][0]:.0f} x {d['joist'][1]:.0f} mm, Sturz "
+         f"{d['lintel'][0]:.0f} x {d['lintel'][1]:.0f} mm, Staender und Raehm "
+         f"{WAND_STIEL[0]:.0f} x {WAND_STIEL[1]:.0f} mm, Schwelle "
+         f"{SCHWELLE[1]:.0f} x {SCHWELLE[0]:.0f} mm liegend - alle Nadelholz C24.")
+    tp.p("Nutzlast der Bodenflaeche 2,50 kN/m2 (Abstellflaeche), Eigenlast "
+         "der Balkenlage 0,30 kN/m2, Wandeigenlast 0,35 kN/m2.")
+    tp.p("Nachweise nach DIN EN 1995-1-1 als Einfeldtraeger, Nutzungsklasse 2, "
+         "gamma_M = 1,30, kmod = 0,90 fuer Schnee und 0,80 fuer die Nutzlast "
+         "der Bodenflaeche. Der Knicknachweis der Staender ist konservativ "
+         "ohne die aussteifende Wirkung von Konterlattung und Beplankung "
+         "gefuehrt. Windsog ist ueber die durchgehende Verankerung jedes "
+         "Sparrens mit Sparren-Pfettenankern und die Verschraubung des "
+         "Fussriegels im Schwellenrost abgedeckt.")
 
     tp.box("Haftungsausschluss", [
         "Diese Unterlagen wurden automatisch aus den eingegebenen Parametern "

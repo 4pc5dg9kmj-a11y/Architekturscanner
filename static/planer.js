@@ -16,7 +16,7 @@ const de = (s) => (s == null ? "" : String(s));
 /* ------------------------------------------------------------------ Zustand */
 
 const DEF = {
-  n_bikes: 6, tool_width: 1500, depth: 2350, eaves_height: 2100, roof_pitch: 10,
+  n_bikes: 6, tool_width: 1200, depth: 2270, eaves_height: 2100, roof_pitch: 7,
   closure: "closed_double", roofing: "trapez", foundation: "slabs",
   cladding: "rhombus", snow_zone: "2", altitude: 250, site: "innenbereich",
   with_gutter: true, with_floor: true, with_workbench: false, tool_shelves: 2,
@@ -183,8 +183,10 @@ function renderSide() {
       ${spec.n_bikes > 0 ? eur(c.pro_stellplatz) + " je Stellplatz · " : ""}
       Verschnitt ${fmt(c.verschnitt_pct, 0)} % ·
       Eigenlast ${fmt(w.eigenlast_kg)} kg auf ${w.auflager} Auflagern<br>
-      Sparren ${k.sparren} mm, Ausnutzung ${fmt(k.sparren_eta, 2)} ·
-      Richtpreise, ohne Werkzeug
+      Sparren ${k.sparren} · Deckenbalken ${k.joist} · Sturz ${k.lintel} mm<br>
+      Achsraster ${fmt(k.raster)} mm, ${fmt(k.auflager)} Auflager ·
+      Statik ${k.statik_ok ? "erfüllt" : "NICHT erfüllt"}, höchste Ausnutzung
+      ${fmt(k.statik_eta, 2)} · Richtpreise, ohne Werkzeug
     </div>`;
 }
 
@@ -263,7 +265,7 @@ function draw3d() {
   const L = [0.42, -0.68, 0.60];
   const faces = [];
   for (const s of m.solids) {
-    if (hidden.has(s.g)) continue;
+    if (!layerVisible(s.g)) continue;
     const polys = s.kind === "poly" ? [s.v.map((_, i) => i)] : FACES;
     for (const f of polys) {
       const p = f.map((i) => s.v[i]);
@@ -283,17 +285,14 @@ function draw3d() {
   // Die Dachhaut liegt über allem und wird immer von oben gesehen. Der
   // Maleralgorithmus sortiert nur nach Schwerpunkt-Tiefe und würde eine große
   // Fläche sonst hinter kleinen Bauteilen einsortieren, die darunter liegen.
-  const skin = faces.filter((f) => f.s.g === "Dachhaut");
-  if (skin.length) {
-    lastFaces = faces.filter((f) => f.s.g !== "Dachhaut").concat(skin);
-  } else {
-    lastFaces = faces;
-  }
-  faces.length = 0;
-  faces.push(...lastFaces);
+  // Wichtig: immer ein NEUES Array bilden - sonst zeigen beide Namen auf
+  // dieselbe Liste und das Umsortieren löscht sie.
+  const order = faces.filter((f) => f.s.g !== "Dachhaut")
+    .concat(faces.filter((f) => f.s.g === "Dachhaut"));
+  lastFaces = order;
 
   g.lineJoin = "round";
-  for (const f of faces) {
+  for (const f of order) {
     g.beginPath();
     g.moveTo(f.pr[0][0], f.pr[0][1]);
     for (let i = 1; i < f.pr.length; i++) g.lineTo(f.pr[i][0], f.pr[i][1]);
@@ -309,19 +308,66 @@ function draw3d() {
     `${fmt(k.bri, 2)} m³ · Grenzwand ${fmt(k.grenzhoehe / 1000, 2)} m`, 14, H - 32);
 }
 
+/* Schichten in Baureihenfolge. `phase` blendet von unten nach oben ein,
+   die Haken darüber schalten einzelne Schichten unabhängig davon. */
+let phase = 99;
+
+function activeLayers() {
+  return data.model3d.layers.filter((g) =>
+    data.model3d.solids.some((s) => s.g === g));
+}
+
+function layerVisible(g) {
+  const order = activeLayers();
+  const i = order.indexOf(g);
+  return i >= 0 && i < phase && !hidden.has(g);
+}
+
 function renderLegend() {
-  const el = $("#legend3d");
-  el.innerHTML = data.model3d.layers.map((g) => {
-    const s = data.model3d.solids.find((x) => x.g === g);
-    if (!s) return "";
-    return `<label><input type="checkbox" data-g="${esc(g)}"
-      ${hidden.has(g) ? "" : "checked"}>
-      <i style="background:${s.c}"></i>${de(g)}</label>`;
+  const order = activeLayers();
+  if (phase > order.length) phase = order.length;
+  const sl = $("#s-phase");
+  sl.max = order.length;
+  sl.value = phase;
+  $("#o-phase").textContent = phase >= order.length
+    ? "fertig" : `${phase} / ${order.length} · ${de(order[phase - 1])}`;
+
+  $("#legend-list").innerHTML = order.map((g, i) => {
+    const sol = data.model3d.solids.find((x) => x.g === g);
+    const on = layerVisible(g);
+    return `<div class="row ${on ? "" : "off"}">
+      <label><input type="checkbox" data-g="${esc(g)}" ${hidden.has(g) ? "" : "checked"}>
+        <i style="background:${sol.c}"></i>${i + 1}. ${de(g)}</label>
+      <button class="solo" data-solo="${esc(g)}" title="nur diese Schicht">nur</button>
+    </div>`;
   }).join("");
-  el.querySelectorAll("input").forEach((i) => i.onchange = () => {
+
+  $("#legend-list").querySelectorAll("input").forEach((i) => i.onchange = () => {
     const g = i.dataset.g;
     if (i.checked) hidden.delete(g); else hidden.add(g);
-    draw3d();
+    renderLegend(); draw3d();
+  });
+  $("#legend-list").querySelectorAll(".solo").forEach((btnEl) => btnEl.onclick = () => {
+    const g = btnEl.dataset.solo;
+    const others = order.filter((x) => x !== g);
+    hidden = new Set(hidden.size === others.length && !hidden.has(g) ? [] : others);
+    phase = order.length;
+    renderLegend(); draw3d();
+  });
+}
+
+function bindLayers() {
+  $("#s-phase").addEventListener("input", (e) => {
+    phase = parseInt(e.target.value, 10);
+    renderLegend(); draw3d();
+  });
+  document.querySelectorAll(".legend-head button").forEach((b) => b.onclick = () => {
+    const order = activeLayers();
+    hidden = b.dataset.preset === "struct"
+      ? new Set(order.filter((g) => !data.model3d.structural_layers.includes(g)))
+      : new Set();
+    phase = order.length;
+    renderLegend(); draw3d();
   });
 }
 
@@ -620,6 +666,61 @@ function renderBau() {
       `<li>${esc(de(m))}</li>`).join("")}</ul>`;
 }
 
+function renderStatik() {
+  const st = data.structure_summary;
+  const kette = ["Dachhaut", "Traglatte", "Sparren", "Rähm", "Ständer",
+                 "Fußriegel", "Bodenplatte", "Deckenbalken", "Schwelle",
+                 "Fundament", "Baugrund"];
+
+  const bar = (u, ok) => {
+    const cls = !ok ? "fail" : u > 0.85 ? "warn" : "";
+    return `<span class="util ${cls}"><span class="bar">
+      <i style="width:${Math.min(100, u * 100)}%"></i></span><b>${fmt(u, 2)}</b></span>`;
+  };
+
+  const rows = data.structure.map((p) => `<tr>
+    <td><b>${esc(de(p.title))}</b></td><td>${esc(de(p.member))}</td>
+    <td>${esc(de(p.profile))}</td><td>${esc(de(p.span))}</td>
+    <td class="num">${bar(p.util, p.ok)}</td></tr>`).join("");
+
+  const details = data.structure.map((p) => `<div class="proof">
+    <div class="h"><b>${esc(de(p.title))}</b>${bar(p.util, p.ok)}</div>
+    <div class="meta">${esc(de(p.member))} · ${esc(de(p.profile))} ·
+      ${esc(de(p.span))} · Last ${esc(p.load)}</div>
+    <table><tbody>${p.results.map((r) => `<tr>
+      <td>${esc(de(r.name))}</td><td class="num">${esc(r.value)}</td>
+      <td>${r.limit === "-" ? "" : "zulässig " + esc(r.limit)}</td>
+      <td class="num">${r.limit === "-" ? "" : fmt(r.util, 2)}</td></tr>`).join("")}
+    </tbody></table>
+    ${p.note ? `<div class="note">${esc(de(p.note))}</div>` : ""}</div>`).join("");
+
+  $("#vstatik").innerHTML = `<h2>Standsicherheit</h2>
+    <p class="lead">Jedes tragende Holz ist nachgewiesen – Biegung, Schub,
+    Durchbiegung, Knicken und die Querdruckspannung an jedem Auflager.
+    Querschnitte, die nicht reichen, werden automatisch vergrößert.</p>
+    <div class="verdict ${st.state}" style="max-width:64ch">
+      <span class="dot"></span><span>${esc(de(st.text))}</span></div>
+    <h3>Lastweg</h3>
+    <p class="lead" style="margin-bottom:6px">Eine durchgehende Auflagerkette:
+    jedes Holz liegt auf dem darunterliegenden auf, kein Balken hängt in einer
+    Verbindung. Sparren, Ständer und Deckenbalken stehen im selben Achsraster
+    von ${fmt(data.kpi.raster)} mm senkrecht übereinander – unter jeder Achse
+    steht ein Fundamentpunkt (${fmt(data.kpi.auflager)} insgesamt).</p>
+    <div class="chain">${kette.map((k, i) =>
+      `<span>${k}</span>${i < kette.length - 1 ? "<em>↓</em>" : ""}`).join("")}</div>
+    <table><thead><tr><th>Nachweis</th><th>Bauteil</th><th>Querschnitt</th>
+      <th>Stützweite</th><th class="num">Ausnutzung</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    <h3>Einzelnachweise</h3>${details}
+    <div class="callout"><b>Grenzen dieses Nachweises</b>
+    Gerechnet wird als Einfeldträger ohne Durchlaufwirkung, Nutzungsklasse 2,
+    γ<sub>M</sub> = 1,30, k<sub>mod</sub> 0,90 für Schnee und 0,80 für die
+    Nutzlast. Der Knicknachweis der Ständer lässt die aussteifende Wirkung von
+    Konterlattung und Beplankung außer Acht – das liegt auf der sicheren
+    Seite. Für ein verfahrensfreies Nebengebäude ist das angemessen; geprüfte
+    Standsicherheitsnachweise ersetzt es nicht.</div>`;
+}
+
 function renderHbo() {
   const k = data.kpi, sc = data.sparren_check;
   const cards = [
@@ -672,7 +773,7 @@ function render() {
   renderDrawSelect();
   draw3d();
   draw2d();
-  renderHolz(); renderMat(); renderBau(); renderHbo();
+  renderHolz(); renderMat(); renderBau(); renderStatik(); renderHbo();
 }
 
 function bindTabs() {
@@ -703,7 +804,7 @@ function bindControls() {
 }
 
 writeControls();
-bindTabs(); bindControls(); bind3d(); bind2d();
+bindTabs(); bindControls(); bind3d(); bind2d(); bindLayers();
 runOptimize();
 
 })();

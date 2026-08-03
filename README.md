@@ -65,13 +65,43 @@ möglichst breiter Geräteteil, danach möglichst großzügige lichte Höhe.
 Typisches Ergebnis: rund **5,03 m × 2,27 m, 29,4 m³** – sechs Räder plus
 1,50 m Geräteraum, Grenzwand 2,71 m.
 
-## Statik
+## Statik: jedes Holz nachgewiesen, jeder Balken auf einer Stütze
 
-Die Sparren werden **automatisch dimensioniert**, nicht geraten. Nachgewiesen
-werden Biegespannung, Durchbiegung und Schub nach DIN EN 1995-1-1
-(Nutzungsklasse 2, k_mod = 0,90, γ_M = 1,30) für Schneelastzone und
-Geländehöhe des Standorts. Wer auf Gründach umstellt, sieht sofort einen
-stärkeren Querschnitt – 110 kg/m² gesättigtes Substrat sind kein Detail.
+Der Lastweg ist eine **durchgehende Auflagerkette**. Kein Balken hängt in
+einer Verbindung – jedes Holz liegt auf dem darunterliegenden auf:
+
+```
+Dachhaut → Traglatte → Sparren → Rähm → Ständer → Fußriegel
+         → Bodenplatte → Deckenbalken → Schwelle → Fundament → Baugrund
+```
+
+**Sparren, Ständer und Deckenbalken stehen im selben Achsraster senkrecht
+übereinander**, und unter jeder Achse steht ein Fundamentpunkt. Die Dachlast
+läuft damit gerade nach unten, ohne über biegebeanspruchte Riegel umgelenkt
+zu werden. Die Schwelle wird dadurch zum reinen Auflagerholz statt zum
+Biegeträger.
+
+Nachgewiesen wird **jedes tragende Holz**, nicht nur der Sparren:
+
+| Nachweis | Bauteile |
+|---|---|
+| Biegung, Schub, Durchbiegung | Traglatte, Sparren, Rähm, Sturz, Deckenbalken, Schwelle |
+| Knicken (EC5 mit k_c) | Ständer |
+| Querdruck an der Auflagerfläche | Sparren auf Rähm, Ständer auf Fußriegel, Deckenbalken auf Schwelle |
+| Bodenpressung | Fundamentplatte auf Baugrund |
+
+Alles nach DIN EN 1995-1-1, Nutzungsklasse 2, γ_M = 1,30, k_mod 0,90 für
+Schnee und 0,80 für die Nutzlast der Bodenfläche (2,5 kN/m²). Der
+Knicknachweis lässt die aussteifende Wirkung von Konterlattung und Beplankung
+außer Acht – das liegt auf der sicheren Seite.
+
+**Querschnitte werden bemessen, nicht geraten.** Sparren, Deckenbalken und
+Sturz wachsen automatisch mit Spannweite und Last. Wer auf Gründach
+umstellt, sieht sofort stärkere Hölzer – 110 kg/m² gesättigtes Substrat sind
+kein Detail. Und was sich mit Handelsquerschnitten nicht mehr überspannen
+lässt – etwa eine 5,35 m breite offene Front – bekommt automatisch eine
+Zwischenstütze, statt den Nachweis zu reißen. Über den gesamten Reglerbereich
+(972 geprüfte Kombinationen) ist kein Bauteil überlastet.
 
 ## Standardhölzer und Zuschnitt
 
@@ -92,7 +122,8 @@ typisch unter 20 %.
   Schnitt A-A, Sparrenplan, vier Ständerwerkspläne, drei Details 1:5
 - Holzliste, Zuschnittplan, Schrauben- und Werkstoffliste, Werkzeugliste
 - Bauanleitung in 11 Schritten mit Dauer, Personenzahl und Kontrollpunkten
-- Prüfung nach HBO mit Einzelnachweisen und Lastannahmen
+- Standsicherheit: Übersicht aller Nachweise plus Einzelwerte je Bauteil
+- Prüfung nach HBO und Lastannahmen
 
 **DXF-Export** des kompletten Zeichnungssatzes, layerweise getrennt, in Metern.
 
@@ -101,11 +132,12 @@ typisch unter 20 %.
 | Bereich | Inhalt |
 |---|---|
 | Seitenleiste | Slider für Stellplätze, Geräteteil, Tiefe, lichte Höhe, Dachneigung; Ausführung, Standort, Preisniveau; Ampel und Kostenrahmen |
-| 3D-Ansicht | Ziehen = drehen, Mausrad = zoomen, Shift+Ziehen = verschieben; Bauteilgruppen einzeln ausblenden, Bauteil unter dem Zeiger wird benannt |
+| 3D-Ansicht | Ziehen = drehen, Mausrad = zoomen, Shift+Ziehen = verschieben. **Bauphasen-Regler** baut das Häuschen Schicht für Schicht auf, jede Schicht lässt sich einzeln abhaken oder per „nur" allein zeigen; „Tragwerk" blendet alles Nichttragende aus. Das Bauteil unter dem Zeiger wird benannt |
 | Zeichnungen | alle Blätter, Ziehen = verschieben, Mausrad = zoomen |
 | Holz & Zuschnitt | Einkaufsliste und Zuschnittplan je Stange |
 | Schrauben & Material | Verbindungsmittel, Werkstoffe, Werkzeug |
 | Bauanleitung | Schritte mit Kontrollpunkten zum Abhaken |
+| Statik | Lastweg, alle Nachweise mit Ausnutzungsbalken, Einzelwerte |
 | Hessen-Prüfung | Kennwerte, Einzelnachweise, Lastannahmen |
 
 ## Technik
@@ -120,7 +152,8 @@ typisch unter 20 %.
 
 ```
 shed/spec.py          Eingabeparameter und feste Konstruktionsmaße
-shed/statics.py       Lasten und Sparrennachweis nach EC5
+shed/statics.py       Lasten und Grundnachweise nach EC5
+shed/structure.py     Lastweg und Nachweis aller Hölzer
 shed/model.py         parametrisches Bauwerk, jedes Holz mit Lage
 shed/compliance.py    HBO-Prüfung und Optimierer
 shed/bom.py           Holzliste, Zuschnitt, Schrauben, Werkstoffe

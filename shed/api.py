@@ -7,6 +7,7 @@ from .compliance import check_all, max_bikes_for, summary
 from .drawings import LAYERS, all_drawings
 from .instructions import build_steps, maintenance, prepare_notes, tool_list
 from .model import Building, build
+from .structure import report as structural_report, summary as structural_summary
 from .text import de_deep
 from .spec import (
     HBO_MAX_BRI,
@@ -43,10 +44,14 @@ GROUP_LABEL = {
     "folie": "Folien",
 }
 
-# Reihenfolge der Ein-/Ausblendbaren Ebenen in der 3D-Ansicht
+# Schichten in Baureihenfolge - der Regler blendet sie von unten nach oben ein
 LAYER_ORDER = ["Gruendung", "Schwellenrost", "Boden", "Ständerwerk", "Trennwand",
                "Dachtragwerk", "Dachhaut", "Konterlattung", "Fassade",
                "Tueren", "Einbauten"]
+
+# Welche Schichten gehoeren zum Tragwerk (Schnellauswahl in der Oberflaeche)
+LAYER_STRUCTURAL = ["Gruendung", "Schwellenrost", "Ständerwerk", "Trennwand",
+                    "Dachtragwerk"]
 
 
 def model3d(b: Building) -> dict:
@@ -80,6 +85,7 @@ def model3d(b: Building) -> dict:
     return {
         "solids": solids,
         "layers": LAYER_ORDER,
+        "structural_layers": LAYER_STRUCTURAL,
         "center": [d["length_out"] / 2, d["depth_out"] / 2, d["z_roof_rear"] / 2],
         "size": max(d["length_out"], d["depth_out"], d["z_roof_rear"]),
     }
@@ -102,12 +108,14 @@ def _payload(spec: ShedSpec) -> dict:
     b = build(spec)
     d = b.dims
     checks = check_all(b)
+    proofs = structural_report(b)
     lines = timber_list(b)
 
     return {
         "spec": spec.to_dict(),
         "dims": {k: (list(v) if isinstance(v, tuple) else v)
-                 for k, v in d.items() if k != "sparren_check"},
+                 for k, v in d.items()
+                 if not k.endswith("_proof") and k not in ("sparren_check",)},
         "sparren_check": d["sparren_check"],
         "kpi": {
             "laenge": round(d["length_out"]),
@@ -125,13 +133,20 @@ def _payload(spec: ShedSpec) -> dict:
             "lichte_vorn": round(d["clear_height_front"]),
             "lichte_hinten": round(d["clear_height_rear"]),
             "sparren": f"{d['sparren'][0]:.0f} x {d['sparren'][1]:.0f}",
-            "sparren_eta": d["sparren_check"].get("eta_max", 0),
+            "joist": f"{d['joist'][0]:.0f} x {d['joist'][1]:.0f}",
+            "lintel": f"{d['lintel'][0]:.0f} x {d['lintel'][1]:.0f}",
+            "raster": round(d["e_axis"]),
+            "auflager": len(d.get("support_xy", [])),
+            "statik_eta": structural_summary(proofs)["max_util"],
+            "statik_ok": structural_summary(proofs)["state"] == "ok",
             "dachflaeche": round(d["roof_area"], 2),
             "geraetflaeche": round(d["tool_w"] * d["inner_d"] / 1e6, 2),
             "max_bikes": max_bikes_for(spec),
         },
         "checks": [c.to_dict() for c in checks],
         "summary": summary(checks),
+        "structure": [p.to_dict() for p in proofs],
+        "structure_summary": structural_summary(proofs),
         "cost": cost_summary(b),
         "weight": weight_estimate(b),
         "timber": [{

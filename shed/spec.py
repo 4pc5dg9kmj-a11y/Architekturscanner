@@ -54,13 +54,15 @@ class ShedSpec:
     """Die vom Nutzer per Slider gesteuerten Groessen."""
 
     # --- Nutzung -----------------------------------------------------------
+    # Die Vorgaben entsprechen dem Ergebnis des Optimierers: die groesste
+    # Variante, die in Hessen noch verfahrensfrei an der Grenze stehen darf.
     n_bikes: int = 6                 # Fahrradstellplaetze
-    tool_width: float = 1500.0       # lichte Breite des Geraeteteils (0 = keiner)
+    tool_width: float = 1200.0       # lichte Breite des Geraeteteils (0 = keiner)
 
     # --- Geometrie ---------------------------------------------------------
-    depth: float = 2350.0            # Aussentiefe (Y)
+    depth: float = 2270.0            # Aussentiefe (Y)
     eaves_height: float = 2100.0     # lichte Hoehe vorne an der Traufe
-    roof_pitch: float = 10.0         # Dachneigung in Grad
+    roof_pitch: float = 7.0          # Dachneigung in Grad
 
     # --- Ausfuehrung -------------------------------------------------------
     closure: str = "closed_double"   # closed_double | open_front | side_doors

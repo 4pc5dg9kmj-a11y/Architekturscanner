@@ -71,7 +71,9 @@ def build_steps(b: Building) -> list[Step]:
         steps.append(Step(
             2, "Gruendung: Gehwegplatten auf Splittbett", "1 Tag", 2,
             [
-                f"{n_slabs} Auflagerpunkte nach dem Gruendungsplan abstecken.",
+                f"{n_slabs} Auflagerpunkte nach dem Gruendungsplan abstecken - "
+                "drei Reihen (Grenze, Mitte, Traufe) mit je einem Punkt unter "
+                "jeder Balkenachse.",
                 "Je Punkt ca. 40 x 40 cm und 20 cm tief ausheben. Unkrautvlies "
                 "einlegen, 15 cm Schotter 0/32 einfuellen und mit dem Handstampfer "
                 "verdichten.",
@@ -118,26 +120,37 @@ def build_steps(b: Building) -> list[Step]:
             ["Trennlage vollflaechig unter dem Holz"],
             ["Bohrhammer", "Wasserwaage"]))
 
+    jb, jh = d["joist"]
     steps.append(Step(
-        3, "Schwellenrost aufbauen", "3 Stunden", 2,
+        3, "Schwellen und Balkenlage aufbauen", "4 Stunden", 2,
         [
-            f"Zwei Laengstraeger {SCHWELLE[0]:.0f} x {SCHWELLE[1]:.0f} mm "
-            f"kesseldruckimpraegniert auf {fl:.0f} mm zuschneiden.",
-            f"Querhoelzer auf {fd - SCHWELLE[0]:.0f} mm zuschneiden, "
-            f"{_n(b.members, 'Rost-Querholz')} Stueck.",
-            f"Rahmen auf den Platten auslegen, Querhoelzer im Achsabstand von "
-            f"maximal {RASTER:.0f} mm einsetzen und mit 8 x 200 mm "
-            "Konstruktionsschrauben durch den Laengstraeger verschrauben "
-            "(je Stoss 2 Schrauben, vorbohren).",
-            "Unter jedem Holz-Plattenkontakt einen Streifen Bitumenbahn "
-            "einlegen - das ist der wirksamste Schutz gegen aufsteigende Feuchte.",
-            "Rechtwinkligkeit ueber die Diagonalen kontrollieren und den Rahmen "
+            f"Drei Schwellen {SCHWELLE[1]:.0f} x {SCHWELLE[0]:.0f} mm "
+            f"kesseldruckimpraegniert auf {fl:.0f} mm zuschneiden - eine an der "
+            "Grenze, eine in der Mitte, eine an der Traufe. Sie werden LIEGEND "
+            "eingebaut, die breite Seite auf den Platten.",
+            "Unter jede Schwelle einen Streifen Bitumenbahn legen. Das ist der "
+            "wirksamste Schutz gegen aufsteigende Feuchte.",
+            f"Deckenbalken {jb:.0f} x {jh:.0f} mm auf {fd:.0f} mm zuschneiden, "
+            f"{_n(b.members, 'Deckenbalken')} Stueck. Sie werden hochkant QUER "
+            "ueber die drei Schwellen gelegt - nicht dazwischen eingehaengt.",
+            f"Achsabstand {d['e_axis']:.0f} mm. Unter jeder Balkenachse steht "
+            "eine Fundamentplatte: so hat jeder Balken sein Auflager senkrecht "
+            "unter sich. Genau dieses Raster wiederholt sich spaeter bei den "
+            "Staendern und den Sparren.",
+            "Jeden Balken mit zwei Schraegschrauben 6 x 140 mm in die Schwelle "
+            "ziehen. Die Schrauben halten den Balken an Ort und Stelle - "
+            "getragen wird er von der Auflagerflaeche, nicht von der Schraube.",
+            "Randbalken an Grenz- und Traufseite auflegen und stirnseitig mit "
+            "den Deckenbalken verschrauben.",
+            "Rechtwinkligkeit ueber die Diagonalen kontrollieren und den Rost "
             "erst dann endgueltig fixieren.",
         ],
-        [f"Diagonalen gleich ({nz(math.hypot(fl, fd) / 1000, 3)} m)",
+        [f"Diagonalen gleich ({math.hypot(fl, fd) / 1000:.3f} m)",
          "Rost waagerecht in beide Richtungen",
-         "Trennlage unter allen Auflagerpunkten"],
-        ["Handkreissaege", "Akkuschrauber", "Holzbohrer 5 mm", "Winkel"]))
+         "Jeder Deckenbalken liegt satt auf allen drei Schwellen auf",
+         "Trennlage unter allen Schwellen"],
+        ["Handkreissaege", "Akkuschrauber", "Holzbohrer 5 mm", "Winkel",
+         "Richtscheit 2 m"]))
 
     if spec.with_floor:
         steps.append(Step(
@@ -157,7 +170,11 @@ def build_steps(b: Building) -> list[Step]:
         [
             "Jede Wand nach dem Ständerwerksplan flach auf dem Boden aufbauen - "
             "das ist deutlich schneller und genauer als Aufrichten in der Luft.",
-            f"Ständerraster {RASTER:.0f} mm Achsabstand, Querschnitt "
+            f"Ständerraster {d['e_axis']:.0f} mm - dasselbe Achsmass wie die "
+            "Deckenbalken darunter. Jeder Ständer steht senkrecht ueber einem "
+            "Balken, jeder Sparren spaeter senkrecht ueber einem Ständer. "
+            "Diese Achsen anzeichnen, bevor irgendetwas geschnitten wird.",
+            f"Querschnitt "
             f"{WAND_STIEL[0]:.0f} x {WAND_STIEL[1]:.0f} mm, die 120-mm-Seite liegt "
             "in der Wandebene (Wanddicke 60 mm).",
             f"Rueckwand (Grenze): Ständerlaenge {d['z_plate_top_rear'] - d['z_floor'] - 60 - WAND_STIEL[1]:.0f} mm. "
@@ -203,7 +220,8 @@ def build_steps(b: Building) -> list[Step]:
         n, "Sparrenlage und Dachtragwerk", "5 Stunden", 2,
         [
             f"{len(sparren)} Sparren {d['sparren'][0]:.0f} x {d['sparren'][1]:.0f} mm, "
-            f"Laenge je {d['sparren_len']:.0f} mm, Achsabstand {RASTER:.0f} mm.",
+            f"Laenge je {d['sparren_len']:.0f} mm, Achsabstand {d['e_axis']:.0f} mm "
+            "- genau ueber den Ständern.",
             f"Kerven fuer die Auflager auf beiden Raehmen anreissen "
             f"(Neigung {spec.roof_pitch:.0f} Grad). Kerventiefe hoechstens "
             f"{d['sparren'][1] / 3:.0f} mm - ein Drittel der Sparrenhoehe.",

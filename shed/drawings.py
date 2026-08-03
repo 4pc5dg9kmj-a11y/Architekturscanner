@@ -443,14 +443,27 @@ def section(b: Building) -> Drawing:
         dr.rect(min(ys), min(zs), max(ys), max(zs), "schnitt")
         dr.hatch(min(ys), min(zs), max(ys), max(zs))
     dr.rect(off - 150, -150, off + fd + 150, 0, "hilfslinie")
+    # Lastweg-Achse: Sparren, Staender und Deckenbalken stehen uebereinander
+    dr.line(off + WAND_STIEL[0] / 2, -300, off + WAND_STIEL[0] / 2,
+            d["z_roof_rear"] + 200, "achse")
+    dr.line(off + fd - WAND_STIEL[0] / 2, -300, off + fd - WAND_STIEL[0] / 2,
+            d["z_roof_front"] + 200, "achse")
     dr.text((off + fd / 2), -230, "Schotter 0/32, ca. 15 cm - Splittbett 5 cm - Unkrautvlies",
             2.2, "text")
 
-    # Schwellenrost geschnitten (Laengstraeger vorne/hinten) + Querholz
-    dr.rect(off, 0, off + fd, SCHWELLE[1], "schnitt")
-    dr.hatch(off, 0, off + fd, SCHWELLE[1])
-    dr.text(off + fd + 220, SCHWELLE[1] / 2,
-            f"Schwellenrost {SCHWELLE[0]:.0f}x{SCHWELLE[1]:.0f} kdi", 2.2, "text", align="left")
+    # Schwellen (liegend, geschnitten) und Deckenbalken (laengs, in Ansicht)
+    z_sill = d["z_sill_top"]
+    for yc in (off + SCHWELLE[1] / 2, off + fd / 2, off + fd - SCHWELLE[1] / 2):
+        dr.rect(yc - SCHWELLE[1] / 2, 0, yc + SCHWELLE[1] / 2, z_sill, "schnitt")
+        dr.hatch(yc - SCHWELLE[1] / 2, 0, yc + SCHWELLE[1] / 2, z_sill)
+    dr.text(off + fd + 220, z_sill / 2,
+            f"Schwelle {SCHWELLE[1]:.0f}x{SCHWELLE[0]:.0f} kdi, liegend",
+            2.2, "text", align="left")
+    jb, jh = d["joist"]
+    dr.rect(off, z_sill, off + fd, z_sill + jh, "sicht")
+    dr.text(off + fd + 220, z_sill + jh / 2,
+            f"Deckenbalken {jb:.0f}x{jh:.0f}, e = {d['e_axis']:.0f} mm",
+            2.2, "text", align="left")
 
     # Boden
     if spec.with_floor:
@@ -489,7 +502,8 @@ def section(b: Building) -> Drawing:
 
     dr.text(off + fd * 0.45, z_a - fd * 0.45 * math.tan(pitch) + sh + 420,
             f"Trapezblech auf Traglattung 40x60, Sparren "
-            f"{d['sparren'][0]:.0f}x{sh:.0f} e={625} mm", 2.3, "text")
+            f"{d['sparren'][0]:.0f}x{sh:.0f}, e = {d['e_axis']:.0f} mm",
+            2.3, "text")
 
     # lichte Hoehen
     dr.dim(off + WAND_STIEL[0] + 40, d["z_floor"], off + WAND_STIEL[0] + 40,
@@ -668,31 +682,46 @@ def detail_drawings(b: Building) -> list[Drawing]:
     d = b.dims
     out: list[Drawing] = []
 
-    # Detail 1: Fusspunkt
-    dr = Drawing("detail_fuss", "Detail 1 - Fusspunkt an der Traufwand", "M 1:5", 5)
-    y = 0.0
-    dr.rect(-200, -50, 300, 0, "schnitt"); dr.hatch(-200, -50, 300, 0)
-    dr.text(320, -25, "Gehwegplatte 40x40x5 auf Splitt", 2.4, "text", align="left")
-    dr.rect(-40, 0, 20, 4, "detail")
-    dr.text(320, 6, "Bitumen-Trennlage", 2.4, "text", align="left")
-    dr.rect(-40, 4, 20, 4 + SCHWELLE[1], "schnitt"); dr.hatch(-40, 4, 20, 4 + SCHWELLE[1])
-    dr.text(320, 4 + SCHWELLE[1] / 2, f"Schwelle {SCHWELLE[0]:.0f}x{SCHWELLE[1]:.0f} kdi",
+    # Detail 1: Fusspunkt - die Auflagerkette im Massstab 1:5
+    jb, jh = d["joist"]
+    dr = Drawing("detail_fuss", "Detail 1 - Fusspunkt: Auflagerkette",
+                 "M 1:5 - jedes Holz liegt auf dem darunter auf", 5)
+    dr.rect(-220, -50, 220, 0, "schnitt"); dr.hatch(-220, -50, 220, 0)
+    dr.text(250, -25, "Gehwegplatte 40x40x5 auf Splitt -\nunter jeder Balkenachse",
             2.4, "text", align="left")
-    zf = 4 + SCHWELLE[1]
-    dr.rect(-40, zf, 20, zf + 22, "schnitt")
-    dr.text(320, zf + 11, "OSB/3 22 mm", 2.4, "text", align="left")
-    dr.rect(-40, zf + 22, 20, zf + 82, "schnitt"); dr.hatch(-40, zf + 22, 20, zf + 82)
-    dr.text(320, zf + 52, "Fussriegel 60x60", 2.4, "text", align="left")
-    dr.rect(-40, zf + 82, 20, zf + 400, "schnitt")
-    dr.text(320, zf + 250, "Ständer 60x120", 2.4, "text", align="left")
-    dr.rect(-70, zf + 22, -40, zf + 400, "detail")
-    dr.rect(-90, zf + 22, -70, zf + 400, "detail")
-    dr.text(-420, zf + 300, "Konterlatte 30x50 +\nRhombus 20x65", 2.4, "text", align="right")
-    dr.line(-40, zf + 60, -140, zf + 60, "achse")
-    dr.text(-150, zf + 60, "Winkelverbinder 90x90\n+ Ankerschrauben 5x40",
+    dr.rect(-60, 0, 60, 4, "detail")
+    dr.text(250, 8, "Bitumen-Trennlage", 2.4, "text", align="left")
+    z = 4.0
+    dr.rect(-60, z, 60, z + SCHWELLE[0], "schnitt")
+    dr.hatch(-60, z, 60, z + SCHWELLE[0])
+    dr.text(250, z + SCHWELLE[0] / 2,
+            f"Schwelle {SCHWELLE[1]:.0f}x{SCHWELLE[0]:.0f} kdi, liegend",
+            2.4, "text", align="left")
+    z += SCHWELLE[0]
+    dr.rect(-jb / 2, z, jb / 2, z + jh, "schnitt")
+    dr.hatch(-jb / 2, z, jb / 2, z + jh)
+    dr.text(250, z + jh / 2, f"Deckenbalken {jb:.0f}x{jh:.0f}\nliegt auf - nicht eingehaengt",
+            2.4, "text", align="left")
+    dr.line(-jb / 2 - 20, z, -140, z, "achse")
+    dr.text(-150, z - 10, "Querdruck-Auflager,\nvolle Schwellenbreite",
             2.2, "text", align="right")
-    dr.text(60, -160, "Holz mind. 100 mm ueber Gelaende halten - Spritzwasserschutz",
+    z += jh
+    dr.rect(-jb / 2 - 60, z, jb / 2 + 60, z + 22, "schnitt")
+    dr.text(250, z + 11, "Bodenplatte OSB/3 22 mm", 2.4, "text", align="left")
+    z += 22
+    dr.rect(-30, z, 30, z + 60, "schnitt"); dr.hatch(-30, z, 30, z + 60)
+    dr.text(250, z + 30, "Fussriegel 60x60", 2.4, "text", align="left")
+    z += 60
+    dr.rect(-30, z, 30, z + 380, "schnitt")
+    dr.text(250, z + 200, "Staender 60x120 -\nsteht ueber dem Deckenbalken",
             2.4, "text", align="left")
+    dr.line(-30, z + 40, -140, z + 40, "achse")
+    dr.text(-150, z + 40, "Winkelverbinder 90x90\n+ Ankerschrauben 5x40",
+            2.2, "text", align="right")
+    dr.line(0, -120, 0, z + 420, "achse")
+    dr.text(0, -200, "LASTACHSE", 2.6, "achse")
+    dr.text(-260, -330, "Holz mindestens 100 mm ueber Gelaende halten - "
+            "Spritzwasserschutz", 2.4, "text", align="left")
     out.append(dr)
 
     # Detail 2: Traufpunkt
