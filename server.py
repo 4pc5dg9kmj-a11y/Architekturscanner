@@ -13,10 +13,12 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from scanner.dxf_export import export_dxf
+from scanner.relief_api import router as relief_router
 from scanner.vectorize import VectorizeParams, decode_image, pdf_to_image, vectorize
 
 ROOT = Path(__file__).parent
 app = FastAPI(title="Architekturscanner")
+app.include_router(relief_router)
 
 
 @app.post("/api/vectorize")
@@ -72,6 +74,12 @@ async def api_export_dxf(project: dict):
 @app.get("/")
 async def index():
     return FileResponse(ROOT / "static" / "index.html")
+
+
+@app.get("/relief")
+async def relief_page():
+    """3D-Druck-Builder: Foto -> Platte mit bildgebenden Linien."""
+    return FileResponse(ROOT / "static" / "relief.html")
 
 
 app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")

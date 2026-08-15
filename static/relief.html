@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D-Druck-Builder – Linien-Relief</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/relief.css">
+</head>
+<body>
+<header id="toolbar">
+  <span class="brand">🖨 Linien-Relief</span>
+  <label class="filebtn">📷 Foto laden
+    <input type="file" id="fileInput" accept="image/*,.pdf">
+  </label>
+  <span class="sep"></span>
+  <span id="presetButtons"></span>
+  <span class="sep"></span>
+  <button id="btnReset" title="Alle Regler auf die Vorgaben zurücksetzen">↺ Zurücksetzen</button>
+  <span class="sep"></span>
+  <select id="exportFormat" title="Dateiformat">
+    <option value="stl">STL</option>
+    <option value="3mf">3MF</option>
+    <option value="obj">OBJ</option>
+  </select>
+  <button id="btnExport" class="primary" title="Druckdatei herunterladen">⬇ Druckdatei</button>
+  <a href="/" class="linkbtn" title="Zurück zum Architekturscanner">📐 Scanner</a>
+</header>
+
+<div id="main">
+  <aside id="sidebar">
+    <section>
+      <h3>Platte</h3>
+      <label>Breite <output data-for="width_mm"></output> mm
+        <input type="range" id="width_mm" min="20" max="300" step="1" value="120"></label>
+      <label>Höhe
+        <span class="row">
+          <input type="number" id="height_mm" min="0" max="300" step="1" value="0" class="num">
+          <span class="unit">mm – 0 = aus dem Foto</span>
+        </span></label>
+      <label>Plattendicke <output data-for="plate_thickness_mm"></output> mm
+        <input type="range" id="plate_thickness_mm" min="0.6" max="6" step="0.2" value="1.6"></label>
+      <label>Rand <output data-for="margin_mm"></output> mm
+        <input type="range" id="margin_mm" min="0" max="25" step="0.5" value="5"></label>
+      <label><input type="checkbox" id="frame" checked> Erhabener Rahmen</label>
+      <label>Rahmenhöhe <output data-for="frame_height_mm"></output> mm
+        <input type="range" id="frame_height_mm" min="0.2" max="8" step="0.2" value="1.2"></label>
+    </section>
+
+    <section>
+      <h3>Linien</h3>
+      <label>Anzahl <output data-for="line_count"></output>
+        <input type="range" id="line_count" min="10" max="250" step="1" value="60"></label>
+      <label>Richtung <output data-for="angle_deg"></output>°
+        <input type="range" id="angle_deg" min="0" max="179" step="1" value="0"></label>
+      <label>Strich hell <output data-for="line_width_min_mm"></output> mm
+        <input type="range" id="line_width_min_mm" min="0.2" max="3" step="0.05" value="0.42"></label>
+      <label>Strich dunkel <output data-for="line_width_max_mm"></output> mm
+        <input type="range" id="line_width_max_mm" min="0.2" max="5" step="0.05" value="1.4"></label>
+      <label>Höhe hell <output data-for="line_height_min_mm"></output> mm
+        <input type="range" id="line_height_min_mm" min="0.2" max="6" step="0.1" value="0.8"></label>
+      <label>Höhe dunkel <output data-for="line_height_max_mm"></output> mm
+        <input type="range" id="line_height_max_mm" min="0.2" max="10" step="0.1" value="0.8"></label>
+    </section>
+
+    <section>
+      <h3>Welle</h3>
+      <label>Auslenkung <output data-for="wave_amp_mm"></output> mm
+        <input type="range" id="wave_amp_mm" min="0" max="12" step="0.1" value="3"></label>
+      <label>Wellenlänge <output data-for="wave_len_mm"></output> mm
+        <input type="range" id="wave_len_mm" min="5" max="250" step="1" value="80"></label>
+      <label>Versatz je Linie <output data-for="wave_phase_deg"></output>°
+        <input type="range" id="wave_phase_deg" min="-180" max="180" step="1" value="0"></label>
+    </section>
+
+    <section>
+      <h3>Bild</h3>
+      <label><input type="checkbox" id="invert"> Negativ (hell ↔ dunkel)</label>
+      <label><input type="checkbox" id="auto_levels" checked> Tonwerte automatisch spreizen</label>
+      <label>Helligkeit <output data-for="brightness"></output>
+        <input type="range" id="brightness" min="-0.6" max="0.6" step="0.02" value="0"></label>
+      <label>Kontrast <output data-for="contrast"></output>
+        <input type="range" id="contrast" min="0.3" max="2.5" step="0.05" value="1"></label>
+      <label>Gamma <output data-for="gamma"></output>
+        <input type="range" id="gamma" min="0.4" max="2.5" step="0.05" value="1"></label>
+      <label>Weichzeichnen <output data-for="blur_px"></output> px
+        <input type="range" id="blur_px" min="0" max="12" step="0.2" value="1.2"></label>
+    </section>
+
+    <section>
+      <h3>Qualität</h3>
+      <label>Stützpunkte <output data-for="samples_per_mm"></output> /mm
+        <input type="range" id="samples_per_mm" min="1" max="8" step="0.5" value="3"></label>
+      <label>Vereinfachung <output data-for="simplify_tol_mm"></output> mm
+        <input type="range" id="simplify_tol_mm" min="0" max="0.2" step="0.005" value="0.02"></label>
+      <label>Eintauchtiefe <output data-for="embed_mm"></output> mm
+        <input type="range" id="embed_mm" min="0" max="2" step="0.05" value="0.3"></label>
+    </section>
+  </aside>
+
+  <div id="viewer">
+    <div id="viewTabs">
+      <button class="tab active" data-view="relief">Streiflicht</button>
+      <button class="tab" data-view="topview">Draufsicht</button>
+      <button class="tab" data-view="source">Foto</button>
+      <span id="viewHint">Foto laden, um zu beginnen.</span>
+    </div>
+    <div id="stage">
+      <img id="previewImg" alt="Vorschau des Reliefs">
+      <div id="dropHint">
+        <div class="dropInner">
+          <div class="big">📷</div>
+          <p><b>Foto hierher ziehen</b> oder oben „Foto laden“.</p>
+          <p class="muted">Aus dem Bild wird eine Platte mit Linien, die das
+            Motiv beim Betrachten wieder erscheinen lassen.</p>
+        </div>
+      </div>
+      <div id="busy" class="hidden"><div class="spin"></div></div>
+    </div>
+    <div id="statsbar"></div>
+  </div>
+</div>
+
+<script src="/static/relief.js"></script>
+</body>
+</html>

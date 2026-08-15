@@ -25,6 +25,14 @@ button.primary:hover { background: #359059; }
 button.small { padding: 3px 8px; font-size: 12px; margin-top: 6px; }
 .filebtn input { display: none; }
 
+/* Verweis auf den jeweils anderen Arbeitsbereich (Scanner <-> 3D-Druck) */
+.linkbtn {
+  background: #34363d; color: #d8dade; border: 1px solid #46484f;
+  border-radius: 6px; padding: 5px 10px; text-decoration: none;
+  margin-left: auto; white-space: nowrap;
+}
+.linkbtn:hover { background: #3f424a; }
+
 #main { flex: 1; display: flex; min-height: 0; }
 
 #sidebar {

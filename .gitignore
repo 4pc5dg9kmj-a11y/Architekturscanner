@@ -4,3 +4,8 @@ __pycache__/
 node_modules/
 *.dxf
 *.archscan.json
+
+# 3D-Druck-Ausgaben
+*.stl
+*.3mf
+*.obj

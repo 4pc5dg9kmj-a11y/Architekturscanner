@@ -1,0 +1,64 @@
+/* Zusatzstile des 3D-Druck-Builders; die Grundstile kommen aus style.css. */
+
+#sidebar { width: 268px; }
+#sidebar label .row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+#sidebar input.num {
+  width: 68px; background: #34363d; color: #d8dade;
+  border: 1px solid #46484f; border-radius: 4px; padding: 2px 4px; font: inherit;
+}
+#sidebar .unit { font-size: 11px; color: #8b8e96; }
+#sidebar output { color: #7fd4a0; font-variant-numeric: tabular-nums; }
+#sidebar input[type=range]:disabled { opacity: .35; }
+
+#presetButtons button { font-size: 12px; padding: 4px 9px; }
+
+#viewer { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+#viewTabs {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 10px; background: #24262c; border-bottom: 1px solid #34363d;
+}
+#viewTabs .tab { padding: 3px 12px; font-size: 12px; }
+#viewHint { margin-left: auto; font-size: 12px; color: #8b8e96; }
+
+#stage {
+  flex: 1; position: relative; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    linear-gradient(45deg, #202227 25%, transparent 25%) 0 0/24px 24px,
+    linear-gradient(-45deg, #202227 25%, transparent 25%) 0 12px/24px 24px,
+    linear-gradient(45deg, transparent 75%, #202227 75%) 12px -12px/24px 24px,
+    linear-gradient(-45deg, transparent 75%, #202227 75%) -12px 0/24px 24px,
+    #1b1d21;
+  padding: 16px;
+}
+#stage.dragover { outline: 2px dashed #4d84c0; outline-offset: -10px; }
+
+#previewImg {
+  max-width: 100%; max-height: 100%; object-fit: contain; display: none;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, .55); border-radius: 2px;
+  image-rendering: auto;
+}
+#previewImg.ready { display: block; }
+
+#dropHint { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+#dropHint.hidden { display: none; }
+.dropInner { text-align: center; color: #9a9da5; max-width: 320px; }
+.dropInner .big { font-size: 42px; margin-bottom: 8px; }
+.dropInner p { margin: 6px 0; font-size: 13px; }
+.dropInner .muted { color: #74777f; font-size: 12px; }
+
+#busy {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; background: rgba(27, 29, 33, .45);
+}
+#busy.hidden { display: none; }
+
+#statsbar {
+  display: flex; flex-wrap: wrap; gap: 4px 20px; padding: 6px 12px;
+  background: #24262c; border-top: 1px solid #34363d;
+  font-size: 12px; color: #9a9da5; min-height: 28px;
+}
+#statsbar b { color: #d8dade; font-weight: 600; font-variant-numeric: tabular-nums; }
+#statsbar .note { color: #e2b96b; flex-basis: 100%; }
+#statsbar .err { color: #ff8f8f; flex-basis: 100%; }
