@@ -56,6 +56,8 @@ Zweiter Arbeitsbereich unter <http://localhost:8000/relief> (Knopf
 Aus der Nähe sieht man nur Striche – aus ein paar Schritten Abstand setzt
 sich daraus wieder das Motiv zusammen.
 
+![Foto, Draufsicht und Streiflicht-Vorschau](docs/relief_beispiel.png)
+
 Drei Modulationen tragen das Bild, jede einzeln regelbar:
 
 | Modulation | Wirkung | Regler |

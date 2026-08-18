@@ -14,7 +14,6 @@ const state = {
   defaults: {},
   presets: {},
   pending: null,     // laufender fetch-Abbruch
-  queued: false,     // waehrend eines Laufs kam eine neue Anfrage
   timer: null,
 };
 
@@ -55,11 +54,15 @@ function syncOutputs() {
   document.querySelectorAll('#sidebar output[data-for]').forEach((out) => {
     const el = document.getElementById(out.dataset.for);
     if (!el) return;
-    const value = Number(el.value);
-    out.textContent = Number.isInteger(value) ? value : value.toFixed(2).replace(/0$/, '');
+    out.textContent = num(Number(el.value));
   });
-  const frameOn = $('#frame').checked;
-  $('#frame_height_mm').disabled = !frameOn;
+  $('#frame_height_mm').disabled = !$('#frame').checked;
+}
+
+/** Zahl mit deutschem Dezimalkomma, ohne überflüssige Nullen. */
+function num(value) {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/0$/, '').replace('.', ',');
 }
 
 // ---------------------------------------------------------------------------
@@ -111,24 +114,29 @@ async function requestPreview() {
 function renderView() {
   const img = $('#previewImg');
   const src = state.view === 'source' ? state.sourceUrl : state.previews[state.view];
-  if (!src) return;
+  if (!src) {
+    // Nur bei PDF-Vorlagen: es gibt kein Originalbild zum Anzeigen.
+    if (state.view === 'source' && state.id) {
+      $('#viewHint').textContent = 'Für PDF-Vorlagen gibt es keine Foto-Ansicht.';
+    }
+    return;
+  }
   img.src = src;
   img.classList.add('ready');
   $('#dropHint').classList.add('hidden');
 }
 
 function showStats(s) {
-  const fmt = (n) => String(n).replace('.', ',');
   const parts = [
-    `Platte <b>${fmt(s.width_mm)} × ${fmt(s.height_mm)} × ${fmt(s.total_height_mm)} mm</b>`,
-    `Linien <b>${s.line_count}</b> im Abstand <b>${fmt(s.spacing_mm)} mm</b>`,
-    `Strich <b>${fmt(s.width_max_mm)} mm</b> max.`,
-    `Länge <b>${fmt(s.line_length_m)} m</b>`,
+    `Platte <b>${num(s.width_mm)} × ${num(s.height_mm)} × ${num(s.total_height_mm)} mm</b>`,
+    `Linien <b>${s.line_count}</b> im Abstand <b>${num(s.spacing_mm)} mm</b>`,
+    `Strich <b>${num(s.width_max_mm)} mm</b> max.`,
+    `Länge <b>${num(s.line_length_m)} m</b>`,
     `Dreiecke <b>${s.triangles.toLocaleString('de-DE')}</b>`,
-    `STL ca. <b>${fmt(s.stl_mb)} MB</b>`,
+    `STL ca. <b>${num(s.stl_mb)} MB</b>`,
   ];
   if (s.filament_g) {
-    parts.push(`Material ca. <b>${fmt(s.filament_g)} g</b> (${fmt(s.filament_m)} m)`);
+    parts.push(`Material ca. <b>${num(s.filament_g)} g</b> (${num(s.filament_m)} m)`);
   }
   const notes = (s.notes || []).map((n) => `<span class="note">⚠ ${n}</span>`);
   $('#statsbar').innerHTML = parts.map((p) => `<span>${p}</span>`).join('') + notes.join('');
@@ -147,9 +155,16 @@ async function loadFile(file) {
   $('#busy').classList.remove('hidden');
   $('#viewHint').textContent = 'Foto wird gelesen …';
 
-  const reader = new FileReader();
-  reader.onload = () => { state.sourceUrl = reader.result; };
-  if (!file.name.toLowerCase().endsWith('.pdf')) reader.readAsDataURL(file);
+  // Altes Original verwerfen, sonst zeigt die Foto-Ansicht die Vorgängerdatei
+  state.sourceUrl = null;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      state.sourceUrl = reader.result;
+      if (state.view === 'source') renderView();
+    };
+    reader.readAsDataURL(file);
+  }
 
   const form = new FormData();
   form.append('file', file);
@@ -260,6 +275,9 @@ async function init() {
   $('#btnExport').addEventListener('click', exportModel);
   $('#btnReset').addEventListener('click', () => {
     writeParams(state.defaults);
+    const buttons = $('#presetButtons').querySelectorAll('button');
+    buttons.forEach((b) => b.classList.remove('active'));
+    buttons[0]?.classList.add('active');   // Vorgaben entsprechen dem ersten Preset
     schedulePreview(0);
   });
 

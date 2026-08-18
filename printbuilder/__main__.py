@@ -85,17 +85,20 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     gray = decode_image(args.bild.read_bytes())
-    result = build_relief(gray, params, with_previews=args.vorschau is not None)
+    # Die Vorschau wird immer gerastert: daraus stammt die Materialschaetzung.
+    result = build_relief(gray, params, with_previews=True)
     out.write_bytes(EXPORTERS[fmt](result.mesh))
 
     s = result.stats
     print(f"{out}  ({out.stat().st_size / 1024 / 1024:.1f} MB)")
     print(f"  Platte      {s['width_mm']} x {s['height_mm']} x "
           f"{s['total_height_mm']} mm")
-    print(f"  Linien      {s['line_count']}, {s['line_length_m']} m Gesamtlaenge")
+    print(f"  Linien      {s['line_count']} im Abstand {s['spacing_mm']} mm, "
+          f"{s['line_length_m']} m Gesamtlaenge")
     print(f"  Dreiecke    {s['triangles']:,}".replace(",", "."))
-    if "filament_g" in s:
-        print(f"  Material    ca. {s['filament_g']} g / {s['filament_m']} m Filament")
+    print(f"  Material    ca. {s['filament_g']} g / {s['filament_m']} m Filament")
+    for note in s.get("notes", []):
+        print(f"  Hinweis     {note}")
 
     if args.vorschau:
         import base64
