@@ -88,3 +88,14 @@ Dann <http://localhost:8000> öffnen.
 - Vektorisierungs-Parameter (Mindestlänge, Lückenschluss, Winkeltoleranz)
   sind in der Seitenleiste einstellbar; „Neu vektorisieren“ wendet sie an,
   ohne eigene Zeichnungen/Maßketten zu verlieren.
+
+---
+
+## 🧾 Zusätzlich im Repo: Rechnungs-App (`rechnung/`)
+
+Aus Booking.com-/Airbnb-Screenshots wird eine fertige PDF-Rechnung für das
+Wohlfühlapartment Guxhagen – im Browser (`rechnung/index.html`, offline und als
+Handy-App installierbar), auf der Kommandozeile (`node rechnung/cli.mjs`) oder
+direkt über Claude (Skill `.claude/skills/rechnung/`).
+
+Details: [`rechnung/README.md`](rechnung/README.md)

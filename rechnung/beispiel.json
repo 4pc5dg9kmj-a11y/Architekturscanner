@@ -1,0 +1,25 @@
+{
+  "gast": {
+    "firma": "BSU InfraBau GmbH",
+    "name": "",
+    "strasse": "Jägerstr. 27",
+    "plz": "57299",
+    "ort": "Burbach",
+    "land": "DE",
+    "email": "Hasret.demirkiran@bsu-gmbh.de"
+  },
+  "rechnung": {
+    "nummer": "2026-018",
+    "datum": "2026-08-27",
+    "portal": "Booking.com",
+    "buchungsnummer": "6138652495",
+    "anreise": "2026-08-10",
+    "abreise": "2026-08-11",
+    "naechte": 1,
+    "gaeste": 1,
+    "zahlungsziel": 14,
+    "bezahlt": false,
+    "hinweis": ""
+  },
+  "intern": { "gesamtpreis": 69, "kommission": 8.28 }
+}

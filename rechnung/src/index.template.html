@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#114732">
+<title>Rechnung erstellen · Wohlfühlapartment</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rechnung">
+<style>
+:root{
+  --gruen:#1b6b4b; --gruen-dunkel:#114732; --gruen-hell:#eaf3ee;
+  --tinte:#1a1d1b; --grau:#6b7671; --linie:#dfe5e1; --flaeche:#ffffff;
+  --hintergrund:#f4f6f5; --radius:12px; --schatten:0 1px 2px rgba(16,32,25,.06),0 8px 24px rgba(16,32,25,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  color:var(--tinte);background:var(--hintergrund);-webkit-text-size-adjust:100%;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+
+/* ---------------------------------------------------------------- Kopfleiste */
+.kopf{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));
+  background:var(--gruen-dunkel);color:#fff;
+}
+.kopf h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
+.kopf .summe{margin-left:auto;font-weight:700;font-size:16px;white-space:nowrap}
+.knopf{
+  border:0;border-radius:9px;padding:9px 14px;background:var(--gruen);color:#fff;
+  font-weight:600;cursor:pointer;white-space:nowrap;
+}
+.knopf:hover{filter:brightness(1.08)}
+.knopf.leise{background:rgba(255,255,255,.14)}
+.knopf.rand{background:#fff;color:var(--gruen-dunkel)}
+.knopf.klein{padding:6px 10px;font-size:13px;border-radius:8px}
+.knopf:disabled{opacity:.5;cursor:not-allowed}
+
+/* -------------------------------------------------------------------- Layout */
+.buehne{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:16px;align-items:start}
+@media (max-width:1000px){
+  .buehne{grid-template-columns:1fr;padding:12px}
+  .vorschau{display:none}
+  body.zeigt-vorschau .eingaben{display:none}
+  body.zeigt-vorschau .vorschau{display:block}
+}
+.reiter{display:none;gap:8px;padding:10px 16px 0}
+@media (max-width:1000px){.reiter{display:flex}}
+.reiter button{flex:1;background:#fff;border:1px solid var(--linie);border-radius:9px;padding:9px;font-weight:600;cursor:pointer}
+.reiter button.aktiv{background:var(--gruen);color:#fff;border-color:var(--gruen)}
+
+.karte{background:var(--flaeche);border:1px solid var(--linie);border-radius:var(--radius);box-shadow:var(--schatten);margin-bottom:14px;overflow:hidden}
+.karte>summary,.karte>.titel{
+  list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;display:flex;align-items:center;gap:10px;
+}
+.karte>summary::-webkit-details-marker{display:none}
+.karte>summary::after{content:"▾";margin-left:auto;color:var(--grau);transition:transform .15s}
+.karte[open]>summary::after{transform:rotate(180deg)}
+.karte .inhalt{padding:0 16px 16px}
+.karte .marke{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--gruen);text-transform:uppercase}
+
+.feld{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;min-width:0}
+.feld label{font-size:12px;color:var(--grau);font-weight:600}
+.feld input,.feld select,.feld textarea{
+  border:1px solid var(--linie);border-radius:9px;padding:10px 11px;background:#fff;width:100%;
+}
+.feld input:focus,.feld select:focus,.feld textarea:focus{outline:2px solid var(--gruen);outline-offset:-1px;border-color:var(--gruen)}
+.feld textarea{resize:vertical;min-height:64px}
+.reihe{display:grid;gap:10px}
+.reihe.z2{grid-template-columns:1fr 1fr}
+.reihe.z3{grid-template-columns:1fr 1fr 1fr}
+.reihe.z13{grid-template-columns:1fr 2fr}
+@media (max-width:560px){.reihe.z3{grid-template-columns:1fr 1fr}}
+.schalter{display:flex;align-items:center;gap:9px;margin:6px 0 12px;font-size:14px}
+.schalter input{width:18px;height:18px;accent-color:var(--gruen)}
+.hinweis{font-size:12.5px;color:var(--grau);margin:2px 0 10px}
+
+/* ------------------------------------------------------------------ Positionen */
+.position{border:1px solid var(--linie);border-radius:10px;padding:12px;margin-bottom:10px;background:#fcfdfc}
+.position .kopfzeile{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.position .nr{width:22px;height:22px;border-radius:50%;background:var(--gruen-hell);color:var(--gruen);
+  font-size:12px;font-weight:700;display:grid;place-items:center;flex:none}
+.position .zeilensumme{margin-left:auto;font-weight:700}
+.weg{border:0;background:none;color:#b3261e;cursor:pointer;font-size:13px;padding:4px 6px}
+.schnellwahl{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.schnellwahl button{border:1px dashed var(--linie);background:#fff;border-radius:20px;padding:6px 12px;font-size:13px;cursor:pointer}
+.schnellwahl button:hover{border-color:var(--gruen);color:var(--gruen)}
+
+/* --------------------------------------------------------------------- Import */
+.importreiter{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.importreiter button{border:1px solid var(--linie);background:#fff;border-radius:8px;padding:7px 12px;font-size:13.5px;cursor:pointer}
+.importreiter button.aktiv{background:var(--gruen-hell);border-color:var(--gruen);color:var(--gruen);font-weight:600}
+.ablage{border:2px dashed var(--linie);border-radius:10px;padding:22px 14px;text-align:center;color:var(--grau);cursor:pointer;background:#fcfdfc}
+.ablage.hover{border-color:var(--gruen);background:var(--gruen-hell);color:var(--gruen)}
+.bilder{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:10px}
+.bilder figure{margin:0;position:relative}
+.bilder img{width:100%;height:118px;object-fit:cover;border-radius:8px;border:1px solid var(--linie);cursor:zoom-in}
+.bilder button{position:absolute;top:4px;right:4px;border:0;border-radius:6px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:12px;padding:2px 6px}
+.lupe{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;place-items:center;z-index:50;padding:16px}
+.lupe.auf{display:grid}
+.lupe img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
+
+/* ------------------------------------------------------------------- Vorschau */
+.vorschau{position:sticky;top:76px}
+.vorschau .rahmen{background:#fff;border:1px solid var(--linie);border-radius:var(--radius);box-shadow:var(--schatten);overflow:hidden}
+.vorschau iframe{width:100%;height:min(78vh,1000px);border:0;display:block;background:#fff}
+.vorschau .leer{padding:40px 20px;text-align:center;color:var(--grau)}
+.vorschau .zeile{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--linie);font-size:13px;color:var(--grau)}
+
+.meldung{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);background:var(--gruen-dunkel);color:#fff;
+  padding:11px 18px;border-radius:24px;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:60}
+.meldung.auf{opacity:1;transform:translate(-50%,0)}
+.fussleiste{position:sticky;bottom:0;z-index:15;display:flex;gap:10px;align-items:center;
+  padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-top:1px solid var(--linie)}
+.fussleiste .gesamt{font-weight:700}
+.fussleiste .gesamt small{display:block;font-weight:500;color:var(--grau);font-size:11.5px}
+.wachs{flex:1}
+code.pfad{background:var(--gruen-hell);border-radius:4px;padding:1px 5px;font-size:12.5px}
+</style>
+</head>
+<body>
+
+<header class="kopf">
+  <h1>Rechnung erstellen</h1>
+  <div class="summe" id="kopfSumme">0,00 €</div>
+  <button class="knopf rand" id="btnPdfOben">PDF</button>
+</header>
+
+<nav class="reiter">
+  <button id="reiterDaten" class="aktiv">Eingaben</button>
+  <button id="reiterVorschau">Vorschau</button>
+</nav>
+
+<main class="buehne">
+  <section class="eingaben">
+
+    <details class="karte" open id="kImport">
+      <summary>1 · Daten übernehmen</summary>
+      <div class="inhalt">
+        <div class="importreiter">
+          <button data-import="claude" class="aktiv">Von Claude (JSON)</button>
+          <button data-import="text">Text einfügen</button>
+          <button data-import="bilder">Screenshots</button>
+        </div>
+
+        <div data-importfeld="claude">
+          <p class="hinweis">Screenshots an Claude geben, Prompt kopieren, Antwort hier einfügen – oder den fertigen Link von Claude öffnen.</p>
+          <button class="knopf klein leise" id="btnPrompt" style="background:var(--gruen-hell);color:var(--gruen)">Prompt für Claude kopieren</button>
+          <div class="feld" style="margin-top:10px">
+            <label for="jsonEingabe">JSON von Claude</label>
+            <textarea id="jsonEingabe" rows="6" placeholder='{ "gast": { "firma": "..." }, "rechnung": { ... } }'></textarea>
+          </div>
+          <button class="knopf" id="btnJson">Daten übernehmen</button>
+        </div>
+
+        <div data-importfeld="text" hidden>
+          <p class="hinweis">Text aus der Booking-/Airbnb-Nachricht kopieren und hier einfügen – Buchungsnummer, Zeitraum, Preis und Anschrift werden erkannt.</p>
+          <div class="feld">
+            <label for="textEingabe">Kopierter Text</label>
+            <textarea id="textEingabe" rows="7" placeholder="Bestätigungsnummer: 6138652495&#10;BSU InfraBau GmbH&#10;Jägerstr. 27&#10;57299 Burbach …"></textarea>
+          </div>
+          <button class="knopf" id="btnText">Erkennen &amp; übernehmen</button>
+        </div>
+
+        <div data-importfeld="bilder" hidden>
+          <p class="hinweis">Screenshots als Vorlage zum Abtippen – sie bleiben nur auf diesem Gerät.</p>
+          <div class="ablage" id="ablage">Screenshots hierher ziehen oder tippen zum Auswählen</div>
+          <input type="file" id="dateiEingabe" accept="image/*" multiple hidden>
+          <div class="bilder" id="bilder"></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="karte" open>
+      <summary>2 · Rechnungsempfänger</summary>
+      <div class="inhalt">
+        <div class="reihe z13">
+          <div class="feld">
+            <label for="kundenwahl">Gespeicherte Kunden</label>
+            <select id="kundenwahl"><option value="">– auswählen –</option></select>
+          </div>
+          <div class="feld">
+            <label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+              <button class="knopf klein leise" id="btnKundeMerken" style="background:var(--gruen-hell);color:var(--gruen)">Kunde merken</button>
+              <button class="knopf klein leise" id="btnKundeLoeschen" style="background:#fbeceb;color:#b3261e">Löschen</button>
+            </div>
+          </div>
+        </div>
+        <div class="feld"><label for="f-firma">Firma</label><input id="f-firma" data-pfad="gast.firma" placeholder="BSU InfraBau GmbH"></div>
+        <div class="feld"><label for="f-name">Name / Ansprechpartner</label><input id="f-name" data-pfad="gast.name" placeholder="Philipp Zahnow"></div>
+        <div class="feld"><label for="f-strasse">Straße und Hausnummer</label><input id="f-strasse" data-pfad="gast.strasse" placeholder="Jägerstr. 27"></div>
+        <div class="reihe z13">
+          <div class="feld"><label for="f-plz">PLZ</label><input id="f-plz" data-pfad="gast.plz" inputmode="numeric" placeholder="57299"></div>
+          <div class="feld"><label for="f-ort">Ort</label><input id="f-ort" data-pfad="gast.ort" placeholder="Burbach"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="f-land">Land</label><input id="f-land" data-pfad="gast.land" placeholder="DE"></div>
+          <div class="feld"><label for="f-mail">E-Mail</label><input id="f-mail" data-pfad="gast.email" type="email" placeholder="rechnung@firma.de"></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="karte" open>
+      <summary>3 · Buchung &amp; Rechnung</summary>
+      <div class="inhalt">
+        <div class="reihe z2">
+          <div class="feld"><label for="f-nummer">Rechnungsnummer</label><input id="f-nummer" data-pfad="rechnung.nummer" placeholder="2026-018"></div>
+          <div class="feld"><label for="f-datum">Rechnungsdatum</label><input id="f-datum" data-pfad="rechnung.datum" type="date"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="f-portal">Buchungsportal</label>
+            <select id="f-portal" data-pfad="rechnung.portal">
+              <option value="">– keins –</option><option>Booking.com</option><option>Airbnb</option>
+              <option>Fewo-direkt</option><option>Direktbuchung</option>
+            </select>
+          </div>
+          <div class="feld"><label for="f-buchungsnr">Buchungsnummer</label><input id="f-buchungsnr" data-pfad="rechnung.buchungsnummer" inputmode="numeric" placeholder="6138652495"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="f-anreise">Anreise</label><input id="f-anreise" data-pfad="rechnung.anreise" type="date"></div>
+          <div class="feld"><label for="f-abreise">Abreise</label><input id="f-abreise" data-pfad="rechnung.abreise" type="date"></div>
+        </div>
+        <div class="reihe z3">
+          <div class="feld"><label for="f-naechte">Nächte</label><input id="f-naechte" data-pfad="rechnung.naechte" type="number" min="0" step="1"></div>
+          <div class="feld"><label for="f-gaeste">Gäste</label><input id="f-gaeste" data-pfad="rechnung.gaeste" type="number" min="1" step="1"></div>
+          <div class="feld"><label for="f-ziel">Zahlungsziel (Tage)</label><input id="f-ziel" data-pfad="rechnung.zahlungsziel" type="number" min="0" step="1"></div>
+        </div>
+        <label class="schalter"><input type="checkbox" id="f-bezahlt" data-pfad="rechnung.bezahlt"> Bereits bezahlt (nur Beleg, keine Überweisung)</label>
+        <div class="feld"><label for="f-hinweis">Zusätzlicher Hinweis auf der Rechnung</label><textarea id="f-hinweis" data-pfad="rechnung.hinweis" rows="2" placeholder="z. B. Anschlussbuchung, Frühstück inklusive …"></textarea></div>
+      </div>
+    </details>
+
+    <details class="karte" open>
+      <summary>4 · Positionen</summary>
+      <div class="inhalt">
+        <div id="positionen"></div>
+        <div class="schnellwahl">
+          <button data-vorlage="uebernachtung">+ Übernachtung</button>
+          <button data-vorlage="reinigung">+ Endreinigung</button>
+          <button data-vorlage="kurtaxe">+ Kurtaxe</button>
+          <button data-vorlage="fruehstueck">+ Frühstück</button>
+          <button data-vorlage="parkplatz">+ Stellplatz</button>
+          <button data-vorlage="leer">+ Freie Position</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="karte">
+      <summary>5 · Vermieter, Steuer &amp; Bank</summary>
+      <div class="inhalt">
+        <p class="hinweis">Wird auf diesem Gerät gespeichert und für jede weitere Rechnung übernommen.</p>
+        <div class="feld"><label for="v-objekt">Objektname (Titel oben)</label><input id="v-objekt" data-pfad="vermieter.objekt"></div>
+        <div class="feld"><label for="v-name">Vermieter</label><input id="v-name" data-pfad="vermieter.name"></div>
+        <div class="feld"><label for="v-strasse">Straße</label><input id="v-strasse" data-pfad="vermieter.strasse"></div>
+        <div class="reihe z13">
+          <div class="feld"><label for="v-plz">PLZ</label><input id="v-plz" data-pfad="vermieter.plz"></div>
+          <div class="feld"><label for="v-ort">Ort</label><input id="v-ort" data-pfad="vermieter.ort"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="v-tel">Telefon</label><input id="v-tel" data-pfad="vermieter.telefon"></div>
+          <div class="feld"><label for="v-mail">E-Mail</label><input id="v-mail" data-pfad="vermieter.email"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="v-steuernr">Steuernummer</label><input id="v-steuernr" data-pfad="vermieter.steuernummer"></div>
+          <div class="feld"><label for="v-ustid">USt-IdNr. (optional)</label><input id="v-ustid" data-pfad="vermieter.ustId"></div>
+        </div>
+        <div class="feld"><label for="v-iban">IBAN</label><input id="v-iban" data-pfad="vermieter.iban"></div>
+        <div class="reihe z2">
+          <div class="feld"><label for="v-bic">BIC (optional)</label><input id="v-bic" data-pfad="vermieter.bic"></div>
+          <div class="feld"><label for="v-gruss">Grußformel im Fuß</label><input id="v-gruss" data-pfad="vermieter.grussformel"></div>
+        </div>
+        <label class="schalter"><input type="checkbox" id="v-klein" data-pfad="vermieter.kleinunternehmer"> Kleinunternehmer nach § 19 UStG (keine Umsatzsteuer)</label>
+        <div class="reihe z2" id="ustFelder">
+          <div class="feld"><label for="v-satz">Umsatzsteuersatz (%)</label><input id="v-satz" data-pfad="vermieter.ustSatz" type="number" min="0" step="0.1"></div>
+          <div class="feld"><label for="v-inkl">Preise verstehen sich</label>
+            <select id="v-inkl" data-pfad="vermieter.preiseInklUst">
+              <option value="true">inkl. USt. (Bruttopreise)</option>
+              <option value="false">zzgl. USt. (Nettopreise)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="karte">
+      <summary>6 · Interne Notizen (nicht auf der Rechnung)</summary>
+      <div class="inhalt">
+        <div class="reihe z2">
+          <div class="feld"><label for="i-kommission">Portal-Kommission (€)</label><input id="i-kommission" data-pfad="intern.kommission" inputmode="decimal" placeholder="8,28"></div>
+          <div class="feld"><label for="i-notiz">Notiz</label><input id="i-notiz" data-pfad="intern.notiz"></div>
+        </div>
+        <p class="hinweis" id="auszahlung"></p>
+      </div>
+    </details>
+
+    <details class="karte">
+      <summary>7 · Gespeicherte Rechnungen</summary>
+      <div class="inhalt">
+        <div id="historie"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="knopf klein leise" id="btnJsonKopieren" style="background:var(--gruen-hell);color:var(--gruen)">Aktuelle Daten als JSON kopieren</button>
+          <button class="knopf klein leise" id="btnZuruecksetzen" style="background:#fbeceb;color:#b3261e">Neue leere Rechnung</button>
+        </div>
+      </div>
+    </details>
+
+  </section>
+
+  <section class="vorschau">
+    <div class="rahmen">
+      <div class="zeile"><span id="vorschauInfo">Live-Vorschau</span>
+        <span class="wachs"></span>
+        <button class="knopf klein" id="btnOeffnen">In neuem Tab</button>
+      </div>
+      <iframe id="rahmenPdf" title="Rechnungsvorschau"></iframe>
+      <div class="leer" id="vorschauLeer" hidden>Noch keine Position – füge unten eine Position hinzu.</div>
+    </div>
+  </section>
+</main>
+
+<div class="fussleiste">
+  <div class="gesamt" id="fussSumme">0,00 €<small id="fussDetail">Gesamt zu zahlen</small></div>
+  <span class="wachs"></span>
+  <button class="knopf leise" id="btnDrucken" style="background:var(--gruen-hell);color:var(--gruen)">Drucken</button>
+  <button class="knopf" id="btnPdf">PDF herunterladen</button>
+</div>
+
+<div class="lupe" id="lupe"><img alt="Screenshot groß"></div>
+<div class="meldung" id="meldung"></div>
+
+<script>
+/*__JS__*/
+</script>
+</body>
+</html>

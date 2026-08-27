@@ -1,0 +1,1892 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#114732">
+<title>Rechnung erstellen · Wohlfühlapartment</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rechnung">
+<style>
+:root{
+  --gruen:#1b6b4b; --gruen-dunkel:#114732; --gruen-hell:#eaf3ee;
+  --tinte:#1a1d1b; --grau:#6b7671; --linie:#dfe5e1; --flaeche:#ffffff;
+  --hintergrund:#f4f6f5; --radius:12px; --schatten:0 1px 2px rgba(16,32,25,.06),0 8px 24px rgba(16,32,25,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  color:var(--tinte);background:var(--hintergrund);-webkit-text-size-adjust:100%;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+
+/* ---------------------------------------------------------------- Kopfleiste */
+.kopf{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));
+  background:var(--gruen-dunkel);color:#fff;
+}
+.kopf h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px}
+.kopf .summe{margin-left:auto;font-weight:700;font-size:16px;white-space:nowrap}
+.knopf{
+  border:0;border-radius:9px;padding:9px 14px;background:var(--gruen);color:#fff;
+  font-weight:600;cursor:pointer;white-space:nowrap;
+}
+.knopf:hover{filter:brightness(1.08)}
+.knopf.leise{background:rgba(255,255,255,.14)}
+.knopf.rand{background:#fff;color:var(--gruen-dunkel)}
+.knopf.klein{padding:6px 10px;font-size:13px;border-radius:8px}
+.knopf:disabled{opacity:.5;cursor:not-allowed}
+
+/* -------------------------------------------------------------------- Layout */
+.buehne{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:16px;align-items:start}
+@media (max-width:1000px){
+  .buehne{grid-template-columns:1fr;padding:12px}
+  .vorschau{display:none}
+  body.zeigt-vorschau .eingaben{display:none}
+  body.zeigt-vorschau .vorschau{display:block}
+}
+.reiter{display:none;gap:8px;padding:10px 16px 0}
+@media (max-width:1000px){.reiter{display:flex}}
+.reiter button{flex:1;background:#fff;border:1px solid var(--linie);border-radius:9px;padding:9px;font-weight:600;cursor:pointer}
+.reiter button.aktiv{background:var(--gruen);color:#fff;border-color:var(--gruen)}
+
+.karte{background:var(--flaeche);border:1px solid var(--linie);border-radius:var(--radius);box-shadow:var(--schatten);margin-bottom:14px;overflow:hidden}
+.karte>summary,.karte>.titel{
+  list-style:none;cursor:pointer;padding:14px 16px;font-weight:700;display:flex;align-items:center;gap:10px;
+}
+.karte>summary::-webkit-details-marker{display:none}
+.karte>summary::after{content:"▾";margin-left:auto;color:var(--grau);transition:transform .15s}
+.karte[open]>summary::after{transform:rotate(180deg)}
+.karte .inhalt{padding:0 16px 16px}
+.karte .marke{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--gruen);text-transform:uppercase}
+
+.feld{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;min-width:0}
+.feld label{font-size:12px;color:var(--grau);font-weight:600}
+.feld input,.feld select,.feld textarea{
+  border:1px solid var(--linie);border-radius:9px;padding:10px 11px;background:#fff;width:100%;
+}
+.feld input:focus,.feld select:focus,.feld textarea:focus{outline:2px solid var(--gruen);outline-offset:-1px;border-color:var(--gruen)}
+.feld textarea{resize:vertical;min-height:64px}
+.reihe{display:grid;gap:10px}
+.reihe.z2{grid-template-columns:1fr 1fr}
+.reihe.z3{grid-template-columns:1fr 1fr 1fr}
+.reihe.z13{grid-template-columns:1fr 2fr}
+@media (max-width:560px){.reihe.z3{grid-template-columns:1fr 1fr}}
+.schalter{display:flex;align-items:center;gap:9px;margin:6px 0 12px;font-size:14px}
+.schalter input{width:18px;height:18px;accent-color:var(--gruen)}
+.hinweis{font-size:12.5px;color:var(--grau);margin:2px 0 10px}
+
+/* ------------------------------------------------------------------ Positionen */
+.position{border:1px solid var(--linie);border-radius:10px;padding:12px;margin-bottom:10px;background:#fcfdfc}
+.position .kopfzeile{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.position .nr{width:22px;height:22px;border-radius:50%;background:var(--gruen-hell);color:var(--gruen);
+  font-size:12px;font-weight:700;display:grid;place-items:center;flex:none}
+.position .zeilensumme{margin-left:auto;font-weight:700}
+.weg{border:0;background:none;color:#b3261e;cursor:pointer;font-size:13px;padding:4px 6px}
+.schnellwahl{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.schnellwahl button{border:1px dashed var(--linie);background:#fff;border-radius:20px;padding:6px 12px;font-size:13px;cursor:pointer}
+.schnellwahl button:hover{border-color:var(--gruen);color:var(--gruen)}
+
+/* --------------------------------------------------------------------- Import */
+.importreiter{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.importreiter button{border:1px solid var(--linie);background:#fff;border-radius:8px;padding:7px 12px;font-size:13.5px;cursor:pointer}
+.importreiter button.aktiv{background:var(--gruen-hell);border-color:var(--gruen);color:var(--gruen);font-weight:600}
+.ablage{border:2px dashed var(--linie);border-radius:10px;padding:22px 14px;text-align:center;color:var(--grau);cursor:pointer;background:#fcfdfc}
+.ablage.hover{border-color:var(--gruen);background:var(--gruen-hell);color:var(--gruen)}
+.bilder{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;margin-top:10px}
+.bilder figure{margin:0;position:relative}
+.bilder img{width:100%;height:118px;object-fit:cover;border-radius:8px;border:1px solid var(--linie);cursor:zoom-in}
+.bilder button{position:absolute;top:4px;right:4px;border:0;border-radius:6px;background:rgba(0,0,0,.6);color:#fff;cursor:pointer;font-size:12px;padding:2px 6px}
+.lupe{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;place-items:center;z-index:50;padding:16px}
+.lupe.auf{display:grid}
+.lupe img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
+
+/* ------------------------------------------------------------------- Vorschau */
+.vorschau{position:sticky;top:76px}
+.vorschau .rahmen{background:#fff;border:1px solid var(--linie);border-radius:var(--radius);box-shadow:var(--schatten);overflow:hidden}
+.vorschau iframe{width:100%;height:min(78vh,1000px);border:0;display:block;background:#fff}
+.vorschau .leer{padding:40px 20px;text-align:center;color:var(--grau)}
+.vorschau .zeile{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--linie);font-size:13px;color:var(--grau)}
+
+.meldung{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);background:var(--gruen-dunkel);color:#fff;
+  padding:11px 18px;border-radius:24px;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:60}
+.meldung.auf{opacity:1;transform:translate(-50%,0)}
+.fussleiste{position:sticky;bottom:0;z-index:15;display:flex;gap:10px;align-items:center;
+  padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-top:1px solid var(--linie)}
+.fussleiste .gesamt{font-weight:700}
+.fussleiste .gesamt small{display:block;font-weight:500;color:var(--grau);font-size:11.5px}
+.wachs{flex:1}
+code.pfad{background:var(--gruen-hell);border-radius:4px;padding:1px 5px;font-size:12.5px}
+</style>
+</head>
+<body>
+
+<header class="kopf">
+  <h1>Rechnung erstellen</h1>
+  <div class="summe" id="kopfSumme">0,00 €</div>
+  <button class="knopf rand" id="btnPdfOben">PDF</button>
+</header>
+
+<nav class="reiter">
+  <button id="reiterDaten" class="aktiv">Eingaben</button>
+  <button id="reiterVorschau">Vorschau</button>
+</nav>
+
+<main class="buehne">
+  <section class="eingaben">
+
+    <details class="karte" open id="kImport">
+      <summary>1 · Daten übernehmen</summary>
+      <div class="inhalt">
+        <div class="importreiter">
+          <button data-import="claude" class="aktiv">Von Claude (JSON)</button>
+          <button data-import="text">Text einfügen</button>
+          <button data-import="bilder">Screenshots</button>
+        </div>
+
+        <div data-importfeld="claude">
+          <p class="hinweis">Screenshots an Claude geben, Prompt kopieren, Antwort hier einfügen – oder den fertigen Link von Claude öffnen.</p>
+          <button class="knopf klein leise" id="btnPrompt" style="background:var(--gruen-hell);color:var(--gruen)">Prompt für Claude kopieren</button>
+          <div class="feld" style="margin-top:10px">
+            <label for="jsonEingabe">JSON von Claude</label>
+            <textarea id="jsonEingabe" rows="6" placeholder='{ "gast": { "firma": "..." }, "rechnung": { ... } }'></textarea>
+          </div>
+          <button class="knopf" id="btnJson">Daten übernehmen</button>
+        </div>
+
+        <div data-importfeld="text" hidden>
+          <p class="hinweis">Text aus der Booking-/Airbnb-Nachricht kopieren und hier einfügen – Buchungsnummer, Zeitraum, Preis und Anschrift werden erkannt.</p>
+          <div class="feld">
+            <label for="textEingabe">Kopierter Text</label>
+            <textarea id="textEingabe" rows="7" placeholder="Bestätigungsnummer: 6138652495&#10;BSU InfraBau GmbH&#10;Jägerstr. 27&#10;57299 Burbach …"></textarea>
+          </div>
+          <button class="knopf" id="btnText">Erkennen &amp; übernehmen</button>
+        </div>
+
+        <div data-importfeld="bilder" hidden>
+          <p class="hinweis">Screenshots als Vorlage zum Abtippen – sie bleiben nur auf diesem Gerät.</p>
+          <div class="ablage" id="ablage">Screenshots hierher ziehen oder tippen zum Auswählen</div>
+          <input type="file" id="dateiEingabe" accept="image/*" multiple hidden>
+          <div class="bilder" id="bilder"></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="karte" open>
+      <summary>2 · Rechnungsempfänger</summary>
+      <div class="inhalt">
+        <div class="reihe z13">
+          <div class="feld">
+            <label for="kundenwahl">Gespeicherte Kunden</label>
+            <select id="kundenwahl"><option value="">– auswählen –</option></select>
+          </div>
+          <div class="feld">
+            <label>&nbsp;</label>
+            <div style="display:flex;gap:8px">
+              <button class="knopf klein leise" id="btnKundeMerken" style="background:var(--gruen-hell);color:var(--gruen)">Kunde merken</button>
+              <button class="knopf klein leise" id="btnKundeLoeschen" style="background:#fbeceb;color:#b3261e">Löschen</button>
+            </div>
+          </div>
+        </div>
+        <div class="feld"><label for="f-firma">Firma</label><input id="f-firma" data-pfad="gast.firma" placeholder="BSU InfraBau GmbH"></div>
+        <div class="feld"><label for="f-name">Name / Ansprechpartner</label><input id="f-name" data-pfad="gast.name" placeholder="Philipp Zahnow"></div>
+        <div class="feld"><label for="f-strasse">Straße und Hausnummer</label><input id="f-strasse" data-pfad="gast.strasse" placeholder="Jägerstr. 27"></div>
+        <div class="reihe z13">
+          <div class="feld"><label for="f-plz">PLZ</label><input id="f-plz" data-pfad="gast.plz" inputmode="numeric" placeholder="57299"></div>
+          <div class="feld"><label for="f-ort">Ort</label><input id="f-ort" data-pfad="gast.ort" placeholder="Burbach"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="f-land">Land</label><input id="f-land" data-pfad="gast.land" placeholder="DE"></div>
+          <div class="feld"><label for="f-mail">E-Mail</label><input id="f-mail" data-pfad="gast.email" type="email" placeholder="rechnung@firma.de"></div>
+        </div>
+      </div>
+    </details>
+
+    <details class="karte" open>
+      <summary>3 · Buchung &amp; Rechnung</summary>
+      <div class="inhalt">
+        <div class="reihe z2">
+          <div class="feld"><label for="f-nummer">Rechnungsnummer</label><input id="f-nummer" data-pfad="rechnung.nummer" placeholder="2026-018"></div>
+          <div class="feld"><label for="f-datum">Rechnungsdatum</label><input id="f-datum" data-pfad="rechnung.datum" type="date"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="f-portal">Buchungsportal</label>
+            <select id="f-portal" data-pfad="rechnung.portal">
+              <option value="">– keins –</option><option>Booking.com</option><option>Airbnb</option>
+              <option>Fewo-direkt</option><option>Direktbuchung</option>
+            </select>
+          </div>
+          <div class="feld"><label for="f-buchungsnr">Buchungsnummer</label><input id="f-buchungsnr" data-pfad="rechnung.buchungsnummer" inputmode="numeric" placeholder="6138652495"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="f-anreise">Anreise</label><input id="f-anreise" data-pfad="rechnung.anreise" type="date"></div>
+          <div class="feld"><label for="f-abreise">Abreise</label><input id="f-abreise" data-pfad="rechnung.abreise" type="date"></div>
+        </div>
+        <div class="reihe z3">
+          <div class="feld"><label for="f-naechte">Nächte</label><input id="f-naechte" data-pfad="rechnung.naechte" type="number" min="0" step="1"></div>
+          <div class="feld"><label for="f-gaeste">Gäste</label><input id="f-gaeste" data-pfad="rechnung.gaeste" type="number" min="1" step="1"></div>
+          <div class="feld"><label for="f-ziel">Zahlungsziel (Tage)</label><input id="f-ziel" data-pfad="rechnung.zahlungsziel" type="number" min="0" step="1"></div>
+        </div>
+        <label class="schalter"><input type="checkbox" id="f-bezahlt" data-pfad="rechnung.bezahlt"> Bereits bezahlt (nur Beleg, keine Überweisung)</label>
+        <div class="feld"><label for="f-hinweis">Zusätzlicher Hinweis auf der Rechnung</label><textarea id="f-hinweis" data-pfad="rechnung.hinweis" rows="2" placeholder="z. B. Anschlussbuchung, Frühstück inklusive …"></textarea></div>
+      </div>
+    </details>
+
+    <details class="karte" open>
+      <summary>4 · Positionen</summary>
+      <div class="inhalt">
+        <div id="positionen"></div>
+        <div class="schnellwahl">
+          <button data-vorlage="uebernachtung">+ Übernachtung</button>
+          <button data-vorlage="reinigung">+ Endreinigung</button>
+          <button data-vorlage="kurtaxe">+ Kurtaxe</button>
+          <button data-vorlage="fruehstueck">+ Frühstück</button>
+          <button data-vorlage="parkplatz">+ Stellplatz</button>
+          <button data-vorlage="leer">+ Freie Position</button>
+        </div>
+      </div>
+    </details>
+
+    <details class="karte">
+      <summary>5 · Vermieter, Steuer &amp; Bank</summary>
+      <div class="inhalt">
+        <p class="hinweis">Wird auf diesem Gerät gespeichert und für jede weitere Rechnung übernommen.</p>
+        <div class="feld"><label for="v-objekt">Objektname (Titel oben)</label><input id="v-objekt" data-pfad="vermieter.objekt"></div>
+        <div class="feld"><label for="v-name">Vermieter</label><input id="v-name" data-pfad="vermieter.name"></div>
+        <div class="feld"><label for="v-strasse">Straße</label><input id="v-strasse" data-pfad="vermieter.strasse"></div>
+        <div class="reihe z13">
+          <div class="feld"><label for="v-plz">PLZ</label><input id="v-plz" data-pfad="vermieter.plz"></div>
+          <div class="feld"><label for="v-ort">Ort</label><input id="v-ort" data-pfad="vermieter.ort"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="v-tel">Telefon</label><input id="v-tel" data-pfad="vermieter.telefon"></div>
+          <div class="feld"><label for="v-mail">E-Mail</label><input id="v-mail" data-pfad="vermieter.email"></div>
+        </div>
+        <div class="reihe z2">
+          <div class="feld"><label for="v-steuernr">Steuernummer</label><input id="v-steuernr" data-pfad="vermieter.steuernummer"></div>
+          <div class="feld"><label for="v-ustid">USt-IdNr. (optional)</label><input id="v-ustid" data-pfad="vermieter.ustId"></div>
+        </div>
+        <div class="feld"><label for="v-iban">IBAN</label><input id="v-iban" data-pfad="vermieter.iban"></div>
+        <div class="reihe z2">
+          <div class="feld"><label for="v-bic">BIC (optional)</label><input id="v-bic" data-pfad="vermieter.bic"></div>
+          <div class="feld"><label for="v-gruss">Grußformel im Fuß</label><input id="v-gruss" data-pfad="vermieter.grussformel"></div>
+        </div>
+        <label class="schalter"><input type="checkbox" id="v-klein" data-pfad="vermieter.kleinunternehmer"> Kleinunternehmer nach § 19 UStG (keine Umsatzsteuer)</label>
+        <div class="reihe z2" id="ustFelder">
+          <div class="feld"><label for="v-satz">Umsatzsteuersatz (%)</label><input id="v-satz" data-pfad="vermieter.ustSatz" type="number" min="0" step="0.1"></div>
+          <div class="feld"><label for="v-inkl">Preise verstehen sich</label>
+            <select id="v-inkl" data-pfad="vermieter.preiseInklUst">
+              <option value="true">inkl. USt. (Bruttopreise)</option>
+              <option value="false">zzgl. USt. (Nettopreise)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <details class="karte">
+      <summary>6 · Interne Notizen (nicht auf der Rechnung)</summary>
+      <div class="inhalt">
+        <div class="reihe z2">
+          <div class="feld"><label for="i-kommission">Portal-Kommission (€)</label><input id="i-kommission" data-pfad="intern.kommission" inputmode="decimal" placeholder="8,28"></div>
+          <div class="feld"><label for="i-notiz">Notiz</label><input id="i-notiz" data-pfad="intern.notiz"></div>
+        </div>
+        <p class="hinweis" id="auszahlung"></p>
+      </div>
+    </details>
+
+    <details class="karte">
+      <summary>7 · Gespeicherte Rechnungen</summary>
+      <div class="inhalt">
+        <div id="historie"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="knopf klein leise" id="btnJsonKopieren" style="background:var(--gruen-hell);color:var(--gruen)">Aktuelle Daten als JSON kopieren</button>
+          <button class="knopf klein leise" id="btnZuruecksetzen" style="background:#fbeceb;color:#b3261e">Neue leere Rechnung</button>
+        </div>
+      </div>
+    </details>
+
+  </section>
+
+  <section class="vorschau">
+    <div class="rahmen">
+      <div class="zeile"><span id="vorschauInfo">Live-Vorschau</span>
+        <span class="wachs"></span>
+        <button class="knopf klein" id="btnOeffnen">In neuem Tab</button>
+      </div>
+      <iframe id="rahmenPdf" title="Rechnungsvorschau"></iframe>
+      <div class="leer" id="vorschauLeer" hidden>Noch keine Position – füge unten eine Position hinzu.</div>
+    </div>
+  </section>
+</main>
+
+<div class="fussleiste">
+  <div class="gesamt" id="fussSumme">0,00 €<small id="fussDetail">Gesamt zu zahlen</small></div>
+  <span class="wachs"></span>
+  <button class="knopf leise" id="btnDrucken" style="background:var(--gruen-hell);color:var(--gruen)">Drucken</button>
+  <button class="knopf" id="btnPdf">PDF herunterladen</button>
+</div>
+
+<div class="lupe" id="lupe"><img alt="Screenshot groß"></div>
+<div class="meldung" id="meldung"></div>
+
+<script>
+'use strict';
+(function(){
+/* ---- pdf.mjs ---- */
+/* Minimaler PDF-Generator (ohne Fremdbibliotheken).
+ *
+ * Erzeugt echte Vektor-PDFs mit den Standardschriften Helvetica /
+ * Helvetica-Bold / Helvetica-Oblique (WinAnsi-Kodierung, inkl. Umlaute und
+ * Euro-Zeichen). Das Koordinatensystem der API liegt oben links (wie im
+ * Browser), intern wird auf das PDF-System (unten links) umgerechnet.
+ */
+
+const A4 = { w: 595.28, h: 841.89 };
+
+const FONTS = { regular: 'F1', bold: 'F2', italic: 'F3' };
+
+/* ---------------------------------------------------------------- Kodierung */
+
+// Unicode -> WinAnsi-Byte fuer alles oberhalb von ASCII, was hier vorkommt.
+const WIN_ANSI_SPECIAL = {
+  '€': 0x80, '‚': 0x82, 'ƒ': 0x83, '„': 0x84,
+  '…': 0x85, '†': 0x86, '‡': 0x87, 'ˆ': 0x88,
+  '‰': 0x89, 'Š': 0x8a, '‹': 0x8b, 'Œ': 0x8c,
+  'Ž': 0x8e, '‘': 0x91, '’': 0x92, '“': 0x93,
+  '”': 0x94, '•': 0x95, '–': 0x96, '—': 0x97,
+  '˜': 0x98, '™': 0x99, 'š': 0x9a, '›': 0x9b,
+  'œ': 0x9c, 'ž': 0x9e, 'Ÿ': 0x9f,
+};
+
+/** Wandelt einen Unicode-String in eine WinAnsi-Bytefolge (als Latin1-String). */
+function toWinAnsi(input) {
+  let out = '';
+  for (const ch of String(input ?? '')) {
+    const code = ch.codePointAt(0);
+    if (code === 0x0a || code === 0x0d) { out += ' '; continue; }
+    if (code >= 0x20 && code <= 0x7e) { out += ch; continue; }
+    if (code >= 0xa0 && code <= 0xff) { out += ch; continue; }
+    const special = WIN_ANSI_SPECIAL[ch];
+    out += special !== undefined ? String.fromCharCode(special) : '?';
+  }
+  return out;
+}
+
+function escapePdfString(latin1) {
+  return latin1.replace(/([\\()])/g, '\\$1');
+}
+
+/* --------------------------------------------------------------- Zeichenbreiten */
+
+const HELVETICA_ASCII = [
+  278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278,
+  556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556,
+  1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778,
+  667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556,
+  333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556,
+  556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584,
+];
+
+const HELVETICA_BOLD_ASCII = [
+  278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278,
+  556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611,
+  975, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778,
+  667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556,
+  333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611,
+  611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584,
+];
+
+// Akzentbuchstaben haben in Helvetica die Breite ihres Grundbuchstabens.
+const ACCENT_BASE =
+  'AAAAAAECEEEEIIIIDNOOOOOxOUUUUYPsaaaaaaeceeeeiiiidnooooo/ouuuuypy';
+
+function buildWidthTable(ascii) {
+  const widths = new Array(256).fill(ascii[0]);
+  for (let i = 32; i <= 126; i += 1) widths[i] = ascii[i - 32];
+  const w = (ch) => ascii[ch.charCodeAt(0) - 32];
+  for (let i = 0xc0; i <= 0xff; i += 1) widths[i] = w(ACCENT_BASE[i - 0xc0]);
+  widths[0xdf] = w('s');           // ss
+  widths[0x80] = w('E');           // Euro
+  widths[0x91] = widths[0x92] = w("'");
+  widths[0x93] = widths[0x94] = w('"');
+  widths[0x95] = w('o');           // bullet
+  widths[0x96] = w('-') * 1.5;     // en dash
+  widths[0x97] = w('-') * 2;       // em dash
+  widths[0x85] = w('.') * 3;       // ellipsis
+  widths[0xa0] = w(' ');
+  widths[0xa9] = widths[0xae] = w('O');
+  widths[0xb7] = w('.');           // middle dot
+  return widths;
+}
+
+const WIDTHS = {
+  F1: buildWidthTable(HELVETICA_ASCII),
+  F2: buildWidthTable(HELVETICA_BOLD_ASCII),
+  F3: buildWidthTable(HELVETICA_ASCII),
+};
+
+/** Textbreite in Punkt. */
+function measure(text, font = FONTS.regular, size = 10) {
+  const table = WIDTHS[font] || WIDTHS.F1;
+  const bytes = toWinAnsi(text);
+  let total = 0;
+  for (let i = 0; i < bytes.length; i += 1) total += table[bytes.charCodeAt(i)];
+  return (total * size) / 1000;
+}
+
+/** Bricht Text auf maxWidth um; respektiert vorhandene Zeilenumbrueche. */
+function wrapText(text, font, size, maxWidth) {
+  const lines = [];
+  for (const paragraph of String(text ?? '').split(/\r?\n/)) {
+    const words = paragraph.split(/\s+/).filter(Boolean);
+    if (!words.length) { lines.push(''); continue; }
+    let line = '';
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (measure(candidate, font, size) <= maxWidth || !line) {
+        line = candidate;
+      } else {
+        lines.push(line);
+        line = word;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+/* ------------------------------------------------------------------ Dokument */
+
+const fmt = (n) => (Math.round(n * 1000) / 1000).toString();
+
+class PdfDoc {
+  constructor({ width = A4.w, height = A4.h, title = 'Rechnung', author = '' } = {}) {
+    this.width = width;
+    this.height = height;
+    this.title = title;
+    this.author = author;
+    this.pages = [];
+    this.addPage();
+  }
+
+  addPage() {
+    this.pages.push([]);
+    this.page = this.pages[this.pages.length - 1];
+    return this.pages.length;
+  }
+
+  get pageCount() { return this.pages.length; }
+
+  /** y von oben -> PDF-y von unten. */
+  _y(y) { return this.height - y; }
+
+  _color(rgb) {
+    const [r, g, b] = rgb;
+    return `${fmt(r / 255)} ${fmt(g / 255)} ${fmt(b / 255)}`;
+  }
+
+  rect(x, y, w, h, { fill, stroke, lineWidth = 0.6, radius = 0 } = {}) {
+    const ops = [];
+    if (fill) ops.push(`${this._color(fill)} rg`);
+    if (stroke) ops.push(`${this._color(stroke)} RG`, `${fmt(lineWidth)} w`);
+    const y0 = this._y(y + h);
+    if (radius > 0) {
+      const r = Math.min(radius, w / 2, h / 2);
+      const k = r * 0.5523;
+      const x1 = x + w;
+      const y1 = y0 + h;
+      ops.push(`${fmt(x + r)} ${fmt(y0)} m`);
+      ops.push(`${fmt(x1 - r)} ${fmt(y0)} l`);
+      ops.push(`${fmt(x1 - r + k)} ${fmt(y0)} ${fmt(x1)} ${fmt(y0 + r - k)} ${fmt(x1)} ${fmt(y0 + r)} c`);
+      ops.push(`${fmt(x1)} ${fmt(y1 - r)} l`);
+      ops.push(`${fmt(x1)} ${fmt(y1 - r + k)} ${fmt(x1 - r + k)} ${fmt(y1)} ${fmt(x1 - r)} ${fmt(y1)} c`);
+      ops.push(`${fmt(x + r)} ${fmt(y1)} l`);
+      ops.push(`${fmt(x + r - k)} ${fmt(y1)} ${fmt(x)} ${fmt(y1 - r + k)} ${fmt(x)} ${fmt(y1 - r)} c`);
+      ops.push(`${fmt(x)} ${fmt(y0 + r)} l`);
+      ops.push(`${fmt(x)} ${fmt(y0 + r - k)} ${fmt(x + r - k)} ${fmt(y0)} ${fmt(x + r)} ${fmt(y0)} c`);
+      ops.push('h');
+    } else {
+      ops.push(`${fmt(x)} ${fmt(y0)} ${fmt(w)} ${fmt(h)} re`);
+    }
+    ops.push(fill && stroke ? 'B' : fill ? 'f' : 'S');
+    this.page.push(`q ${ops.join(' ')} Q`);
+  }
+
+  line(x1, y1, x2, y2, { color = [0, 0, 0], width = 0.6, dash = null } = {}) {
+    const ops = [`${this._color(color)} RG`, `${fmt(width)} w`];
+    if (dash) ops.push(`[${dash.map(fmt).join(' ')}] 0 d`);
+    ops.push(`${fmt(x1)} ${fmt(this._y(y1))} m ${fmt(x2)} ${fmt(this._y(y2))} l S`);
+    this.page.push(`q ${ops.join(' ')} Q`);
+  }
+
+  /**
+   * Setzt eine Textzeile. y ist die Grundlinie (Baseline) von oben gemessen.
+   * align: 'left' | 'right' | 'center'
+   */
+  text(content, x, y, {
+    font = FONTS.regular, size = 10, color = [0, 0, 0], align = 'left',
+    charSpacing = 0, opacity = 1,
+  } = {}) {
+    const raw = String(content ?? '');
+    if (!raw) return;
+    let width = measure(raw, font, size);
+    if (charSpacing) width += charSpacing * (toWinAnsi(raw).length - 1);
+    let tx = x;
+    if (align === 'right') tx = x - width;
+    else if (align === 'center') tx = x - width / 2;
+    const ops = [
+      'BT',
+      `/${font} ${fmt(size)} Tf`,
+      `${this._color(color)} rg`,
+    ];
+    if (charSpacing) ops.push(`${fmt(charSpacing)} Tc`);
+    ops.push(`${fmt(tx)} ${fmt(this._y(y))} Td`);
+    ops.push(`(${escapePdfString(toWinAnsi(raw))}) Tj`);
+    ops.push('ET');
+    const alpha = opacity < 1 ? `/GS${Math.round(opacity * 100)} gs ` : '';
+    this.page.push(`q ${alpha}${ops.join(' ')} Q`);
+  }
+
+  /** Mehrzeiliger Text; gibt die y-Position nach dem letzten Umbruch zurueck. */
+  paragraph(content, x, y, maxWidth, {
+    font = FONTS.regular, size = 10, color = [0, 0, 0], leading = null, align = 'left',
+  } = {}) {
+    const step = leading ?? size * 1.35;
+    let cursor = y;
+    for (const lineText of wrapText(content, font, size, maxWidth)) {
+      if (lineText) this.text(lineText, x, cursor, { font, size, color, align });
+      cursor += step;
+    }
+    return cursor;
+  }
+
+  build() {
+    const objects = [];
+    const push = (body) => { objects.push(body); return objects.length; };
+
+    const pageIds = [];
+    const contentIds = [];
+    // Platzhalter fuer Katalog (1) und Seitenbaum (2)
+    push('');
+    push('');
+
+    const fontIds = {
+      F1: push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'),
+      F2: push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'),
+      F3: push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>'),
+    };
+    const gsId = push('<< /Type /ExtGState /ca 0.75 /CA 0.75 >>');
+
+    this.pages.forEach((ops) => {
+      const stream = ops.join('\n');
+      contentIds.push(push(`<< /Length ${toWinAnsi(stream).length} >>\nstream\n${stream}\nendstream`));
+    });
+
+    this.pages.forEach((_, i) => {
+      pageIds.push(push(
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${fmt(this.width)} ${fmt(this.height)}] ` +
+        `/Resources << /Font << /F1 ${fontIds.F1} 0 R /F2 ${fontIds.F2} 0 R /F3 ${fontIds.F3} 0 R >> ` +
+        `/ExtGState << /GS75 ${gsId} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`,
+      ));
+    });
+
+    const infoId = push(
+      `<< /Title (${escapePdfString(toWinAnsi(this.title))}) ` +
+      `/Author (${escapePdfString(toWinAnsi(this.author))}) ` +
+      `/Producer (Rechnungs-Generator) /Creator (Rechnungs-Generator) >>`,
+    );
+
+    objects[0] = '<< /Type /Catalog /Pages 2 0 R >>';
+    objects[1] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${pageIds.length} >>`;
+
+    let pdf = '%PDF-1.4\n%\xE2\xE3\xCF\xD3\n';
+    const offsets = [0];
+    objects.forEach((body, index) => {
+      offsets.push(pdf.length);
+      pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+    });
+    const xrefPos = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    for (let i = 1; i <= objects.length; i += 1) {
+      pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info ${infoId} 0 R >>\n`;
+    pdf += `startxref\n${xrefPos}\n%%EOF\n`;
+
+    const bytes = new Uint8Array(pdf.length);
+    for (let i = 0; i < pdf.length; i += 1) bytes[i] = pdf.charCodeAt(i) & 0xff;
+    return bytes;
+  }
+}
+
+/* ---- invoice.mjs ---- */
+/* Rechnungsmodell + PDF-Layout.
+ *
+ * Reine Logik ohne DOM: wird sowohl von der Web-App als auch von der
+ * Kommandozeile (cli.mjs) benutzt, damit Vorschau und Download identisch sind.
+ */
+
+/* -------------------------------------------------------------- Farben/Raster */
+
+const C = {
+  ink: [26, 29, 27],
+  soft: [107, 118, 113],
+  faint: [147, 156, 151],
+  accent: [27, 107, 75],
+  accentDark: [17, 71, 50],
+  accentSoft: [234, 243, 238],
+  hair: [219, 227, 221],
+  zebra: [247, 249, 248],
+  white: [255, 255, 255],
+};
+
+const M = { left: 48, right: 48, bottom: 74, header: 108 };
+const CONTENT_W = A4.w - M.left - M.right;
+
+/* ------------------------------------------------------------------ Vorgaben */
+
+const VERMIETER_VORGABE = {
+  objekt: 'Wohlfühlapartment Guxhagen',
+  name: 'Anne & Andreas Steffen',
+  strasse: 'Dörnhagener Str. 11',
+  plz: '34302',
+  ort: 'Guxhagen',
+  land: 'DE',
+  steuernummer: '024 482 44529',
+  ustId: '',
+  telefon: '01728869146',
+  email: 'service.steffen@outlook.de',
+  iban: 'DE23 7603 0080 0230 4925 43',
+  bic: '',
+  bank: '',
+  kleinunternehmer: true,
+  ustSatz: 7,
+  preiseInklUst: true,
+  grussformel: 'Vielen Dank für Ihren Besuch!',
+};
+
+function leereRechnung() {
+  return {
+    vermieter: { ...VERMIETER_VORGABE },
+    gast: { firma: '', name: '', strasse: '', plz: '', ort: '', land: '', email: '' },
+    rechnung: {
+      nummer: '',
+      datum: heuteIso(),
+      portal: '',
+      buchungsnummer: '',
+      anreise: '',
+      abreise: '',
+      naechte: 0,
+      gaeste: 1,
+      zahlungsziel: 14,
+      bezahlt: false,
+      hinweis: '',
+    },
+    positionen: [],
+    intern: { kommission: null, notiz: '' },
+  };
+}
+
+/* ------------------------------------------------------------------- Helfer */
+
+function heuteIso() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/** Akzeptiert "2026-08-10", "10.08.2026", "10.8.26" -> Date | null */
+function parseDatum(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const text = String(value).trim();
+  let m = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  m = text.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{2,4})$/);
+  if (m) {
+    let year = Number(m[3]);
+    if (year < 100) year += 2000;
+    return new Date(year, Number(m[2]) - 1, Number(m[1]));
+  }
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isoDatum(value) {
+  const d = parseDatum(value);
+  if (!d) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function formatDatum(value) {
+  const d = parseDatum(value);
+  if (!d) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
+}
+
+function naechteZwischen(anreise, abreise) {
+  const a = parseDatum(anreise);
+  const b = parseDatum(abreise);
+  if (!a || !b) return 0;
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+function plusTage(value, tage) {
+  const d = parseDatum(value);
+  if (!d) return null;
+  return new Date(d.getTime() + tage * 86400000);
+}
+
+function formatEuro(amount) {
+  const n = Number.isFinite(Number(amount)) ? Number(amount) : 0;
+  return `${n.toFixed(2).replace('.', ',')} €`;
+}
+
+function formatMenge(n) {
+  const value = Number(n) || 0;
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace('.', ',');
+}
+
+/** Wandelt "1.234,50", "€ 69", "69.00" in eine Zahl. */
+function parseBetrag(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const text = String(value ?? '').replace(/[^\d,.-]/g, '');
+  if (!text) return 0;
+  const normalized = text.includes(',')
+    ? text.replace(/\./g, '').replace(',', '.')
+    : text;
+  const n = Number.parseFloat(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/* --------------------------------------------------------- Modell + Rechnung */
+
+/** Fuellt fehlende Felder, berechnet Summen. Veraendert die Eingabe nicht. */
+function normalisiere(input) {
+  const basis = leereRechnung();
+  const data = {
+    vermieter: { ...basis.vermieter, ...(input.vermieter || {}) },
+    gast: { ...basis.gast, ...(input.gast || {}) },
+    rechnung: { ...basis.rechnung, ...(input.rechnung || {}) },
+    positionen: (input.positionen || []).map((p) => ({
+      auto: Boolean(p.auto),
+      titel: p.titel || '',
+      details: Array.isArray(p.details) ? p.details.filter(Boolean) : (p.details ? [String(p.details)] : []),
+      menge: Number(p.menge) || 0,
+      einheit: p.einheit || '',
+      einzelpreis: parseBetrag(p.einzelpreis),
+    })),
+    intern: { ...basis.intern, ...(input.intern || {}) },
+  };
+
+  const r = data.rechnung;
+  r.datum = isoDatum(r.datum) || heuteIso();
+  r.anreise = isoDatum(r.anreise);
+  r.abreise = isoDatum(r.abreise);
+  if (!Number(r.naechte)) r.naechte = naechteZwischen(r.anreise, r.abreise);
+
+  const zeilen = data.positionen.map((p) => ({
+    ...p,
+    summe: Math.round(p.menge * p.einzelpreis * 100) / 100,
+  }));
+  const brutto = Math.round(zeilen.reduce((s, z) => s + z.summe, 0) * 100) / 100;
+
+  const v = data.vermieter;
+  const satz = v.kleinunternehmer ? 0 : Number(v.ustSatz) || 0;
+  let netto = brutto;
+  let steuer = 0;
+  let gesamt = brutto;
+  if (satz > 0) {
+    if (v.preiseInklUst === false) {
+      netto = brutto;
+      steuer = Math.round(netto * (satz / 100) * 100) / 100;
+      gesamt = Math.round((netto + steuer) * 100) / 100;
+    } else {
+      netto = Math.round((brutto / (1 + satz / 100)) * 100) / 100;
+      steuer = Math.round((brutto - netto) * 100) / 100;
+      gesamt = brutto;
+    }
+  }
+
+  const faellig = r.bezahlt || !Number(r.zahlungsziel)
+    ? null
+    : plusTage(r.datum, Number(r.zahlungsziel));
+
+  return {
+    ...data,
+    zeilen,
+    summen: { netto, steuer, satz, gesamt, zwischensumme: brutto },
+    faelligkeit: faellig ? isoDatum(faellig) : '',
+  };
+}
+
+/** Dateiname fuer den Download. */
+function dateiname(model) {
+  const nummer = (model.rechnung.nummer || 'Rechnung').replace(/[^\w.-]+/g, '-');
+  const wer = (model.gast.firma || model.gast.name || '').replace(/[^\wÄÖÜäöüß -]+/g, '').trim();
+  const teil = wer ? `_${wer.replace(/\s+/g, '-')}` : '';
+  return `Rechnung_${nummer}${teil}.pdf`;
+}
+
+/* ------------------------------------------------------------------ Layout */
+
+function anschrift(block) {
+  const zeilen = [];
+  if (block.firma) zeilen.push(block.firma);
+  if (block.name) zeilen.push(block.name);
+  if (block.strasse) zeilen.push(block.strasse);
+  const ort = [block.plz, block.ort].filter(Boolean).join(' ');
+  if (ort) zeilen.push(ort);
+  if (block.land && block.land.toUpperCase() !== 'DE') zeilen.push(block.land);
+  return zeilen;
+}
+
+function kopf(doc, model) {
+  const v = model.vermieter;
+  doc.rect(0, 0, A4.w, M.header, { fill: C.accentDark });
+  doc.rect(0, M.header, A4.w, 4, { fill: C.accent });
+
+  doc.text(v.objekt || 'Ferienwohnung', M.left, 44, {
+    font: FONTS.bold, size: 18, color: C.white,
+  });
+  doc.text(v.name, M.left, 63, { size: 9.5, color: C.white, opacity: 0.75 });
+  const adresse = [v.strasse, [v.plz, v.ort].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
+  doc.text(adresse, M.left, 77, { size: 9.5, color: C.white, opacity: 0.75 });
+  const kontakt = [v.telefon, v.email].filter(Boolean).join(' · ');
+  doc.text(kontakt, M.left, 91, { size: 9.5, color: C.white, opacity: 0.75 });
+
+  const rechts = A4.w - M.right;
+  doc.text('RECHNUNG', rechts, 46, {
+    font: FONTS.bold, size: 20, color: C.white, align: 'right', charSpacing: 1.6,
+  });
+  const nummer = model.rechnung.nummer ? `Nr. ${model.rechnung.nummer}` : '';
+  if (nummer) doc.text(nummer, rechts, 66, { size: 10, color: C.white, align: 'right', opacity: 0.75 });
+  doc.text(formatDatum(model.rechnung.datum), rechts, 82, {
+    size: 10, color: C.white, align: 'right', opacity: 0.75,
+  });
+}
+
+function fuss(doc, model, seite, seiten) {
+  const v = model.vermieter;
+  const y = A4.h - M.bottom + 18;
+  doc.line(M.left, y - 22, A4.w - M.right, y - 22, { color: C.hair, width: 0.8 });
+  if (v.grussformel) {
+    doc.text(v.grussformel, A4.w / 2, y, {
+      font: FONTS.italic, size: 13, color: C.accent, align: 'center',
+    });
+  }
+  const zeile = [
+    v.telefon,
+    v.email,
+    v.steuernummer ? `Steuernr. ${v.steuernummer}` : '',
+    v.ustId ? `USt-IdNr. ${v.ustId}` : '',
+  ].filter(Boolean).join('  ·  ');
+  doc.text(zeile, M.left, y + 20, { size: 8, color: C.faint });
+  doc.text(`Seite ${seite} von ${seiten}`, A4.w - M.right, y + 20, {
+    size: 8, color: C.faint, align: 'right',
+  });
+}
+
+function infoBox(doc, model, x, y, width) {
+  const r = model.rechnung;
+  const eintraege = [
+    ['Rechnungsnr.', r.nummer],
+    ['Rechnungsdatum', formatDatum(r.datum)],
+    ['Buchungsnr.', r.buchungsnummer],
+    ['Buchungsportal', r.portal],
+    ['Anreise', formatDatum(r.anreise)],
+    ['Abreise', formatDatum(r.abreise)],
+    ['Nächte', r.naechte ? String(r.naechte) : ''],
+    ['Gäste', r.gaeste ? String(r.gaeste) : ''],
+  ].filter(([, wert]) => wert);
+
+  const zeilenhoehe = 15;
+  const hoehe = 30 + eintraege.length * zeilenhoehe;
+  doc.rect(x, y, width, hoehe, { fill: C.accentSoft, radius: 8 });
+  doc.text('Buchungsdetails', x + 14, y + 20, {
+    font: FONTS.bold, size: 8.5, color: C.accent, charSpacing: 0.8,
+  });
+  let cursor = y + 40;
+  for (const [label, wert] of eintraege) {
+    doc.text(label, x + 14, cursor, { size: 9, color: C.soft });
+    doc.text(wert, x + width - 14, cursor, { size: 9, font: FONTS.bold, color: C.ink, align: 'right' });
+    cursor += zeilenhoehe;
+  }
+  return y + hoehe;
+}
+
+function empfaenger(doc, model, x, y, width) {
+  const v = model.vermieter;
+  const absender = [v.name, v.strasse, [v.plz, v.ort].filter(Boolean).join(' ')]
+    .filter(Boolean).join(' · ');
+  doc.text(absender, x, y, { size: 7.5, color: C.faint });
+  doc.line(x, y + 4, x + Math.min(width, measure(absender, FONTS.regular, 7.5)), y + 4,
+    { color: C.hair, width: 0.5 });
+
+  doc.text('RECHNUNGSEMPFÄNGER', x, y + 26, {
+    font: FONTS.bold, size: 8, color: C.accent, charSpacing: 0.8,
+  });
+
+  let cursor = y + 46;
+  const zeilen = anschrift(model.gast);
+  zeilen.forEach((zeile, index) => {
+    doc.text(zeile, x, cursor, {
+      font: index === 0 ? FONTS.bold : FONTS.regular,
+      size: index === 0 ? 11.5 : 10.5,
+      color: C.ink,
+    });
+    cursor += index === 0 ? 17 : 15;
+  });
+  if (model.gast.email) {
+    doc.text(model.gast.email, x, cursor + 3, { size: 9, color: C.soft });
+    cursor += 18;
+  }
+  return cursor;
+}
+
+const SPALTEN = {
+  pos: M.left + 4,
+  titel: M.left + 34,
+  menge: M.left + 336,
+  preis: M.left + 410,
+  summe: A4.w - M.right - 6,
+};
+
+function tabellenkopf(doc, y) {
+  doc.rect(M.left, y, CONTENT_W, 26, { fill: C.accent, radius: 5 });
+  const basis = y + 17;
+  doc.text('POS', SPALTEN.pos, basis, { font: FONTS.bold, size: 8, color: C.white, charSpacing: 0.6 });
+  doc.text('BESCHREIBUNG', SPALTEN.titel, basis, { font: FONTS.bold, size: 8, color: C.white, charSpacing: 0.6 });
+  doc.text('MENGE', SPALTEN.menge, basis, { font: FONTS.bold, size: 8, color: C.white, align: 'right', charSpacing: 0.6 });
+  doc.text('EINZELPREIS', SPALTEN.preis, basis, { font: FONTS.bold, size: 8, color: C.white, align: 'right', charSpacing: 0.6 });
+  doc.text('BETRAG', SPALTEN.summe, basis, { font: FONTS.bold, size: 8, color: C.white, align: 'right', charSpacing: 0.6 });
+  return y + 26;
+}
+
+function zeilenhoehe(zeile) {
+  const breite = SPALTEN.menge - SPALTEN.titel - 24;
+  const titelZeilen = wrapText(zeile.titel || '', FONTS.bold, 10.5, breite).length || 1;
+  const detailZeilen = zeile.details.reduce(
+    (sum, d) => sum + wrapText(d, FONTS.regular, 8.8, breite).length, 0,
+  );
+  return 14 + titelZeilen * 14 + detailZeilen * 11.5;
+}
+
+function zeichneZeile(doc, zeile, index, y) {
+  const hoehe = zeilenhoehe(zeile);
+  if (index % 2 === 1) doc.rect(M.left, y, CONTENT_W, hoehe, { fill: C.zebra });
+  doc.line(M.left, y + hoehe, A4.w - M.right, y + hoehe, { color: C.hair, width: 0.5 });
+
+  const breite = SPALTEN.menge - SPALTEN.titel - 24;
+  let cursor = y + 18;
+  doc.text(String(index + 1), SPALTEN.pos, cursor, { size: 9, color: C.faint });
+  doc.text(formatMenge(zeile.menge) + (zeile.einheit ? ` ${zeile.einheit}` : ''),
+    SPALTEN.menge, cursor, { size: 10, color: C.ink, align: 'right' });
+  doc.text(formatEuro(zeile.einzelpreis), SPALTEN.preis, cursor, { size: 10, color: C.ink, align: 'right' });
+  doc.text(formatEuro(zeile.summe), SPALTEN.summe, cursor, { font: FONTS.bold, size: 10.5, color: C.ink, align: 'right' });
+
+  for (const t of wrapText(zeile.titel || '', FONTS.bold, 10.5, breite)) {
+    doc.text(t, SPALTEN.titel, cursor, { font: FONTS.bold, size: 10.5, color: C.ink });
+    cursor += 14;
+  }
+  for (const detail of zeile.details) {
+    for (const t of wrapText(detail, FONTS.regular, 8.8, breite)) {
+      doc.text(t, SPALTEN.titel, cursor, { size: 8.8, color: C.soft });
+      cursor += 11.5;
+    }
+  }
+  return y + hoehe;
+}
+
+function summenblock(doc, model, y) {
+  const breite = 250;
+  const x = A4.w - M.right - breite;
+  const rechts = A4.w - M.right - 6;
+  const s = model.summen;
+  let cursor = y + 20;
+
+  const zeile = (label, wert, opts = {}) => {
+    doc.text(label, x + 6, cursor, { size: 9.5, color: opts.stark ? C.ink : C.soft });
+    doc.text(wert, rechts, cursor, {
+      size: 9.5, color: C.ink, font: opts.stark ? FONTS.bold : FONTS.regular, align: 'right',
+    });
+    cursor += 16;
+  };
+
+  const inklusive = model.vermieter.preiseInklUst !== false;
+  if (s.satz > 0) {
+    zeile('Nettobetrag', formatEuro(s.netto));
+    zeile(`${inklusive ? 'enthaltene' : 'zzgl.'} ${formatMenge(s.satz)} % USt.`, formatEuro(s.steuer));
+  } else if (model.zeilen.length > 1) {
+    zeile('Zwischensumme', formatEuro(s.zwischensumme));
+  }
+
+  const boxY = cursor - 4;
+  doc.rect(x, boxY, breite, 38, { fill: C.accent, radius: 8 });
+  doc.text('Gesamt zu zahlen', x + 14, boxY + 24, { font: FONTS.bold, size: 11, color: C.white });
+  doc.text(formatEuro(s.gesamt), rechts - 8, boxY + 25, {
+    font: FONTS.bold, size: 14, color: C.white, align: 'right',
+  });
+  cursor = boxY + 38 + 16;
+
+  const hinweis = model.vermieter.kleinunternehmer
+    ? 'Im ausgewiesenen Rechnungsbetrag ist gemäß § 19 UStG keine Umsatzsteuer enthalten.'
+    : `Umsatzsteuer ${formatMenge(s.satz)} % auf die Beherbergungsleistung${inklusive ? ' im Rechnungsbetrag enthalten' : ' zusätzlich berechnet'}.`;
+  cursor = doc.paragraph(hinweis, M.left, cursor, CONTENT_W, { size: 8.5, color: C.soft });
+  return cursor + 6;
+}
+
+function zahlungsblock(doc, model, y) {
+  const v = model.vermieter;
+  const r = model.rechnung;
+  const hoehe = 92;
+  doc.rect(M.left, y, CONTENT_W, hoehe, { fill: C.white, stroke: C.hair, radius: 8, lineWidth: 0.8 });
+  doc.text('ZAHLUNG', M.left + 16, y + 22, {
+    font: FONTS.bold, size: 8.5, color: C.accent, charSpacing: 0.8,
+  });
+
+  if (r.bezahlt) {
+    doc.text('Bereits bezahlt – dieser Beleg dient nur zu Ihrer Unterlage.',
+      M.left + 16, y + 46, { size: 10.5, color: C.ink });
+    if (r.portal) {
+      doc.text(`Zahlung über ${r.portal}.`, M.left + 16, y + 64, { size: 9.5, color: C.soft });
+    }
+    return y + hoehe;
+  }
+
+  const faellig = model.faelligkeit
+    ? `Bitte bis zum ${formatDatum(model.faelligkeit)} überweisen.`
+    : 'Bitte zeitnah überweisen.';
+  doc.text(faellig, M.left + 16, y + 44, { size: 10, color: C.ink });
+
+  const felder = [
+    ['Empfänger', v.name],
+    ['IBAN', v.iban],
+    ['Verwendungszweck', r.nummer ? `Rechnung ${r.nummer}` : ''],
+  ].filter(([, wert]) => wert);
+  if (v.bic) felder.splice(2, 0, ['BIC', v.bic]);
+
+  let x = M.left + 16;
+  const spalte = (CONTENT_W - 32) / felder.length;
+  for (const [label, wert] of felder) {
+    doc.text(label, x, y + 66, { size: 8, color: C.faint });
+    doc.text(wert, x, y + 80, { font: FONTS.bold, size: 9.5, color: C.ink });
+    x += spalte;
+  }
+  return y + hoehe;
+}
+
+/** Baut das PDF und liefert die Bytes (Uint8Array). */
+function baueRechnungPdf(input) {
+  const model = input.summen ? input : normalisiere(input);
+  const doc = new PdfDoc({
+    title: `Rechnung ${model.rechnung.nummer || ''}`.trim(),
+    author: model.vermieter.name,
+  });
+
+  kopf(doc, model);
+  const linkeSpalte = A4.w - M.right - 232;
+  const endeEmpfaenger = empfaenger(doc, model, M.left, M.header + 36, linkeSpalte - M.left - 24);
+  const endeInfo = infoBox(doc, model, linkeSpalte, M.header + 30, 232);
+
+  let y = Math.max(endeEmpfaenger, endeInfo) + 30;
+  y = tabellenkopf(doc, y);
+
+  const maxY = A4.h - M.bottom - 30;
+  model.zeilen.forEach((zeile, index) => {
+    if (y + zeilenhoehe(zeile) > maxY) {
+      doc.addPage();
+      kopf(doc, model);
+      y = tabellenkopf(doc, M.header + 40);
+    }
+    y = zeichneZeile(doc, zeile, index, y);
+  });
+
+  const restHoehe = 210 + (model.rechnung.hinweis ? 40 : 0);
+  if (y + restHoehe > maxY) {
+    doc.addPage();
+    kopf(doc, model);
+    y = M.header + 40;
+  }
+
+  y = summenblock(doc, model, y);
+  y = zahlungsblock(doc, model, y + 12);
+
+  if (model.rechnung.hinweis) {
+    doc.paragraph(model.rechnung.hinweis, M.left, y + 26, CONTENT_W, { size: 9, color: C.soft });
+  }
+
+  const seiten = doc.pageCount;
+  // Fusszeilen mit korrekter Seitenzahl auf allen Seiten nachziehen.
+  doc.pages.forEach((_, index) => {
+    doc.page = doc.pages[index];
+    fuss(doc, model, index + 1, seiten);
+  });
+
+  return doc.build();
+}
+
+/* ---- positionen.mjs ---- */
+/* Baut aus Buchungsdaten die uebliche Uebernachtungsposition. */
+
+function standardPosition(daten) {
+  const r = daten.rechnung || {};
+  const v = daten.vermieter || {};
+  const naechte = Number(r.naechte) || naechteZwischen(r.anreise, r.abreise) || 1;
+  const gesamt = parseBetrag((daten.intern || {}).gesamtpreis);
+
+  const details = [];
+  const ort = v.ort || 'Guxhagen';
+  const zeitraum = [formatDatum(r.anreise), formatDatum(r.abreise)].filter(Boolean).join(' – ');
+  if (zeitraum) details.push(`${ort} (Zeitraum: ${zeitraum})`);
+  details.push(`${naechte} Übernachtung${naechte === 1 ? '' : 'en'}`);
+  if (r.gaeste) details.push(`${r.gaeste} Gast${Number(r.gaeste) === 1 ? '' : '/Gäste'}`);
+  if (r.buchungsnummer) {
+    details.push(`Buchungsnr.: ${r.buchungsnummer}${r.portal ? ` (${r.portal})` : ''}`);
+  }
+
+  return {
+    auto: true,
+    titel: `Übernachtung im ${v.objekt || 'Apartment'}`,
+    details,
+    menge: naechte,
+    einheit: naechte === 1 ? 'Nacht' : 'Nächte',
+    // Ungerundet, damit Menge x Einzelpreis exakt den Gesamtpreis ergibt.
+    einzelpreis: naechte ? gesamt / naechte : gesamt,
+  };
+}
+
+/* ---- parse.mjs ---- */
+/* Textanalyse: erkennt Buchungsdaten in kopiertem Text aus Booking.com,
+ * Airbnb oder aus einer Gast-Nachricht ("Bitte stellen Sie die Rechnung auf ...").
+ *
+ * Das ist eine Hilfe fuer den manuellen Weg. Werden Screenshots an Claude
+ * gegeben, liefert Claude die Felder direkt als JSON.
+ */
+
+const MONATE = {
+  jan: 1, januar: 1, feb: 2, februar: 2, mar: 3, mär: 3, maer: 3, march: 3, marz: 3, märz: 3,
+  apr: 4, april: 4, mai: 5, may: 5, jun: 6, juni: 6, jul: 7, juli: 7,
+  aug: 8, august: 8, sep: 9, sept: 9, september: 9, okt: 10, oct: 10, oktober: 10,
+  nov: 11, november: 11, dez: 12, dec: 12, dezember: 12,
+};
+
+const RECHTSFORMEN = /\b(GmbH|AG|UG|mbH|KG|OHG|GbR|e\.?K\.?|SE|Ltd|B\.?V\.?|GmbH & Co)\b/i;
+
+function monatNummer(name) {
+  const key = String(name).toLowerCase().replace(/\.$/, '').trim();
+  return MONATE[key] || MONATE[key.slice(0, 3)] || null;
+}
+
+/** Findet alle Daten im Text und gibt ISO-Strings in Reihenfolge zurueck. */
+function findeDaten(text) {
+  const treffer = [];
+  const jahrFallback = (new Date()).getFullYear();
+
+  // 10.08.2026 / 10.8.26
+  for (const m of text.matchAll(/\b(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{2,4})\b/g)) {
+    let jahr = Number(m[3]);
+    if (jahr < 100) jahr += 2000;
+    treffer.push({ index: m.index, iso: isoDatum(new Date(jahr, Number(m[2]) - 1, Number(m[1]))) });
+  }
+  // 10. Aug. 2026 / 10 Aug 2026 / 10. August
+  for (const m of text.matchAll(/\b(\d{1,2})\.?\s+([A-Za-zÄÖÜäöü]{3,9})\.?\s*(\d{4})?\b/g)) {
+    const monat = monatNummer(m[2]);
+    if (!monat) continue;
+    const jahr = m[3] ? Number(m[3]) : jahrFallback;
+    treffer.push({ index: m.index, iso: isoDatum(new Date(jahr, monat - 1, Number(m[1]))) });
+  }
+  // 2026-08-10
+  for (const m of text.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) {
+    treffer.push({ index: m.index, iso: `${m[1]}-${m[2]}-${m[3]}` });
+  }
+
+  treffer.sort((a, b) => a.index - b.index);
+  const gesehen = new Set();
+  return treffer.map((t) => t.iso).filter((iso) => {
+    if (!iso || gesehen.has(iso)) return false;
+    gesehen.add(iso);
+    return true;
+  });
+}
+
+function findeAdresse(zeilen) {
+  const adresse = { firma: '', name: '', strasse: '', plz: '', ort: '' };
+  for (let i = 0; i < zeilen.length; i += 1) {
+    const plzZeile = zeilen[i].match(/^(\d{5})\s+([A-Za-zÄÖÜäöüß .'-]{2,})$/);
+    if (!plzZeile) continue;
+    adresse.plz = plzZeile[1];
+    adresse.ort = plzZeile[2].trim();
+    for (let k = i - 1; k >= 0 && k >= i - 4; k -= 1) {
+      const zeile = zeilen[k].trim();
+      if (!zeile) continue;
+      if (!adresse.strasse && /\d/.test(zeile) && !/^\d{5}/.test(zeile) && zeile.length < 60) {
+        adresse.strasse = zeile;
+        continue;
+      }
+      if (adresse.strasse && !adresse.firma) {
+        if (RECHTSFORMEN.test(zeile) || /^[A-ZÄÖÜ][\wÄÖÜäöüß&.\- ]{2,}$/.test(zeile)) {
+          adresse.firma = zeile;
+        }
+        break;
+      }
+    }
+    break;
+  }
+  if (!adresse.firma) {
+    const firmenZeile = zeilen.find((z) => RECHTSFORMEN.test(z) && z.length < 60);
+    if (firmenZeile) adresse.firma = firmenZeile.trim();
+  }
+  return adresse;
+}
+
+/**
+ * Analysiert kopierten Text und liefert ein Teil-Rechnungsobjekt.
+ * Alles, was nicht sicher erkannt wird, bleibt leer.
+ */
+function analysiereText(rohtext) {
+  const text = String(rohtext || '');
+  const zeilen = text.split(/\r?\n/).map((z) => z.trim());
+  const ergebnis = { gast: {}, rechnung: {}, positionen: [], intern: {} };
+
+  const nummer = text.match(/(?:Best(?:ä|ae)tigungs|Buchungs|Reservierungs|Bestätigungs)?nummer\s*[:#]?\s*(\d{6,})/i)
+    || text.match(/\b(\d{9,11})\b/);
+  if (nummer) ergebnis.rechnung.buchungsnummer = nummer[1];
+
+  const code = text.match(/\b(?:Code|Bestätigungscode)\s*[:#]?\s*([A-Z0-9]{6,12})\b/);
+  if (!ergebnis.rechnung.buchungsnummer && code) ergebnis.rechnung.buchungsnummer = code[1];
+
+  if (/booking/i.test(text)) ergebnis.rechnung.portal = 'Booking.com';
+  else if (/airbnb/i.test(text)) ergebnis.rechnung.portal = 'Airbnb';
+
+  const daten = findeDaten(text);
+  if (daten.length >= 2) {
+    const [anreise, abreise] = daten;
+    ergebnis.rechnung.anreise = anreise;
+    ergebnis.rechnung.abreise = abreise;
+    ergebnis.rechnung.naechte = naechteZwischen(anreise, abreise);
+  } else if (daten.length === 1) {
+    ergebnis.rechnung.anreise = daten[0];
+  }
+
+  const naechte = text.match(/(\d{1,2})\s*(?:N(?:ä|a)chte?|Übernachtung)/i);
+  if (naechte) ergebnis.rechnung.naechte = Number(naechte[1]);
+
+  const gaeste = text.match(/(\d{1,2})\s*(?:Erwachsene[rn]?|G(?:ä|ae)st(?:e|en)?)/i);
+  if (gaeste) ergebnis.rechnung.gaeste = Number(gaeste[1]);
+
+  const gesamt = text.match(/Gesamtpreis(?:\s+der\s+Buchung)?\s*[:€]*\s*€?\s*([\d.,]+)/i)
+    || text.match(/(?:Gesamt|Summe|Total)\s*[:€]*\s*€?\s*([\d.,]+)/i)
+    || text.match(/€\s*([\d.,]+)/);
+  if (gesamt) ergebnis.intern.gesamtpreis = parseBetrag(gesamt[1]);
+
+  const kommission = text.match(/(?:Kommission|Provision|Servicegebühr)\s*[:€]*\s*€?\s*([\d.,]+)/i);
+  if (kommission) ergebnis.intern.kommission = parseBetrag(kommission[1]);
+
+  const email = text.match(/[\w.+-]+@[\w-]+\.[\w.-]{2,}/);
+  if (email) ergebnis.gast.email = email[0];
+
+  const adresse = findeAdresse(zeilen);
+  Object.assign(ergebnis.gast, Object.fromEntries(
+    Object.entries(adresse).filter(([, wert]) => wert),
+  ));
+
+  return ergebnis;
+}
+
+/* ---- ui.mjs ---- */
+/* Bedienoberflaeche der Rechnungs-App (laeuft nur im Browser). */
+
+
+
+const SPEICHER = {
+  profil: 'rechnung.profil',
+  kunden: 'rechnung.kunden',
+  entwurf: 'rechnung.entwurf',
+  historie: 'rechnung.historie',
+};
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+let daten = leereRechnung();
+let bilder = [];
+let pdfUrl = null;
+let naechteManuell = false;
+let zeichnenTimer = null;
+
+/* ------------------------------------------------------------- Speicher */
+
+function lade(schluessel, vorgabe) {
+  try {
+    const roh = localStorage.getItem(schluessel);
+    return roh ? JSON.parse(roh) : vorgabe;
+  } catch { return vorgabe; }
+}
+
+function speichere(schluessel, wert) {
+  try { localStorage.setItem(schluessel, JSON.stringify(wert)); } catch { /* Kontingent */ }
+}
+
+/* ----------------------------------------------------------------- Hilfen */
+
+function melde(text) {
+  const el = $('#meldung');
+  el.textContent = text;
+  el.classList.add('auf');
+  clearTimeout(melde._t);
+  melde._t = setTimeout(() => el.classList.remove('auf'), 2200);
+}
+
+function hole(objekt, pfad) {
+  return pfad.split('.').reduce((o, teil) => (o == null ? o : o[teil]), objekt);
+}
+
+function setze(objekt, pfad, wert) {
+  const teile = pfad.split('.');
+  const letzt = teile.pop();
+  let ziel = objekt;
+  for (const teil of teile) {
+    if (typeof ziel[teil] !== 'object' || ziel[teil] === null) ziel[teil] = {};
+    ziel = ziel[teil];
+  }
+  ziel[letzt] = wert;
+}
+
+const ZAHLENFELDER = new Set([
+  'rechnung.naechte', 'rechnung.gaeste', 'rechnung.zahlungsziel', 'vermieter.ustSatz',
+]);
+
+function leseFeld(el) {
+  const pfad = el.dataset.pfad;
+  if (el.type === 'checkbox') return el.checked;
+  if (pfad === 'vermieter.preiseInklUst') return el.value === 'true';
+  if (pfad === 'intern.kommission') return el.value ? parseBetrag(el.value) : null;
+  if (ZAHLENFELDER.has(pfad)) return el.value === '' ? 0 : Number(el.value);
+  return el.value;
+}
+
+function schreibeFelder() {
+  for (const el of $$('[data-pfad]')) {
+    const wert = hole(daten, el.dataset.pfad);
+    if (el.type === 'checkbox') el.checked = Boolean(wert);
+    else if (el.dataset.pfad === 'vermieter.preiseInklUst') el.value = wert === false ? 'false' : 'true';
+    else if (el.dataset.pfad === 'intern.kommission') el.value = wert == null || wert === '' ? '' : String(wert).replace('.', ',');
+    else el.value = wert == null ? '' : String(wert);
+  }
+  $('#ustFelder').style.display = daten.vermieter.kleinunternehmer ? 'none' : '';
+}
+
+/* -------------------------------------------------------------- Positionen */
+
+const VORLAGEN = {
+  reinigung: { titel: 'Endreinigung', details: [], menge: 1, einheit: 'Pauschale', einzelpreis: 0 },
+  kurtaxe: { titel: 'Kurtaxe / Gästebeitrag', details: [], menge: 1, einheit: 'Person/Nacht', einzelpreis: 0 },
+  fruehstueck: { titel: 'Frühstück', details: [], menge: 1, einheit: 'Person', einzelpreis: 0 },
+  parkplatz: { titel: 'Stellplatz', details: [], menge: 1, einheit: 'Nacht', einzelpreis: 0 },
+  leer: { titel: '', details: [], menge: 1, einheit: '', einzelpreis: 0 },
+};
+
+function zeichnePositionen() {
+  const box = $('#positionen');
+  box.innerHTML = '';
+  daten.positionen.forEach((position, index) => {
+    const el = document.createElement('div');
+    el.className = 'position';
+    el.innerHTML = `
+      <div class="kopfzeile">
+        <span class="nr">${index + 1}</span>
+        <strong style="font-size:13px;color:var(--grau)">Position</strong>
+        <span class="zeilensumme" data-summe>${formatEuro(position.menge * position.einzelpreis)}</span>
+        <button class="weg" data-weg title="Position entfernen">Entfernen</button>
+      </div>
+      <div class="feld"><label>Bezeichnung</label>
+        <input data-feld="titel" value="${escape(position.titel)}" placeholder="Übernachtung im Wohlfühlapartment"></div>
+      <div class="feld"><label>Details (eine Zeile je Angabe)</label>
+        <textarea data-feld="details" rows="3" placeholder="Guxhagen (Zeitraum: …)&#10;1 Übernachtung&#10;Buchungsnr.: …">${escape((position.details || []).join('\n'))}</textarea></div>
+      <div class="reihe z3">
+        <div class="feld"><label>Menge</label><input data-feld="menge" inputmode="decimal" value="${escape(String(position.menge).replace('.', ','))}"></div>
+        <div class="feld"><label>Einheit</label><input data-feld="einheit" value="${escape(position.einheit || '')}" placeholder="Nächte"></div>
+        <div class="feld"><label>Einzelpreis (€)</label><input data-feld="einzelpreis" inputmode="decimal" value="${escape(preisText(position.einzelpreis))}"></div>
+      </div>`;
+
+    el.querySelector('[data-weg]').addEventListener('click', () => {
+      daten.positionen.splice(index, 1);
+      zeichnePositionen();
+      aktualisiere();
+    });
+
+    for (const feld of el.querySelectorAll('[data-feld]')) {
+      feld.addEventListener('input', () => {
+        const name = feld.dataset.feld;
+        if (name === 'details') position.details = feld.value.split('\n').map((z) => z.trim()).filter(Boolean);
+        else if (name === 'menge' || name === 'einzelpreis') position[name] = parseBetrag(feld.value);
+        else position[name] = feld.value;
+        el.querySelector('[data-summe]').textContent = formatEuro(position.menge * position.einzelpreis);
+        aktualisiere();
+      });
+    }
+    box.appendChild(el);
+  });
+}
+
+function preisText(wert) {
+  const zahl = Number(wert) || 0;
+  const gerundet = Math.round(zahl * 100) / 100;
+  return String(Math.abs(zahl - gerundet) < 0.0001 ? gerundet.toFixed(2) : zahl).replace('.', ',');
+}
+
+function escape(text) {
+  return String(text ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/* ------------------------------------------------------------- Vorschau/PDF */
+
+function baueModell() {
+  return normalisiere(daten);
+}
+
+function aktualisiere({ sofort = false } = {}) {
+  const modell = baueModell();
+  $('#kopfSumme').textContent = formatEuro(modell.summen.gesamt);
+  $('#fussSumme').childNodes[0].nodeValue = formatEuro(modell.summen.gesamt);
+  $('#fussDetail').textContent = modell.rechnung.bezahlt
+    ? 'Bereits bezahlt'
+    : modell.faelligkeit ? `Fällig am ${formatDatum(modell.faelligkeit)}` : 'Gesamt zu zahlen';
+
+  const kommission = parseBetrag(daten.intern.kommission);
+  $('#auszahlung').textContent = kommission
+    ? `Auszahlung nach Kommission: ${formatEuro(modell.summen.gesamt - kommission)} (Kommission ${formatEuro(kommission)}).`
+    : '';
+
+  speichere(SPEICHER.entwurf, daten);
+  speichere(SPEICHER.profil, daten.vermieter);
+
+  clearTimeout(zeichnenTimer);
+  zeichnenTimer = setTimeout(() => zeichneVorschau(modell), sofort ? 0 : 250);
+}
+
+function pdfBlob(modell) {
+  return new Blob([baueRechnungPdf(modell)], { type: 'application/pdf' });
+}
+
+function zeichneVorschau(modell) {
+  const leer = !modell.zeilen.length;
+  $('#vorschauLeer').hidden = !leer;
+  $('#rahmenPdf').style.display = leer ? 'none' : '';
+  $('#vorschauInfo').textContent = leer
+    ? 'Live-Vorschau'
+    : `Live-Vorschau · ${modell.rechnung.nummer || 'ohne Nummer'}`;
+  if (leer) return;
+  try {
+    const url = URL.createObjectURL(pdfBlob(modell));
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    pdfUrl = url;
+    $('#rahmenPdf').src = url;
+  } catch (fehler) {
+    melde(`Vorschau fehlgeschlagen: ${fehler.message}`);
+  }
+}
+
+function herunterladen() {
+  const modell = baueModell();
+  if (!modell.zeilen.length) { melde('Bitte zuerst eine Position anlegen.'); return; }
+  const url = URL.createObjectURL(pdfBlob(modell));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = dateiname(modell);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  merkeHistorie(modell);
+  melde('PDF gespeichert.');
+}
+
+function drucken() {
+  const modell = baueModell();
+  if (!modell.zeilen.length) { melde('Bitte zuerst eine Position anlegen.'); return; }
+  const url = URL.createObjectURL(pdfBlob(modell));
+  const fenster = window.open(url, '_blank');
+  if (!fenster) melde('Bitte Pop-ups erlauben.');
+}
+
+/* ---------------------------------------------------------------- Historie */
+
+function merkeHistorie(modell) {
+  const historie = lade(SPEICHER.historie, []);
+  const eintrag = {
+    nummer: modell.rechnung.nummer,
+    datum: modell.rechnung.datum,
+    empfaenger: modell.gast.firma || modell.gast.name,
+    betrag: modell.summen.gesamt,
+    daten,
+  };
+  const vorhanden = historie.findIndex((h) => h.nummer && h.nummer === eintrag.nummer);
+  if (vorhanden >= 0) historie[vorhanden] = eintrag; else historie.unshift(eintrag);
+  speichere(SPEICHER.historie, historie.slice(0, 60));
+  zeichneHistorie();
+}
+
+function zeichneHistorie() {
+  const historie = lade(SPEICHER.historie, []);
+  const box = $('#historie');
+  if (!historie.length) { box.innerHTML = '<p class="hinweis">Noch keine Rechnung gespeichert.</p>'; return; }
+  box.innerHTML = '';
+  historie.forEach((eintrag, index) => {
+    const zeile = document.createElement('div');
+    zeile.className = 'position';
+    zeile.style.padding = '10px 12px';
+    zeile.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <strong>${escape(eintrag.nummer || '—')}</strong>
+        <span style="color:var(--grau)">${escape(eintrag.empfaenger || '')}</span>
+        <span style="margin-left:auto;font-weight:700">${formatEuro(eintrag.betrag)}</span>
+        <button class="knopf klein leise" style="background:var(--gruen-hell);color:var(--gruen)" data-laden>Laden</button>
+      </div>`;
+    zeile.querySelector('[data-laden]').addEventListener('click', () => {
+      daten = normalisierenEingang(historie[index].daten);
+      naechteManuell = true;
+      schreibeFelder();
+      zeichnePositionen();
+      aktualisiere({ sofort: true });
+      melde(`Rechnung ${eintrag.nummer} geladen.`);
+    });
+    box.appendChild(zeile);
+  });
+}
+
+function naechsteNummer() {
+  const historie = lade(SPEICHER.historie, []);
+  const jahr = new Date().getFullYear();
+  const nummern = historie
+    .map((h) => String(h.nummer || '').match(new RegExp(`^${jahr}-(\\d+)$`)))
+    .filter(Boolean)
+    .map((m) => Number(m[1]));
+  const naechste = (nummern.length ? Math.max(...nummern) : 0) + 1;
+  return `${jahr}-${String(naechste).padStart(3, '0')}`;
+}
+
+/* ------------------------------------------------------------------ Kunden */
+
+function zeichneKunden() {
+  const kunden = lade(SPEICHER.kunden, []);
+  const wahl = $('#kundenwahl');
+  wahl.innerHTML = '<option value="">– auswählen –</option>';
+  kunden.forEach((kunde, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = [kunde.firma, kunde.name, kunde.ort].filter(Boolean).join(' · ');
+    wahl.appendChild(option);
+  });
+}
+
+/* ------------------------------------------------------------------ Import */
+
+function normalisierenEingang(eingang) {
+  const basis = leereRechnung();
+  const profil = lade(SPEICHER.profil, null);
+  return {
+    vermieter: { ...basis.vermieter, ...(profil || {}), ...(eingang.vermieter || {}) },
+    gast: { ...basis.gast, ...(eingang.gast || {}) },
+    rechnung: { ...basis.rechnung, ...(eingang.rechnung || {}) },
+    positionen: Array.isArray(eingang.positionen) ? eingang.positionen.map((p) => ({
+      auto: Boolean(p.auto),
+      titel: p.titel || '',
+      details: Array.isArray(p.details) ? p.details : (p.details ? [String(p.details)] : []),
+      menge: Number(p.menge) || 0,
+      einheit: p.einheit || '',
+      einzelpreis: parseBetrag(p.einzelpreis),
+    })) : [],
+    intern: { ...basis.intern, ...(eingang.intern || {}) },
+  };
+}
+
+function uebernehmen(teil, { ersetzen = false } = {}) {
+  const neu = normalisierenEingang({
+    vermieter: { ...daten.vermieter, ...(teil.vermieter || {}) },
+    gast: ersetzen ? (teil.gast || {}) : { ...daten.gast, ...leerRaus(teil.gast) },
+    rechnung: { ...daten.rechnung, ...leerRaus(teil.rechnung) },
+    positionen: daten.positionen,
+    intern: { ...daten.intern, ...leerRaus(teil.intern) },
+  });
+
+  if (!neu.rechnung.nummer) neu.rechnung.nummer = naechsteNummer();
+  if (!neu.rechnung.datum) neu.rechnung.datum = heuteIso();
+  if (!neu.rechnung.naechte) neu.rechnung.naechte = naechteZwischen(neu.rechnung.anreise, neu.rechnung.abreise);
+
+  // Positionen: mitgelieferte gewinnen, sonst wird aus dem Gesamtpreis die
+  // Uebernachtungszeile neu gebaut. Von Hand ergaenzte Zeilen bleiben erhalten.
+  const gesamt = parseBetrag((teil.intern || {}).gesamtpreis);
+  const vonHand = neu.positionen.filter((position) => !position.auto);
+  if (teil.positionen && teil.positionen.length) {
+    neu.positionen = normalisierenEingang({ positionen: teil.positionen }).positionen;
+  } else if (gesamt) {
+    neu.positionen = [standardPosition(neu), ...vonHand];
+  }
+
+  daten = neu;
+  schreibeFelder();
+  zeichnePositionen();
+  aktualisiere({ sofort: true });
+}
+
+function leerRaus(objekt) {
+  return Object.fromEntries(Object.entries(objekt || {})
+    .filter(([, wert]) => wert !== '' && wert !== null && wert !== undefined));
+}
+
+const PROMPT = `Lies die angehängten Screenshots (Booking.com / Airbnb) und gib mir NUR dieses JSON zurück – keine Erklärung:
+
+{
+  "gast": {"firma":"","name":"","strasse":"","plz":"","ort":"","land":"","email":""},
+  "rechnung": {"portal":"Booking.com","buchungsnummer":"","anreise":"JJJJ-MM-TT","abreise":"JJJJ-MM-TT","naechte":0,"gaeste":1,"hinweis":""},
+  "intern": {"gesamtpreis":0,"kommission":0}
+}
+
+Regeln: "gesamtpreis" ist der Gesamtpreis der Buchung (das, was der Gast zahlt) – die Kommission wird NICHT abgezogen. Wenn der Gast in einer Nachricht eine abweichende Rechnungsanschrift nennt, nimm diese. Felder, die nicht erkennbar sind, leer lassen.`;
+
+function kopiere(text, meldung) {
+  const fertig = () => melde(meldung);
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(fertig).catch(() => ersatzKopie(text, fertig));
+  } else ersatzKopie(text, fertig);
+}
+
+function ersatzKopie(text, fertig) {
+  const feld = document.createElement('textarea');
+  feld.value = text;
+  document.body.appendChild(feld);
+  feld.select();
+  try { document.execCommand('copy'); fertig(); } catch { melde('Kopieren nicht möglich.'); }
+  feld.remove();
+}
+
+function jsonAusText(roh) {
+  const text = String(roh || '').trim();
+  const start = text.indexOf('{');
+  const ende = text.lastIndexOf('}');
+  if (start < 0 || ende < start) throw new Error('Kein JSON gefunden');
+  return JSON.parse(text.slice(start, ende + 1));
+}
+
+function zeigeBilder() {
+  const box = $('#bilder');
+  box.innerHTML = '';
+  bilder.forEach((quelle, index) => {
+    const figur = document.createElement('figure');
+    figur.innerHTML = `<img src="${quelle}" alt="Screenshot ${index + 1}"><button title="Entfernen">×</button>`;
+    figur.querySelector('img').addEventListener('click', () => {
+      $('#lupe img').src = quelle;
+      $('#lupe').classList.add('auf');
+    });
+    figur.querySelector('button').addEventListener('click', () => {
+      bilder.splice(index, 1);
+      zeigeBilder();
+    });
+    box.appendChild(figur);
+  });
+}
+
+function nimmDateien(dateien) {
+  for (const datei of dateien) {
+    if (!datei.type.startsWith('image/')) continue;
+    const leser = new FileReader();
+    leser.onload = () => { bilder.push(leser.result); zeigeBilder(); };
+    leser.readAsDataURL(datei);
+  }
+}
+
+/* -------------------------------------------------------------------- Start */
+
+function bindeEreignisse() {
+  document.addEventListener('input', (ereignis) => {
+    const el = ereignis.target.closest('[data-pfad]');
+    if (!el) return;
+    setze(daten, el.dataset.pfad, leseFeld(el));
+    if (el.dataset.pfad === 'rechnung.naechte') naechteManuell = true;
+    if (el.dataset.pfad === 'rechnung.anreise' || el.dataset.pfad === 'rechnung.abreise') {
+      if (!naechteManuell) {
+        daten.rechnung.naechte = naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
+        $('[data-pfad="rechnung.naechte"]').value = daten.rechnung.naechte || '';
+      }
+    }
+    if (el.dataset.pfad === 'vermieter.kleinunternehmer') {
+      $('#ustFelder').style.display = daten.vermieter.kleinunternehmer ? 'none' : '';
+    }
+    aktualisiere();
+  });
+
+  $('#btnPdf').addEventListener('click', herunterladen);
+  $('#btnPdfOben').addEventListener('click', herunterladen);
+  $('#btnDrucken').addEventListener('click', drucken);
+  $('#btnOeffnen').addEventListener('click', drucken);
+
+  $$('.importreiter button').forEach((knopf) => {
+    knopf.addEventListener('click', () => {
+      $$('.importreiter button').forEach((b) => b.classList.toggle('aktiv', b === knopf));
+      $$('[data-importfeld]').forEach((feld) => {
+        feld.hidden = feld.dataset.importfeld !== knopf.dataset.import;
+      });
+    });
+  });
+
+  $('#btnPrompt').addEventListener('click', () => kopiere(PROMPT, 'Prompt kopiert – zusammen mit den Screenshots an Claude schicken.'));
+  $('#btnJson').addEventListener('click', () => {
+    try {
+      uebernehmen(jsonAusText($('#jsonEingabe').value), { ersetzen: true });
+      melde('Daten übernommen.');
+    } catch (fehler) {
+      melde(`JSON nicht lesbar: ${fehler.message}`);
+    }
+  });
+  $('#btnText').addEventListener('click', () => {
+    const text = $('#textEingabe').value;
+    if (!text.trim()) { melde('Bitte zuerst Text einfügen.'); return; }
+    uebernehmen(analysiereText(text));
+    melde('Erkannte Daten übernommen – bitte prüfen.');
+  });
+
+  $('#ablage').addEventListener('click', () => $('#dateiEingabe').click());
+  $('#dateiEingabe').addEventListener('change', (e) => nimmDateien(e.target.files));
+  ['dragenter', 'dragover'].forEach((typ) => $('#ablage').addEventListener(typ, (e) => {
+    e.preventDefault(); $('#ablage').classList.add('hover');
+  }));
+  ['dragleave', 'drop'].forEach((typ) => $('#ablage').addEventListener(typ, (e) => {
+    e.preventDefault(); $('#ablage').classList.remove('hover');
+    if (typ === 'drop') nimmDateien(e.dataTransfer.files);
+  }));
+  window.addEventListener('paste', (e) => {
+    const dateien = Array.from(e.clipboardData?.files || []);
+    if (dateien.length) { nimmDateien(dateien); melde('Screenshot eingefügt.'); }
+  });
+  $('#lupe').addEventListener('click', () => $('#lupe').classList.remove('auf'));
+
+  $$('.schnellwahl button').forEach((knopf) => knopf.addEventListener('click', () => {
+    const art = knopf.dataset.vorlage;
+    daten.positionen.push(art === 'uebernachtung'
+      ? standardPosition(normalisiere(daten))
+      : { ...VORLAGEN[art], details: [] });
+    zeichnePositionen();
+    aktualisiere();
+  }));
+
+  $('#btnKundeMerken').addEventListener('click', () => {
+    const kunden = lade(SPEICHER.kunden, []);
+    const kunde = { ...daten.gast };
+    if (!kunde.firma && !kunde.name) { melde('Bitte Firma oder Name eingeben.'); return; }
+    const index = kunden.findIndex((k) => k.firma === kunde.firma && k.name === kunde.name);
+    if (index >= 0) kunden[index] = kunde; else kunden.push(kunde);
+    speichere(SPEICHER.kunden, kunden);
+    zeichneKunden();
+    melde('Kunde gespeichert.');
+  });
+  $('#btnKundeLoeschen').addEventListener('click', () => {
+    const wahl = $('#kundenwahl').value;
+    if (wahl === '') { melde('Bitte zuerst einen Kunden auswählen.'); return; }
+    const kunden = lade(SPEICHER.kunden, []);
+    kunden.splice(Number(wahl), 1);
+    speichere(SPEICHER.kunden, kunden);
+    zeichneKunden();
+    melde('Kunde gelöscht.');
+  });
+  $('#kundenwahl').addEventListener('change', (e) => {
+    if (e.target.value === '') return;
+    const kunde = lade(SPEICHER.kunden, [])[Number(e.target.value)];
+    if (!kunde) return;
+    daten.gast = { ...leereRechnung().gast, ...kunde };
+    schreibeFelder();
+    aktualisiere();
+  });
+
+  $('#btnJsonKopieren').addEventListener('click', () => kopiere(JSON.stringify(daten, null, 2), 'JSON kopiert.'));
+  $('#btnZuruecksetzen').addEventListener('click', () => {
+    const profil = lade(SPEICHER.profil, null);
+    daten = leereRechnung();
+    if (profil) daten.vermieter = { ...daten.vermieter, ...profil };
+    daten.rechnung.nummer = naechsteNummer();
+    naechteManuell = false;
+    bilder = [];
+    zeigeBilder();
+    schreibeFelder();
+    zeichnePositionen();
+    aktualisiere({ sofort: true });
+    melde('Neue Rechnung angelegt.');
+  });
+
+  $('#reiterDaten').addEventListener('click', () => {
+    document.body.classList.remove('zeigt-vorschau');
+    $('#reiterDaten').classList.add('aktiv');
+    $('#reiterVorschau').classList.remove('aktiv');
+  });
+  $('#reiterVorschau').addEventListener('click', () => {
+    document.body.classList.add('zeigt-vorschau');
+    $('#reiterVorschau').classList.add('aktiv');
+    $('#reiterDaten').classList.remove('aktiv');
+    aktualisiere({ sofort: true });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); herunterladen(); }
+  });
+}
+
+function ausHash() {
+  const treffer = location.hash.match(/daten=([^&]+)/);
+  if (!treffer) return null;
+  try {
+    const text = decodeURIComponent(escapeDecode(atob(treffer[1].replace(/-/g, '+').replace(/_/g, '/'))));
+    return JSON.parse(text);
+  } catch { return null; }
+}
+
+function escapeDecode(binaer) {
+  return Array.from(binaer, (zeichen) => `%${zeichen.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
+}
+
+function start() {
+  const profil = lade(SPEICHER.profil, null);
+  const entwurf = lade(SPEICHER.entwurf, null);
+  const uebergabe = ausHash();
+
+  daten = leereRechnung();
+  if (profil) daten.vermieter = { ...daten.vermieter, ...profil };
+  if (entwurf && !uebergabe) daten = normalisierenEingang(entwurf);
+  if (uebergabe) daten = normalisierenEingang({ ...uebergabe, vermieter: { ...daten.vermieter, ...(uebergabe.vermieter || {}) } });
+
+  if (!daten.rechnung.nummer) daten.rechnung.nummer = naechsteNummer();
+  if (!daten.rechnung.datum) daten.rechnung.datum = heuteIso();
+  if (!daten.rechnung.naechte) {
+    daten.rechnung.naechte = naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
+  }
+  if (uebergabe && !daten.positionen.length) {
+    const gesamt = parseBetrag(daten.intern.gesamtpreis);
+    if (gesamt) daten.positionen = [standardPosition(daten)];
+  }
+  naechteManuell = Boolean(daten.rechnung.naechte)
+    && daten.rechnung.naechte !== naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
+
+  bindeEreignisse();
+  schreibeFelder();
+  zeichnePositionen();
+  zeichneKunden();
+  zeichneHistorie();
+  aktualisiere({ sofort: true });
+
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* offline optional */ });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', start);
+})();
+</script>
+</body>
+</html>
