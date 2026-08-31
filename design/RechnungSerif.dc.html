@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap">
+  <style>
+    body { margin: 0; background: #ffffff;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+    a { color: #1f5f46; } a:hover { color: #14432f; }
+    .serif { font-family: "Instrument Serif", Georgia, "Times New Roman", serif; font-weight: 400; }
+    .lbl { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #8b918e; }
+    .num { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="width: 794px; height: 1123px; background: #ffffff; color: #15181a; padding: 64px 72px 56px; box-sizing: border-box; display: flex; flex-direction: column;">
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid #15181a; padding-bottom: 18px;">
+    <div class="serif" style="font-size: 30px; line-height: 1;">Wohlfühlapartment Guxhagen</div>
+    <div class="lbl" style="padding-bottom: 3px;">Rechnung 2026-018</div>
+  </div>
+
+  <div style="display: flex; gap: 56px; margin-top: 72px; align-items: flex-start;">
+    <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1;">
+      <div class="lbl" style="margin-bottom: 12px;">Rechnung an</div>
+      <div style="font-size: 16px; font-weight: 600;">BSU InfraBau GmbH</div>
+      <div style="font-size: 15px; line-height: 1.55; color: #3d443f;">Jägerstr. 27<br>57299 Burbach</div>
+      <div style="font-size: 13px; color: #8b918e; margin-top: 6px;">Hasret.demirkiran@bsu-gmbh.de</div>
+    </div>
+    <div style="width: 268px; display: flex; flex-direction: column; gap: 9px; flex: none;">
+      <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #8b918e;">Rechnungsdatum</span><span class="num">31.08.2026</span></div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #8b918e;">Buchungsnummer</span><span class="num">6138652495</span></div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #8b918e;">Zeitraum</span><span class="num">10.–11.08.2026</span></div>
+      <div style="display: flex; justify-content: space-between; font-size: 13px;"><span style="color: #8b918e;">Nächte · Gäste</span><span class="num">1 · 1</span></div>
+    </div>
+  </div>
+
+  <div style="margin-top: 80px;">
+    <div style="display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid #e4e7e5;">
+      <div class="lbl">Leistung</div>
+      <div class="lbl">Betrag</div>
+    </div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 40px; padding: 22px 0 24px; border-bottom: 1px solid #e4e7e5;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="font-size: 15.5px;">Übernachtung im Wohlfühlapartment</div>
+        <div style="font-size: 12.5px; line-height: 1.7; color: #8b918e;">1 Nacht · 10.08. – 11.08.2026 · Guxhagen<br>Buchung über Booking.com</div>
+      </div>
+      <div class="num" style="font-size: 15.5px; white-space: nowrap;">69,00 €</div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 30px;">
+      <span class="lbl" style="color: #15181a;">Gesamt zu zahlen</span>
+      <span class="serif num" style="font-size: 40px; line-height: 1; color: {{accent}};">69,00 €</span>
+    </div>
+
+    <div style="font-size: 11.5px; color: #8b918e; margin-top: 22px; max-width: 420px; line-height: 1.6;">
+      Im Rechnungsbetrag ist gemäß § 19 UStG keine Umsatzsteuer enthalten.
+    </div>
+  </div>
+
+  <div style="margin-top: 64px; display: flex; flex-direction: column; gap: 18px;">
+    <div style="font-size: 14px;">Bitte bis zum 14.09.2026 überweisen.</div>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px;">
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <span class="lbl">Empfänger</span><span style="font-size: 13.5px;">Anne &amp; Andreas Steffen</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <span class="lbl">IBAN</span><span class="num" style="font-size: 13.5px;">DE23 7603 0080 0230 4925 43</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 5px;">
+        <span class="lbl">Verwendungszweck</span><span style="font-size: 13.5px;">Rechnung 2026-018</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1;"></div>
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #e4e7e5; padding-top: 16px;">
+    <span style="font-size: 11.5px; color: #8b918e; line-height: 1.6;">Anne &amp; Andreas Steffen · Dörnhagener Str. 11 · 34302 Guxhagen<br>Steuernr. 024 482 44529 · 01728869146</span>
+    <span class="serif" style="font-size: 19px; font-style: italic; color: #3d443f;">Vielen Dank für Ihren Besuch</span>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#15181a","options":["#15181a","#1f5f46","#8a5a2b","#2b4a7d"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#15181a' };
+  }
+}
+</script>
+</body>
+</html>

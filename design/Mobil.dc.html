@@ -1,0 +1,92 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; background: #ffffff;
+      font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased; color: #15181a; }
+    a { color: #1f5f46; } a:hover { color: #14432f; }
+    .lbl { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: #8b918e; }
+    .num { font-variant-numeric: tabular-nums; }
+    .feld { display: flex; flex-direction: column; gap: 6px; }
+    .feld span { font-size: 11.5px; color: #8b918e; }
+    .feld div { font-size: 16px; padding-bottom: 10px; border-bottom: 1px solid #e4e7e5; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; background: #ffffff; display: flex; flex-direction: column; box-sizing: border-box;">
+
+  <div style="height: 56px; flex: none; border-bottom: 1px solid #e4e7e5; display: flex; align-items: center; gap: 10px; padding: 0 20px;">
+    <span style="font-size: 16px; font-weight: 600; letter-spacing: -.01em;">Rechnung</span>
+    <span style="font-size: 13px; color: #8b918e;">2026-018</span>
+    <div style="flex-grow: 1;"></div>
+    <span style="font-size: 14px; color: #15181a;">Neu</span>
+  </div>
+
+  <div style="flex-grow: 1; padding: 22px 20px 20px; display: flex; flex-direction: column; gap: 26px; overflow: hidden;">
+
+    <div style="display: flex; gap: 20px; border-bottom: 1px solid #e4e7e5;">
+      <div style="font-size: 14px; padding-bottom: 11px; border-bottom: 2px solid {{accent}}; margin-bottom: -1px;">Claude</div>
+      <div style="font-size: 14px; padding-bottom: 11px; color: #8b918e;">Text</div>
+      <div style="font-size: 14px; padding-bottom: 11px; color: #8b918e;">Screenshot</div>
+    </div>
+
+    <div style="border: 1px dashed #d7dcd9; border-radius: 4px; padding: 18px 14px; font-size: 13.5px; color: #b9bfbb;">
+      JSON von Claude einfügen
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="lbl">Empfänger</div>
+      <div class="feld"><span>Firma</span><div>BSU InfraBau GmbH</div></div>
+      <div class="feld"><span>Straße</span><div>Jägerstr. 27</div></div>
+      <div class="feld"><span>PLZ, Ort</span><div class="num">57299 Burbach</div></div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div class="lbl">Buchung</div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px;">
+        <div class="feld"><span>Anreise</span><div class="num">10.08.2026</div></div>
+        <div class="feld"><span>Abreise</span><div class="num">11.08.2026</div></div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <div class="lbl">Positionen</div>
+      <div style="display: flex; align-items: flex-start; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid #e4e7e5;">
+        <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1;">
+          <span style="font-size: 15px;">Übernachtung</span>
+          <span style="font-size: 12px; color: #8b918e;">1 Nacht · Booking.com</span>
+        </div>
+        <span class="num" style="font-size: 15px;">69,00 €</span>
+      </div>
+      <span style="font-size: 14px; color: #15181a;">+ Position</span>
+    </div>
+  </div>
+
+  <div style="flex: none; border-top: 1px solid #e4e7e5; padding: 14px 20px 22px; display: flex; align-items: center; gap: 14px;">
+    <div style="display: flex; flex-direction: column; gap: 2px;">
+      <span class="num" style="font-size: 19px; font-weight: 600;">69,00 €</span>
+      <span style="font-size: 11.5px; color: #8b918e;">fällig 14.09.2026</span>
+    </div>
+    <div style="flex-grow: 1;"></div>
+    <div style="height: 48px; display: flex; align-items: center; padding: 0 16px; font-size: 14.5px; border: 1px solid #e4e7e5; border-radius: 4px;">Vorschau</div>
+    <div style="height: 48px; display: flex; align-items: center; padding: 0 20px; font-size: 14.5px; color: #ffffff; background: {{accent}}; border-radius: 4px;">PDF</div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#1f5f46","options":["#1f5f46","#15181a","#8a5a2b","#2b4a7d"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#1f5f46' };
+  }
+}
+</script>
+</body>
+</html>
