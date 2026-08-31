@@ -23,8 +23,9 @@ dafür steckt in `.claude/skills/rechnung/SKILL.md`.
 * **Screenshots** – Bilder als Vorlage danebenlegen und abtippen.
 
 Alle Zeilen bleiben danach frei bearbeitbar: Bezeichnung, Detailzeilen, Menge,
-Einheit, Einzelpreis. Rechts läuft die Live-Vorschau des echten PDFs mit,
-unten steht *PDF herunterladen*.
+Einheit, Einzelpreis. Rechts läuft die Live-Vorschau mit – sie zeichnet dieselben
+Befehle wie das PDF auf ein Canvas, sieht also aus wie die fertige Datei und
+funktioniert auch auf dem Handy. Unten steht *PDF herunterladen*.
 
 **3. Auf der Kommandozeile**
 
@@ -85,8 +86,12 @@ festlegen, ob die Preise brutto oder netto gemeint sind.
 | `src/parse.mjs` | Erkennt Buchungsdaten in kopiertem Text |
 | `src/ui.mjs` | Bedienoberfläche |
 | `src/index.template.html` | Markup und Gestaltung der App |
-| `build.mjs` | Bündelt alles zu `index.html` |
+| `build.mjs` | Bündelt alles zu `index.html` und zur Claude-Vorschau `vorschau.html` |
 | `cli.mjs` | Rechnung aus JSON auf der Kommandozeile |
+
+`vorschau.html` ist dieselbe App ohne eigenen Seitenrahmen – zum Veröffentlichen
+als Claude-Artifact. Dort speichert die Vorschau-Umgebung die PDF-Datei
+(`downloads`-Fähigkeit), weil die Seite den Download nicht selbst starten darf.
 
 Nach Änderungen in `src/` neu bündeln:
 

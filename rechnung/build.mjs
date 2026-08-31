@@ -28,3 +28,17 @@ if (!vorlage.includes('/*__JS__*/')) throw new Error('Platzhalter /*__JS__*/ feh
 const ziel = join(hier, 'index.html');
 writeFileSync(ziel, vorlage.replace('/*__JS__*/', () => bundle));
 console.log(`${ziel} (${Math.round(bundle.length / 1024)} kB JavaScript)`);
+
+/* Zweite Fassung fuer die Claude-Vorschau: dort liefert die Umgebung den
+ * Seitenrahmen (doctype, head, body) und das Speichern der Datei. */
+const vorschau = vorlage
+  .replace(/<!doctype html>\s*/i, '')
+  .replace(/<\/?(html|head|body)(\s[^>]*)?>\s*/gi, '')
+  .replace(/^\s*<(meta|link)[^>]*>\s*$/gim, '')
+  .replace(/<title>[^<]*<\/title>/i, '<title>Rechnungen Wohlfühlapartment</title>')
+  .replace('/*__JS__*/', () => bundle)
+  .replace(/\n{3,}/g, '\n\n');
+
+const vorschauZiel = join(hier, 'vorschau.html');
+writeFileSync(vorschauZiel, vorschau.trimStart());
+console.log(vorschauZiel);

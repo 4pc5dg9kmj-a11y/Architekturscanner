@@ -4,6 +4,7 @@ import {
   baueRechnungPdf, dateiname, formatEuro, heuteIso, isoDatum, leereRechnung,
   naechteZwischen, normalisiere, parseBetrag, formatDatum,
 } from './invoice.mjs';
+import { zeichneSeite } from './pdf.mjs';
 import { standardPosition } from './positionen.mjs';
 import { analysiereText } from './parse.mjs';
 
@@ -19,7 +20,6 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 let daten = leereRechnung();
 let bilder = [];
-let pdfUrl = null;
 let naechteManuell = false;
 let zeichnenTimer = null;
 
@@ -180,35 +180,66 @@ function pdfBlob(modell) {
 
 function zeichneVorschau(modell) {
   const leer = !modell.zeilen.length;
+  const blaetter = $('#blaetter');
   $('#vorschauLeer').hidden = !leer;
-  $('#rahmenPdf').style.display = leer ? 'none' : '';
+  blaetter.style.display = leer ? 'none' : '';
   $('#vorschauInfo').textContent = leer
     ? 'Live-Vorschau'
     : `Live-Vorschau · ${modell.rechnung.nummer || 'ohne Nummer'}`;
   if (leer) return;
+
   try {
-    const url = URL.createObjectURL(pdfBlob(modell));
-    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-    pdfUrl = url;
-    $('#rahmenPdf').src = url;
+    // Dieselben Zeichenbefehle wie im PDF – nur auf den Bildschirm.
+    const doc = baueRechnungPdf(modell, { alsDokument: true });
+    const breite = Math.max(240, blaetter.clientWidth - 28);
+    const skala = Math.min(1.6, breite / doc.width);
+    const dichte = Math.min(2, window.devicePixelRatio || 1);
+    blaetter.innerHTML = '';
+    for (let seite = 0; seite < doc.pageCount; seite += 1) {
+      const leinwand = document.createElement('canvas');
+      leinwand.setAttribute('role', 'img');
+      leinwand.setAttribute('aria-label', `Rechnung Seite ${seite + 1}`);
+      blaetter.appendChild(leinwand);
+      zeichneSeite(doc, seite, leinwand, { skala, dichte });
+    }
   } catch (fehler) {
     melde(`Vorschau fehlgeschlagen: ${fehler.message}`);
   }
 }
 
-function herunterladen() {
+async function herunterladen() {
   const modell = baueModell();
   if (!modell.zeilen.length) { melde('Bitte zuerst eine Position anlegen.'); return; }
-  const url = URL.createObjectURL(pdfBlob(modell));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = dateiname(modell);
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  const name = dateiname(modell);
+  const ergebnis = await ueberClaudeSpeichern(baueRechnungPdf(modell), name);
+  if (ergebnis === 'abgebrochen') return;
+  if (ergebnis === 'nicht-verfuegbar') {
+    const url = URL.createObjectURL(pdfBlob(modell));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
   merkeHistorie(modell);
   melde('PDF gespeichert.');
+}
+
+/* In der Claude-Vorschau darf die Seite den Download nicht selbst starten –
+ * dort uebernimmt das die Speichern-Funktion der Umgebung. Ueberall sonst
+ * greift der normale Browser-Download. */
+async function ueberClaudeSpeichern(bytes, name) {
+  try {
+    const speichern = await window.claude?.use?.('downloads');
+    if (!speichern) return 'nicht-verfuegbar';
+    await speichern.save({ filename: name, data: bytes });
+    return 'gespeichert';
+  } catch (fehler) {
+    if (fehler && fehler.code === 'declined') { melde('Speichern abgebrochen.'); return 'abgebrochen'; }
+    return 'nicht-verfuegbar';
+  }
 }
 
 function drucken() {
@@ -536,6 +567,21 @@ function bindeEreignisse() {
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); herunterladen(); }
   });
+
+  let groesseTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(groesseTimer);
+    groesseTimer = setTimeout(() => aktualisiere({ sofort: true }), 200);
+  });
+}
+
+/* In der Claude-Vorschau lassen sich keine neuen Fenster oeffnen – dort fuehrt
+ * nur der Speichern-Weg zum Ziel. */
+async function passeUmgebungAn() {
+  const speichern = await window.claude?.use?.('downloads').catch(() => null);
+  if (!speichern) return;
+  $('#btnDrucken').hidden = true;
+  $('#btnOeffnen').hidden = true;
 }
 
 function ausHash() {
@@ -580,7 +626,10 @@ export function start() {
   zeichneHistorie();
   aktualisiere({ sofort: true });
 
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  passeUmgebungAn();
+
+  const alsApp = document.querySelector('link[rel="manifest"]');
+  if (alsApp && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => { /* offline optional */ });
   }
 }

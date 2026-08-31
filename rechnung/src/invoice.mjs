@@ -458,8 +458,12 @@ function zahlungsblock(doc, model, y) {
   return y + hoehe;
 }
 
-/** Baut das PDF und liefert die Bytes (Uint8Array). */
-export function baueRechnungPdf(input) {
+/**
+ * Baut die Rechnung. Standard: fertige PDF-Bytes (Uint8Array).
+ * Mit { alsDokument: true } kommt das PdfDoc zurueck – fuer die Vorschau
+ * auf dem Bildschirm, die dieselben Zeichenbefehle nutzt.
+ */
+export function baueRechnungPdf(input, { alsDokument = false } = {}) {
   const model = input.summen ? input : normalisiere(input);
   const doc = new PdfDoc({
     title: `Rechnung ${model.rechnung.nummer || ''}`.trim(),
@@ -505,5 +509,5 @@ export function baueRechnungPdf(input) {
     fuss(doc, model, index + 1, seiten);
   });
 
-  return doc.build();
+  return alsDokument ? doc : doc.build();
 }

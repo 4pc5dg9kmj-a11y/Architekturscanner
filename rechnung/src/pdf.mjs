@@ -151,6 +151,57 @@ export class PdfDoc {
   }
 
   rect(x, y, w, h, { fill, stroke, lineWidth = 0.6, radius = 0 } = {}) {
+    this.page.push({ art: 'rect', x, y, w, h, fill, stroke, lineWidth, radius });
+  }
+
+  line(x1, y1, x2, y2, { color = [0, 0, 0], width = 0.6, dash = null } = {}) {
+    this.page.push({ art: 'linie', x1, y1, x2, y2, color, width, dash });
+  }
+
+  /**
+   * Setzt eine Textzeile. y ist die Grundlinie (Baseline) von oben gemessen.
+   * align: 'left' | 'right' | 'center' – die Ausrichtung wird sofort in eine
+   * linke x-Position umgerechnet, damit PDF und Bildschirm identisch sitzen.
+   */
+  text(content, x, y, {
+    font = FONTS.regular, size = 10, color = [0, 0, 0], align = 'left',
+    charSpacing = 0, opacity = 1,
+  } = {}) {
+    const raw = String(content ?? '');
+    if (!raw) return;
+    let breite = measure(raw, font, size);
+    if (charSpacing) breite += charSpacing * (toWinAnsi(raw).length - 1);
+    let tx = x;
+    if (align === 'right') tx = x - breite;
+    else if (align === 'center') tx = x - breite / 2;
+    this.page.push({ art: 'text', text: raw, x: tx, y, font, size, color, charSpacing, opacity });
+  }
+
+  /** Mehrzeiliger Text; gibt die y-Position nach dem letzten Umbruch zurueck. */
+  paragraph(content, x, y, maxWidth, {
+    font = FONTS.regular, size = 10, color = [0, 0, 0], leading = null, align = 'left',
+  } = {}) {
+    const step = leading ?? size * 1.35;
+    let cursor = y;
+    for (const lineText of wrapText(content, font, size, maxWidth)) {
+      if (lineText) this.text(lineText, x, cursor, { font, size, color, align });
+      cursor += step;
+    }
+    return cursor;
+  }
+
+  /** Wandelt die gesammelten Befehle einer Seite in einen PDF-Inhaltsstrom. */
+  _inhalt(ops) {
+    const zeilen = [];
+    for (const op of ops) {
+      if (op.art === 'rect') zeilen.push(this._rechteck(op));
+      else if (op.art === 'linie') zeilen.push(this._linie(op));
+      else zeilen.push(this._text(op));
+    }
+    return zeilen.join('\n');
+  }
+
+  _rechteck({ x, y, w, h, fill, stroke, lineWidth, radius }) {
     const ops = [];
     if (fill) ops.push(`${this._color(fill)} rg`);
     if (stroke) ops.push(`${this._color(stroke)} RG`, `${fmt(lineWidth)} w`);
@@ -174,55 +225,24 @@ export class PdfDoc {
       ops.push(`${fmt(x)} ${fmt(y0)} ${fmt(w)} ${fmt(h)} re`);
     }
     ops.push(fill && stroke ? 'B' : fill ? 'f' : 'S');
-    this.page.push(`q ${ops.join(' ')} Q`);
+    return `q ${ops.join(' ')} Q`;
   }
 
-  line(x1, y1, x2, y2, { color = [0, 0, 0], width = 0.6, dash = null } = {}) {
+  _linie({ x1, y1, x2, y2, color, width, dash }) {
     const ops = [`${this._color(color)} RG`, `${fmt(width)} w`];
     if (dash) ops.push(`[${dash.map(fmt).join(' ')}] 0 d`);
     ops.push(`${fmt(x1)} ${fmt(this._y(y1))} m ${fmt(x2)} ${fmt(this._y(y2))} l S`);
-    this.page.push(`q ${ops.join(' ')} Q`);
+    return `q ${ops.join(' ')} Q`;
   }
 
-  /**
-   * Setzt eine Textzeile. y ist die Grundlinie (Baseline) von oben gemessen.
-   * align: 'left' | 'right' | 'center'
-   */
-  text(content, x, y, {
-    font = FONTS.regular, size = 10, color = [0, 0, 0], align = 'left',
-    charSpacing = 0, opacity = 1,
-  } = {}) {
-    const raw = String(content ?? '');
-    if (!raw) return;
-    let width = measure(raw, font, size);
-    if (charSpacing) width += charSpacing * (toWinAnsi(raw).length - 1);
-    let tx = x;
-    if (align === 'right') tx = x - width;
-    else if (align === 'center') tx = x - width / 2;
-    const ops = [
-      'BT',
-      `/${font} ${fmt(size)} Tf`,
-      `${this._color(color)} rg`,
-    ];
+  _text({ text, x, y, font, size, color, charSpacing, opacity }) {
+    const ops = ['BT', `/${font} ${fmt(size)} Tf`, `${this._color(color)} rg`];
     if (charSpacing) ops.push(`${fmt(charSpacing)} Tc`);
-    ops.push(`${fmt(tx)} ${fmt(this._y(y))} Td`);
-    ops.push(`(${escapePdfString(toWinAnsi(raw))}) Tj`);
+    ops.push(`${fmt(x)} ${fmt(this._y(y))} Td`);
+    ops.push(`(${escapePdfString(toWinAnsi(text))}) Tj`);
     ops.push('ET');
-    const alpha = opacity < 1 ? `/GS${Math.round(opacity * 100)} gs ` : '';
-    this.page.push(`q ${alpha}${ops.join(' ')} Q`);
-  }
-
-  /** Mehrzeiliger Text; gibt die y-Position nach dem letzten Umbruch zurueck. */
-  paragraph(content, x, y, maxWidth, {
-    font = FONTS.regular, size = 10, color = [0, 0, 0], leading = null, align = 'left',
-  } = {}) {
-    const step = leading ?? size * 1.35;
-    let cursor = y;
-    for (const lineText of wrapText(content, font, size, maxWidth)) {
-      if (lineText) this.text(lineText, x, cursor, { font, size, color, align });
-      cursor += step;
-    }
-    return cursor;
+    const alpha = opacity < 1 ? '/GS75 gs ' : '';
+    return `q ${alpha}${ops.join(' ')} Q`;
   }
 
   build() {
@@ -243,7 +263,7 @@ export class PdfDoc {
     const gsId = push('<< /Type /ExtGState /ca 0.75 /CA 0.75 >>');
 
     this.pages.forEach((ops) => {
-      const stream = ops.join('\n');
+      const stream = this._inhalt(ops);
       contentIds.push(push(`<< /Length ${toWinAnsi(stream).length} >>\nstream\n${stream}\nendstream`));
     });
 
@@ -282,4 +302,91 @@ export class PdfDoc {
     for (let i = 0; i < pdf.length; i += 1) bytes[i] = pdf.charCodeAt(i) & 0xff;
     return bytes;
   }
+}
+
+/* ------------------------------------------------------------ Bildschirm */
+
+const CANVAS_FONT = {
+  F1: 'Helvetica, Arial, sans-serif',
+  F2: 'Helvetica, Arial, sans-serif',
+  F3: 'Helvetica, Arial, sans-serif',
+};
+
+function css(rgb) {
+  return `rgb(${rgb[0]} ${rgb[1]} ${rgb[2]})`;
+}
+
+/**
+ * Zeichnet eine Seite des Dokuments auf ein Canvas – dieselben Befehle wie im
+ * PDF, damit Vorschau und Datei identisch aussehen. Funktioniert auch dort,
+ * wo eingebettete PDFs nicht angezeigt werden (Handy, Vorschaufenster).
+ */
+export function zeichneSeite(doc, seitenIndex, leinwand, { skala = 1, dichte = 1 } = {}) {
+  const ctx = leinwand.getContext('2d');
+  const gesamt = skala * dichte;
+  leinwand.width = Math.round(doc.width * gesamt);
+  leinwand.height = Math.round(doc.height * gesamt);
+  leinwand.style.width = `${doc.width * skala}px`;
+  leinwand.style.height = `${doc.height * skala}px`;
+  ctx.setTransform(gesamt, 0, 0, gesamt, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, doc.width, doc.height);
+
+  for (const op of doc.pages[seitenIndex] || []) {
+    if (op.art === 'rect') zeichneRechteck(ctx, op);
+    else if (op.art === 'linie') zeichneLinie(ctx, op);
+    else zeichneText(ctx, op);
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+function pfadRechteck(ctx, { x, y, w, h, radius }) {
+  ctx.beginPath();
+  if (radius > 0 && ctx.roundRect) ctx.roundRect(x, y, w, h, Math.min(radius, w / 2, h / 2));
+  else if (radius > 0) {
+    const r = Math.min(radius, w / 2, h / 2);
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  } else ctx.rect(x, y, w, h);
+}
+
+function zeichneRechteck(ctx, op) {
+  pfadRechteck(ctx, op);
+  if (op.fill) { ctx.fillStyle = css(op.fill); ctx.fill(); }
+  if (op.stroke) { ctx.strokeStyle = css(op.stroke); ctx.lineWidth = op.lineWidth; ctx.stroke(); }
+}
+
+function zeichneLinie(ctx, { x1, y1, x2, y2, color, width, dash }) {
+  ctx.save();
+  ctx.strokeStyle = css(color);
+  ctx.lineWidth = width;
+  if (dash) ctx.setLineDash(dash);
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function zeichneText(ctx, { text, x, y, font, size, color, charSpacing, opacity }) {
+  ctx.save();
+  ctx.globalAlpha = opacity ?? 1;
+  ctx.fillStyle = css(color);
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = `${font === FONTS.italic ? 'italic ' : ''}${font === FONTS.bold ? '700 ' : ''}${size}px ${CANVAS_FONT[font]}`;
+  if (charSpacing) {
+    // Buchstabenabstand von Hand setzen – exakt wie im PDF.
+    let cursor = x;
+    for (const zeichen of text) {
+      ctx.fillText(zeichen, cursor, y);
+      cursor += measure(zeichen, font, size) + charSpacing;
+    }
+  } else {
+    ctx.fillText(text, x, y);
+  }
+  ctx.restore();
 }

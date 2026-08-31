@@ -108,7 +108,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 /* ------------------------------------------------------------------- Vorschau */
 .vorschau{position:sticky;top:76px}
 .vorschau .rahmen{background:#fff;border:1px solid var(--linie);border-radius:var(--radius);box-shadow:var(--schatten);overflow:hidden}
-.vorschau iframe{width:100%;height:min(78vh,1000px);border:0;display:block;background:#fff}
+.blaetter{background:#e7ebe8;padding:14px;max-height:min(78vh,1000px);overflow:auto;display:flex;flex-direction:column;align-items:center;gap:14px}
+.blaetter canvas{box-shadow:0 1px 3px rgba(16,32,25,.18),0 10px 30px rgba(16,32,25,.12);border-radius:2px;background:#fff;max-width:100%}
 .vorschau .leer{padding:40px 20px;text-align:center;color:var(--grau)}
 .vorschau .zeile{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--linie);font-size:13px;color:var(--grau)}
 
@@ -319,7 +320,7 @@ code.pfad{background:var(--gruen-hell);border-radius:4px;padding:1px 5px;font-si
         <span class="wachs"></span>
         <button class="knopf klein" id="btnOeffnen">In neuem Tab</button>
       </div>
-      <iframe id="rahmenPdf" title="Rechnungsvorschau"></iframe>
+      <div class="blaetter" id="blaetter" aria-label="Rechnungsvorschau"></div>
       <div class="leer" id="vorschauLeer" hidden>Noch keine Position – füge unten eine Position hinzu.</div>
     </div>
   </section>

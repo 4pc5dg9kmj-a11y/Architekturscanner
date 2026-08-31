@@ -1,14 +1,5 @@
-<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#114732">
-<title>Rechnung erstellen · Wohlfühlapartment</title>
-<link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Rechnung">
+<title>Rechnungen Wohlfühlapartment</title>
+
 <style>
 :root{
   --gruen:#1b6b4b; --gruen-dunkel:#114732; --gruen-hell:#eaf3ee;
@@ -124,9 +115,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .wachs{flex:1}
 code.pfad{background:var(--gruen-hell);border-radius:4px;padding:1px 5px;font-size:12.5px}
 </style>
-</head>
-<body>
-
 <header class="kopf">
   <h1>Rechnung erstellen</h1>
   <div class="summe" id="kopfSumme">0,00 €</div>
@@ -1417,9 +1405,6 @@ function analysiereText(rohtext) {
 /* ---- ui.mjs ---- */
 /* Bedienoberflaeche der Rechnungs-App (laeuft nur im Browser). */
 
-
-
-
 const SPEICHER = {
   profil: 'rechnung.profil',
   kunden: 'rechnung.kunden',
@@ -2049,5 +2034,3 @@ function start() {
 document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
-</body>
-</html>
