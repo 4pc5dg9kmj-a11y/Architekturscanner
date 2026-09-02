@@ -9,19 +9,20 @@ import { A4, FONTS, PdfDoc, measure, wrapText } from './pdf.mjs';
 /* -------------------------------------------------------------- Farben/Raster */
 
 const C = {
-  ink: [26, 29, 27],
-  soft: [107, 118, 113],
-  faint: [147, 156, 151],
-  accent: [27, 107, 75],
-  accentDark: [17, 71, 50],
-  accentSoft: [234, 243, 238],
-  hair: [219, 227, 221],
-  zebra: [247, 249, 248],
+  ink: [21, 24, 26],
+  mid: [61, 68, 63],
+  muted: [139, 145, 142],
+  hair: [228, 231, 229],
+  rule: [21, 24, 26],
+  accent: [31, 95, 70],
   white: [255, 255, 255],
 };
 
-const M = { left: 48, right: 48, bottom: 74, header: 108 };
+// Alle Masse in Punkt (1 pt = 1/72 Zoll). A4 = 595,28 x 841,89 pt.
+const M = { left: 54, right: 54, top: 48, bottom: 42 };
 const CONTENT_W = A4.w - M.left - M.right;
+const SPALTE_W = 201;                 // rechte Spalte: Eckdaten und Summe
+const SPALTE_X = A4.w - M.right - SPALTE_W;
 
 /* ------------------------------------------------------------------ Vorgaben */
 
@@ -210,7 +211,17 @@ export function dateiname(model) {
   return `Rechnung_${nummer}${teil}.pdf`;
 }
 
-/* ------------------------------------------------------------------ Layout */
+/* ------------------------------------------------------------------ Layout
+ *
+ * Reduzierte Gestaltung: weisses Blatt, Haarlinien statt Flaechen, Farbe nur
+ * als schmaler Strich ueber der Summe. Alles ruht auf einer Spaltenkante.
+ */
+
+const LABEL = { font: FONTS.bold, size: 8.25, color: C.muted, charSpacing: 1.15 };
+
+function label(doc, text, x, y, { farbe = C.muted, align = 'left' } = {}) {
+  doc.text(text.toUpperCase(), x, y, { ...LABEL, color: farbe, align });
+}
 
 function anschrift(block) {
   const zeilen = [];
@@ -223,239 +234,194 @@ function anschrift(block) {
   return zeilen;
 }
 
-function kopf(doc, model) {
+function kopfzeile(doc, model) {
   const v = model.vermieter;
-  doc.rect(0, 0, A4.w, M.header, { fill: C.accentDark });
-  doc.rect(0, M.header, A4.w, 4, { fill: C.accent });
-
-  doc.text(v.objekt || 'Ferienwohnung', M.left, 44, {
-    font: FONTS.bold, size: 18, color: C.white,
+  doc.text((v.objekt || 'Ferienwohnung').toUpperCase(), M.left, M.top + 10, {
+    font: FONTS.bold, size: 9.4, color: C.ink, charSpacing: 1.7,
   });
-  doc.text(v.name, M.left, 63, { size: 9.5, color: C.white, opacity: 0.75 });
-  const adresse = [v.strasse, [v.plz, v.ort].filter(Boolean).join(' ')].filter(Boolean).join(' · ');
-  doc.text(adresse, M.left, 77, { size: 9.5, color: C.white, opacity: 0.75 });
-  const kontakt = [v.telefon, v.email].filter(Boolean).join(' · ');
-  doc.text(kontakt, M.left, 91, { size: 9.5, color: C.white, opacity: 0.75 });
-
-  const rechts = A4.w - M.right;
-  doc.text('RECHNUNG', rechts, 46, {
-    font: FONTS.bold, size: 20, color: C.white, align: 'right', charSpacing: 1.6,
-  });
-  const nummer = model.rechnung.nummer ? `Nr. ${model.rechnung.nummer}` : '';
-  if (nummer) doc.text(nummer, rechts, 66, { size: 10, color: C.white, align: 'right', opacity: 0.75 });
-  doc.text(formatDatum(model.rechnung.datum), rechts, 82, {
-    size: 10, color: C.white, align: 'right', opacity: 0.75,
-  });
+  const rechts = [model.rechnung.nummer ? `Rechnung ${model.rechnung.nummer}` : 'Rechnung'];
+  label(doc, rechts[0], A4.w - M.right, M.top + 10, { align: 'right' });
 }
 
-function fuss(doc, model, seite, seiten) {
+function fusszeile(doc, model, seite, seiten) {
   const v = model.vermieter;
-  const y = A4.h - M.bottom + 18;
-  doc.line(M.left, y - 22, A4.w - M.right, y - 22, { color: C.hair, width: 0.8 });
-  if (v.grussformel) {
-    doc.text(v.grussformel, A4.w / 2, y, {
-      font: FONTS.italic, size: 13, color: C.accent, align: 'center',
-    });
-  }
-  const zeile = [
-    v.telefon,
-    v.email,
+  const y = A4.h - M.bottom;
+  doc.line(M.left, y - 20, A4.w - M.right, y - 20, { color: C.hair, width: 0.6 });
+  const links = [
+    v.name,
+    v.strasse,
+    [v.plz, v.ort].filter(Boolean).join(' '),
     v.steuernummer ? `Steuernr. ${v.steuernummer}` : '',
     v.ustId ? `USt-IdNr. ${v.ustId}` : '',
-  ].filter(Boolean).join('  ·  ');
-  doc.text(zeile, M.left, y + 20, { size: 8, color: C.faint });
-  doc.text(`Seite ${seite} von ${seiten}`, A4.w - M.right, y + 20, {
-    size: 8, color: C.faint, align: 'right',
-  });
+  ].filter(Boolean).join(' · ');
+  doc.text(links, M.left, y - 6, { size: 8.6, color: C.muted });
+  const rechts = seiten > 1 ? `${v.telefon} · Seite ${seite}/${seiten}` : v.telefon;
+  doc.text(rechts, A4.w - M.right, y - 6, { size: 8.6, color: C.muted, align: 'right' });
 }
 
-function infoBox(doc, model, x, y, width) {
-  const r = model.rechnung;
-  const eintraege = [
-    ['Rechnungsnr.', r.nummer],
-    ['Rechnungsdatum', formatDatum(r.datum)],
-    ['Buchungsnr.', r.buchungsnummer],
-    ['Buchungsportal', r.portal],
-    ['Anreise', formatDatum(r.anreise)],
-    ['Abreise', formatDatum(r.abreise)],
-    ['Nächte', r.naechte ? String(r.naechte) : ''],
-    ['Gäste', r.gaeste ? String(r.gaeste) : ''],
-  ].filter(([, wert]) => wert);
-
-  const zeilenhoehe = 15;
-  const hoehe = 30 + eintraege.length * zeilenhoehe;
-  doc.rect(x, y, width, hoehe, { fill: C.accentSoft, radius: 8 });
-  doc.text('Buchungsdetails', x + 14, y + 20, {
-    font: FONTS.bold, size: 8.5, color: C.accent, charSpacing: 0.8,
-  });
-  let cursor = y + 40;
-  for (const [label, wert] of eintraege) {
-    doc.text(label, x + 14, cursor, { size: 9, color: C.soft });
-    doc.text(wert, x + width - 14, cursor, { size: 9, font: FONTS.bold, color: C.ink, align: 'right' });
-    cursor += zeilenhoehe;
-  }
-  return y + hoehe;
-}
-
-function empfaenger(doc, model, x, y, width) {
-  const v = model.vermieter;
-  const absender = [v.name, v.strasse, [v.plz, v.ort].filter(Boolean).join(' ')]
-    .filter(Boolean).join(' · ');
-  doc.text(absender, x, y, { size: 7.5, color: C.faint });
-  doc.line(x, y + 4, x + Math.min(width, measure(absender, FONTS.regular, 7.5)), y + 4,
-    { color: C.hair, width: 0.5 });
-
-  doc.text('RECHNUNGSEMPFÄNGER', x, y + 26, {
-    font: FONTS.bold, size: 8, color: C.accent, charSpacing: 0.8,
-  });
-
-  let cursor = y + 46;
-  const zeilen = anschrift(model.gast);
-  zeilen.forEach((zeile, index) => {
-    doc.text(zeile, x, cursor, {
+/** Empfaengeranschrift links; gibt die Unterkante zurueck. */
+function empfaenger(doc, model, y) {
+  label(doc, 'Rechnung an', M.left, y);
+  let cursor = y + 22;
+  anschrift(model.gast).forEach((zeile, index) => {
+    doc.text(zeile, M.left, cursor, {
       font: index === 0 ? FONTS.bold : FONTS.regular,
-      size: index === 0 ? 11.5 : 10.5,
-      color: C.ink,
+      size: index === 0 ? 12 : 11.25,
+      color: index === 0 ? C.ink : C.mid,
     });
-    cursor += index === 0 ? 17 : 15;
+    cursor += index === 0 ? 18 : 15;
   });
   if (model.gast.email) {
-    doc.text(model.gast.email, x, cursor + 3, { size: 9, color: C.soft });
+    doc.text(model.gast.email, M.left, cursor + 4, { size: 9.75, color: C.muted });
     cursor += 18;
   }
   return cursor;
 }
 
-const SPALTEN = {
-  pos: M.left + 4,
-  titel: M.left + 34,
-  menge: M.left + 336,
-  preis: M.left + 410,
-  summe: A4.w - M.right - 6,
-};
+/** Eckdaten rechts als Label-Wert-Zeilen; gibt die Unterkante zurueck. */
+function eckdaten(doc, model, y) {
+  const r = model.rechnung;
+  const zeitraum = [formatDatum(r.anreise), formatDatum(r.abreise)].filter(Boolean).join(' – ');
+  const gaeste = [
+    r.naechte ? `${r.naechte} ${r.naechte === 1 ? 'Nacht' : 'Nächte'}` : '',
+    r.gaeste ? `${r.gaeste} ${Number(r.gaeste) === 1 ? 'Gast' : 'Gäste'}` : '',
+  ].filter(Boolean).join(' · ');
+
+  const zeilen = [
+    ['Rechnungsdatum', formatDatum(r.datum)],
+    ['Buchungsnummer', r.buchungsnummer],
+    ['Gebucht über', r.portal],
+    ['Zeitraum', zeitraum],
+    ['Aufenthalt', gaeste],
+  ].filter(([, wert]) => wert);
+
+  let cursor = y;
+  for (const [name, wert] of zeilen) {
+    doc.text(name, SPALTE_X, cursor, { size: 9.75, color: C.muted });
+    doc.text(wert, A4.w - M.right, cursor, { size: 9.75, color: C.ink, align: 'right' });
+    cursor += 14;
+  }
+  return cursor;
+}
 
 function tabellenkopf(doc, y) {
-  doc.rect(M.left, y, CONTENT_W, 26, { fill: C.accent, radius: 5 });
-  const basis = y + 17;
-  doc.text('POS', SPALTEN.pos, basis, { font: FONTS.bold, size: 8, color: C.white, charSpacing: 0.6 });
-  doc.text('BESCHREIBUNG', SPALTEN.titel, basis, { font: FONTS.bold, size: 8, color: C.white, charSpacing: 0.6 });
-  doc.text('MENGE', SPALTEN.menge, basis, { font: FONTS.bold, size: 8, color: C.white, align: 'right', charSpacing: 0.6 });
-  doc.text('EINZELPREIS', SPALTEN.preis, basis, { font: FONTS.bold, size: 8, color: C.white, align: 'right', charSpacing: 0.6 });
-  doc.text('BETRAG', SPALTEN.summe, basis, { font: FONTS.bold, size: 8, color: C.white, align: 'right', charSpacing: 0.6 });
-  return y + 26;
+  label(doc, 'Leistung', M.left, y);
+  label(doc, 'Betrag', A4.w - M.right, y, { align: 'right' });
+  doc.line(M.left, y + 8, A4.w - M.right, y + 8, { color: C.rule, width: 0.75 });
+  return y + 8;
+}
+
+/** Zusatzzeile "3 Nächte × 85,00 €" – nur wenn die Menge es verlangt. */
+function mengenzeile(zeile) {
+  if (Number(zeile.menge) === 1 && !zeile.einheit) return '';
+  const menge = `${formatMenge(zeile.menge)}${zeile.einheit ? ` ${zeile.einheit}` : ''}`;
+  return Number(zeile.menge) === 1 ? '' : `${menge} × ${formatEuro(zeile.einzelpreis)}`;
+}
+
+function detailZeilen(zeile) {
+  const zusatz = mengenzeile(zeile);
+  return [...(zusatz ? [zusatz] : []), ...zeile.details];
 }
 
 function zeilenhoehe(zeile) {
-  const breite = SPALTEN.menge - SPALTEN.titel - 24;
-  const titelZeilen = wrapText(zeile.titel || '', FONTS.bold, 10.5, breite).length || 1;
-  const detailZeilen = zeile.details.reduce(
-    (sum, d) => sum + wrapText(d, FONTS.regular, 8.8, breite).length, 0,
-  );
-  return 14 + titelZeilen * 14 + detailZeilen * 11.5;
+  const breite = SPALTE_X - M.left - 30;
+  const titelZeilen = wrapText(zeile.titel || '', FONTS.regular, 11.6, breite).length || 1;
+  const details = detailZeilen(zeile)
+    .reduce((summe, d) => summe + wrapText(d, FONTS.regular, 9.4, breite).length, 0);
+  return 22 + titelZeilen * 15 + details * 13 + 6;
 }
 
-function zeichneZeile(doc, zeile, index, y) {
+function zeichneZeile(doc, zeile, y) {
   const hoehe = zeilenhoehe(zeile);
-  if (index % 2 === 1) doc.rect(M.left, y, CONTENT_W, hoehe, { fill: C.zebra });
-  doc.line(M.left, y + hoehe, A4.w - M.right, y + hoehe, { color: C.hair, width: 0.5 });
-
-  const breite = SPALTEN.menge - SPALTEN.titel - 24;
-  let cursor = y + 18;
-  doc.text(String(index + 1), SPALTEN.pos, cursor, { size: 9, color: C.faint });
-  doc.text(formatMenge(zeile.menge) + (zeile.einheit ? ` ${zeile.einheit}` : ''),
-    SPALTEN.menge, cursor, { size: 10, color: C.ink, align: 'right' });
-  doc.text(formatEuro(zeile.einzelpreis), SPALTEN.preis, cursor, { size: 10, color: C.ink, align: 'right' });
-  doc.text(formatEuro(zeile.summe), SPALTEN.summe, cursor, { font: FONTS.bold, size: 10.5, color: C.ink, align: 'right' });
-
-  for (const t of wrapText(zeile.titel || '', FONTS.bold, 10.5, breite)) {
-    doc.text(t, SPALTEN.titel, cursor, { font: FONTS.bold, size: 10.5, color: C.ink });
-    cursor += 14;
+  const breite = SPALTE_X - M.left - 30;
+  let cursor = y + 22;
+  for (const stueck of wrapText(zeile.titel || '', FONTS.regular, 11.6, breite)) {
+    doc.text(stueck, M.left, cursor, { size: 11.6, color: C.ink });
+    cursor += 15;
   }
-  for (const detail of zeile.details) {
-    for (const t of wrapText(detail, FONTS.regular, 8.8, breite)) {
-      doc.text(t, SPALTEN.titel, cursor, { size: 8.8, color: C.soft });
-      cursor += 11.5;
+  cursor += 2;
+  for (const detail of detailZeilen(zeile)) {
+    for (const stueck of wrapText(detail, FONTS.regular, 9.4, breite)) {
+      doc.text(stueck, M.left, cursor, { size: 9.4, color: C.muted });
+      cursor += 13;
     }
   }
+  doc.text(formatEuro(zeile.summe), A4.w - M.right, y + 22, {
+    size: 11.6, color: C.ink, align: 'right',
+  });
+  doc.line(M.left, y + hoehe, A4.w - M.right, y + hoehe, { color: C.hair, width: 0.6 });
   return y + hoehe;
 }
 
 function summenblock(doc, model, y) {
-  const breite = 250;
-  const x = A4.w - M.right - breite;
-  const rechts = A4.w - M.right - 6;
   const s = model.summen;
+  const rechts = A4.w - M.right;
   let cursor = y + 20;
 
-  const zeile = (label, wert, opts = {}) => {
-    doc.text(label, x + 6, cursor, { size: 9.5, color: opts.stark ? C.ink : C.soft });
-    doc.text(wert, rechts, cursor, {
-      size: 9.5, color: C.ink, font: opts.stark ? FONTS.bold : FONTS.regular, align: 'right',
-    });
-    cursor += 16;
+  const zeile = (name, wert) => {
+    doc.text(name, SPALTE_X, cursor, { size: 9.75, color: C.muted });
+    doc.text(wert, rechts, cursor, { size: 9.75, color: C.ink, align: 'right' });
+    cursor += 14;
   };
 
-  const inklusive = model.vermieter.preiseInklUst !== false;
   if (s.satz > 0) {
+    const inklusive = model.vermieter.preiseInklUst !== false;
     zeile('Nettobetrag', formatEuro(s.netto));
     zeile(`${inklusive ? 'enthaltene' : 'zzgl.'} ${formatMenge(s.satz)} % USt.`, formatEuro(s.steuer));
+    cursor += 4;
   } else if (model.zeilen.length > 1) {
     zeile('Zwischensumme', formatEuro(s.zwischensumme));
+    cursor += 4;
   }
 
-  const boxY = cursor - 4;
-  doc.rect(x, boxY, breite, 38, { fill: C.accent, radius: 8 });
-  doc.text('Gesamt zu zahlen', x + 14, boxY + 24, { font: FONTS.bold, size: 11, color: C.white });
-  doc.text(formatEuro(s.gesamt), rechts - 8, boxY + 25, {
-    font: FONTS.bold, size: 14, color: C.white, align: 'right',
+  doc.rect(SPALTE_X, cursor, SPALTE_W, 1.5, { fill: C.accent });
+  cursor += 20;
+  label(doc, 'Gesamt', SPALTE_X, cursor, { farbe: C.ink });
+  doc.text(formatEuro(s.gesamt), rechts, cursor + 4, {
+    font: FONTS.bold, size: 19.5, color: C.ink, align: 'right',
   });
-  cursor = boxY + 38 + 16;
+  cursor += 22;
 
   const hinweis = model.vermieter.kleinunternehmer
-    ? 'Im ausgewiesenen Rechnungsbetrag ist gemäß § 19 UStG keine Umsatzsteuer enthalten.'
-    : `Umsatzsteuer ${formatMenge(s.satz)} % auf die Beherbergungsleistung${inklusive ? ' im Rechnungsbetrag enthalten' : ' zusätzlich berechnet'}.`;
-  cursor = doc.paragraph(hinweis, M.left, cursor, CONTENT_W, { size: 8.5, color: C.soft });
-  return cursor + 6;
+    ? 'Im Rechnungsbetrag ist gemäß § 19 UStG keine Umsatzsteuer enthalten.'
+    : `Umsatzsteuer ${formatMenge(s.satz)} % auf die Beherbergungsleistung${
+      model.vermieter.preiseInklUst !== false ? ' im Rechnungsbetrag enthalten' : ' zusätzlich berechnet'}.`;
+  doc.text(hinweis, M.left, cursor, { size: 8.6, color: C.muted });
+  return cursor + 10;
 }
 
 function zahlungsblock(doc, model, y) {
   const v = model.vermieter;
   const r = model.rechnung;
-  const hoehe = 92;
-  doc.rect(M.left, y, CONTENT_W, hoehe, { fill: C.white, stroke: C.hair, radius: 8, lineWidth: 0.8 });
-  doc.text('ZAHLUNG', M.left + 16, y + 22, {
-    font: FONTS.bold, size: 8.5, color: C.accent, charSpacing: 0.8,
-  });
+  let cursor = y + 30;
 
   if (r.bezahlt) {
-    doc.text('Bereits bezahlt – dieser Beleg dient nur zu Ihrer Unterlage.',
-      M.left + 16, y + 46, { size: 10.5, color: C.ink });
-    if (r.portal) {
-      doc.text(`Zahlung über ${r.portal}.`, M.left + 16, y + 64, { size: 9.5, color: C.soft });
-    }
-    return y + hoehe;
+    doc.text('Bereits bezahlt – dieser Beleg dient nur Ihrer Unterlage.', M.left, cursor, {
+      size: 10.5, color: C.ink,
+    });
+    return cursor + 14;
   }
 
   const faellig = model.faelligkeit
     ? `Bitte bis zum ${formatDatum(model.faelligkeit)} überweisen.`
     : 'Bitte zeitnah überweisen.';
-  doc.text(faellig, M.left + 16, y + 44, { size: 10, color: C.ink });
+  doc.text(faellig, M.left, cursor, { size: 10.5, color: C.ink });
+  cursor += 26;
 
   const felder = [
     ['Empfänger', v.name],
     ['IBAN', v.iban],
-    ['Verwendungszweck', r.nummer ? `Rechnung ${r.nummer}` : ''],
+    [v.bic ? 'BIC' : 'Verwendungszweck', v.bic || (r.nummer ? `Rechnung ${r.nummer}` : '')],
   ].filter(([, wert]) => wert);
-  if (v.bic) felder.splice(2, 0, ['BIC', v.bic]);
+  if (v.bic && r.nummer) felder.push(['Verwendungszweck', `Rechnung ${r.nummer}`]);
 
-  let x = M.left + 16;
-  const spalte = (CONTENT_W - 32) / felder.length;
-  for (const [label, wert] of felder) {
-    doc.text(label, x, y + 66, { size: 8, color: C.faint });
-    doc.text(wert, x, y + 80, { font: FONTS.bold, size: 9.5, color: C.ink });
-    x += spalte;
-  }
-  return y + hoehe;
+  const spalte = CONTENT_W / Math.max(felder.length, 1);
+  felder.forEach(([name, wert], index) => {
+    const x = M.left + index * spalte;
+    label(doc, name, x, cursor);
+    doc.text(wert, x, cursor + 16, { size: 10.1, color: C.ink });
+  });
+  return cursor + 16;
 }
 
 /**
@@ -470,43 +436,42 @@ export function baueRechnungPdf(input, { alsDokument = false } = {}) {
     author: model.vermieter.name,
   });
 
-  kopf(doc, model);
-  const linkeSpalte = A4.w - M.right - 232;
-  const endeEmpfaenger = empfaenger(doc, model, M.left, M.header + 36, linkeSpalte - M.left - 24);
-  const endeInfo = infoBox(doc, model, linkeSpalte, M.header + 30, 232);
+  kopfzeile(doc, model);
+  const kopfEnde = Math.max(
+    empfaenger(doc, model, M.top + 82),
+    eckdaten(doc, model, M.top + 82),
+  );
 
-  let y = Math.max(endeEmpfaenger, endeInfo) + 30;
-  y = tabellenkopf(doc, y);
+  let y = tabellenkopf(doc, kopfEnde + 56);
+  const maxY = A4.h - M.bottom - 40;
 
-  const maxY = A4.h - M.bottom - 30;
-  model.zeilen.forEach((zeile, index) => {
+  for (const zeile of model.zeilen) {
     if (y + zeilenhoehe(zeile) > maxY) {
       doc.addPage();
-      kopf(doc, model);
-      y = tabellenkopf(doc, M.header + 40);
+      kopfzeile(doc, model);
+      y = tabellenkopf(doc, M.top + 60);
     }
-    y = zeichneZeile(doc, zeile, index, y);
-  });
+    y = zeichneZeile(doc, zeile, y);
+  }
 
-  const restHoehe = 210 + (model.rechnung.hinweis ? 40 : 0);
+  const restHoehe = 210 + (model.rechnung.hinweis ? 30 : 0);
   if (y + restHoehe > maxY) {
     doc.addPage();
-    kopf(doc, model);
-    y = M.header + 40;
+    kopfzeile(doc, model);
+    y = M.top + 40;
   }
 
   y = summenblock(doc, model, y);
-  y = zahlungsblock(doc, model, y + 12);
+  y = zahlungsblock(doc, model, y);
 
   if (model.rechnung.hinweis) {
-    doc.paragraph(model.rechnung.hinweis, M.left, y + 26, CONTENT_W, { size: 9, color: C.soft });
+    doc.paragraph(model.rechnung.hinweis, M.left, y + 32, CONTENT_W, { size: 9.4, color: C.muted });
   }
 
   const seiten = doc.pageCount;
-  // Fusszeilen mit korrekter Seitenzahl auf allen Seiten nachziehen.
   doc.pages.forEach((_, index) => {
     doc.page = doc.pages[index];
-    fuss(doc, model, index + 1, seiten);
+    fusszeile(doc, model, index + 1, seiten);
   });
 
   return alsDokument ? doc : doc.build();

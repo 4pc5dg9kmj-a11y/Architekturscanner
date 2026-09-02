@@ -11,11 +11,16 @@ export function standardPosition(daten) {
   const details = [];
   const ort = v.ort || 'Guxhagen';
   const zeitraum = [formatDatum(r.anreise), formatDatum(r.abreise)].filter(Boolean).join(' – ');
-  if (zeitraum) details.push(`${ort} (Zeitraum: ${zeitraum})`);
-  details.push(`${naechte} Übernachtung${naechte === 1 ? '' : 'en'}`);
-  if (r.gaeste) details.push(`${r.gaeste} Gast${Number(r.gaeste) === 1 ? '' : '/Gäste'}`);
+  const erste = [
+    `${naechte} ${naechte === 1 ? 'Nacht' : 'Nächte'}`,
+    zeitraum,
+    ort,
+  ].filter(Boolean).join(' · ');
+  details.push(erste);
   if (r.buchungsnummer) {
-    details.push(`Buchungsnr.: ${r.buchungsnummer}${r.portal ? ` (${r.portal})` : ''}`);
+    details.push(r.portal
+      ? `Buchung ${r.buchungsnummer} über ${r.portal}`
+      : `Buchungsnummer ${r.buchungsnummer}`);
   }
 
   return {

@@ -15,5 +15,6 @@ Gestaltung: weiße Fläche, Haarlinien statt Karten, Eingabefelder nur mit
 Unterlinie, Ziffern in gleicher Breite (`tabular-nums`), Farbe nur auf dem
 PDF-Knopf und als Strich über der Summe.
 
-Die Entwürfe sind noch nicht in `rechnung/` umgesetzt – erst wenn eine der
-beiden Rechnungsfassungen gewählt ist.
+Umgesetzt ist die sachliche Fassung (`Rechnung.dc.html`): App und PDF in
+`rechnung/` folgen ihr. Die Variante mit Serifenschrift bleibt offen – dafür
+müsste die Schrift ins PDF eingebettet werden.

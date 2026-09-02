@@ -156,7 +156,7 @@ function baueModell() {
 
 function aktualisiere({ sofort = false } = {}) {
   const modell = baueModell();
-  $('#kopfSumme').textContent = formatEuro(modell.summen.gesamt);
+  $('#kopfSumme').textContent = modell.rechnung.nummer ? `Nr. ${modell.rechnung.nummer}` : '';
   $('#fussSumme').childNodes[0].nodeValue = formatEuro(modell.summen.gesamt);
   $('#fussDetail').textContent = modell.rechnung.bezahlt
     ? 'Bereits bezahlt'

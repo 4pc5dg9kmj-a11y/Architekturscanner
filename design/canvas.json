@@ -1,12 +1,50 @@
 {
   "artboards": [
-    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1280, "h": 880, "title": "App · Desktop" },
-    { "file": "Mobil.dc.html", "x": 1400, "y": 0, "w": 390, "h": 844, "title": "App · Handy" },
-    { "file": "Rechnung.dc.html", "x": 0, "y": 1040, "w": 794, "h": 1123, "title": "Rechnung", "print": "fixed" },
-    { "file": "RechnungSerif.dc.html", "x": 914, "y": 1040, "w": 794, "h": 1123, "title": "Rechnung · Variante mit Serife", "print": "fixed" }
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 880,
+      "title": "App · Desktop"
+    },
+    {
+      "file": "Mobil.dc.html",
+      "x": 1400,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "App · Handy"
+    },
+    {
+      "file": "Rechnung.dc.html",
+      "x": 0,
+      "y": 1040,
+      "w": 794,
+      "h": 1123,
+      "title": "Rechnung",
+      "print": "fixed"
+    },
+    {
+      "file": "RechnungSerif.dc.html",
+      "x": 914,
+      "y": 1040,
+      "w": 794,
+      "h": 1123,
+      "title": "Rechnung · Variante mit Serife",
+      "print": "fixed"
+    }
   ],
   "annotations": [
-    { "id": "note-richtung", "x": 1880, "y": 1040, "w": 320, "text": "Zwei Wege für die Rechnung:\n\nlinks – rein sachlich, gleiche Schrift wie bisher (Helvetica). So lässt sie sich 1:1 im PDF umsetzen.\n\nrechts – gleiche Ruhe, aber Name und Summe in einer Serifenschrift. Dafür müsste die Schrift ins PDF eingebettet werden.\n\nSag mir, welche – dann baue ich sie in die App." }
+    {
+      "id": "note-richtung",
+      "x": 1880,
+      "y": 1040,
+      "w": 320,
+      "text": "Umgesetzt ist die linke Fassung – sachlich, in Helvetica,\nmit dem grünen Strich über der Summe.\n\nApp und PDF folgen seit dem 02.09.2026 diesem Entwurf.\n\nDie rechte Variante mit Serifenschrift bleibt offen: dafür\nmüsste die Schrift ins PDF eingebettet werden."
+    }
   ],
-  "launch": { "view": "canvas" }
+  "launch": {
+    "view": "canvas"
+  }
 }

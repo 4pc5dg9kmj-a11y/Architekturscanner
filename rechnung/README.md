@@ -1,8 +1,13 @@
 # Rechnung – Gästerechnungen in Sekunden
 
-Aus einem Booking.com-/Airbnb-Screenshot wird eine fertige, sauber gestaltete
-PDF-Rechnung. Ohne Konto, ohne Server, ohne Fremdbibliotheken – das PDF wird
-direkt im Browser bzw. in Node erzeugt.
+Aus einem Booking.com-/Airbnb-Screenshot wird eine fertige PDF-Rechnung. Ohne
+Konto, ohne Server, ohne Fremdbibliotheken – das PDF wird direkt im Browser bzw.
+in Node erzeugt.
+
+Gestaltung: weißes Blatt, Haarlinien statt Kästen, Eingabefelder nur mit
+Unterlinie, Ziffern in gleicher Breite. Farbe kommt zweimal vor – auf dem
+PDF-Knopf und als schmaler Strich über der Summe. Die Entwürfe dazu liegen in
+[`../design/`](../design/README.md).
 
 ![Aufbau](../docs/rechnung-vorschau.png)
 
