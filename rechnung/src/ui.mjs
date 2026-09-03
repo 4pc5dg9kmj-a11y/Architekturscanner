@@ -27,6 +27,7 @@ let bilder = [];
 let sampeln = null;
 let bildGrenzen = null;
 let leseAbbruch = null;
+let lesenMoeglich = true;
 
 // Fehler, nach denen das Lesen in dieser Ansicht gar nicht möglich ist.
 const OHNE_LESEN = new Set([
@@ -468,18 +469,24 @@ async function holeSampler() {
   return sampeln;
 }
 
-function keinLesen(grund) {
+function keinLesen(grund, tipp = '') {
+  lesenMoeglich = false;
   $('#bilderStatus').textContent = grund;
   $('#textweg').hidden = false;
   $('#wegPrompt').hidden = false;
+  const hinweis = $('#textwegHinweis');
+  hinweis.hidden = !tipp;
+  hinweis.textContent = tipp;
 }
+
+const TIPP_OHNE_BILDER = 'Zwei Wege von hier: Im Screenshot den Text markieren (auf dem iPhone lange auf den Text tippen) und unten einfügen – oder „Prompt für Claude kopieren“, den Prompt mit den Bildern im Claude-Chat schicken und die Antwort unten einfügen. Im Browser geöffnet klappt das Lesen oft direkt.';
 
 async function leseScans() {
   const status = $('#bilderStatus');
   status.textContent = 'Verbinde mit Claude …';
   const sampler = await holeSampler();
   if (!sampler) {
-    keinLesen('Diese Ansicht ist nicht mit Claude verbunden. Öffne die Seite in Claude – oder füge den Text der Buchung ein.');
+    keinLesen('Diese Ansicht ist nicht mit Claude verbunden. Öffne die Seite in Claude – oder füge den Text der Buchung ein.', TIPP_OHNE_BILDER);
     return;
   }
 
@@ -501,6 +508,7 @@ async function leseScans() {
       images: dateien,
       signal: leseAbbruch.signal,
     });
+    lesenMoeglich = true;
     uebernehmen(gelesen, { ersetzen: true });
     setzePhase('rechnung');
     const fehlt = [
@@ -520,7 +528,7 @@ async function leseScans() {
     if (code === 'cancelled') {
       status.textContent = 'Abgebrochen.';
     } else if (OHNE_LESEN.has(code)) {
-      keinLesen(LESEFEHLER[code]);
+      keinLesen(LESEFEHLER[code], code === 'images_unavailable' ? TIPP_OHNE_BILDER : '');
     } else {
       status.textContent = LESEFEHLER[code] || 'Das Lesen hat nicht geklappt. Bitte noch einmal versuchen.';
     }
@@ -592,7 +600,8 @@ function jsonAusText(roh) {
 async function erzeuge() {
   const text = $('#textEingabe').value.trim();
 
-  if (bilder.length) { await leseScans(); return; }
+  // Eingefügter Text hat Vorrang – er ist die bewusste Angabe.
+  if (!text && bilder.length && lesenMoeglich) { await leseScans(); return; }
 
   if (text) {
     const alsJson = jsonAusText(text);
