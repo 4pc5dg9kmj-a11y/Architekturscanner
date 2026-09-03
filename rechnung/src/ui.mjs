@@ -96,6 +96,7 @@ function schreibeFelder() {
     if (el.type === 'checkbox') el.checked = Boolean(wert);
     else if (el.dataset.pfad === 'vermieter.preiseInklUst') el.value = wert === false ? 'false' : 'true';
     else if (el.dataset.pfad === 'intern.kommission') el.value = wert == null || wert === '' ? '' : String(wert).replace('.', ',');
+    else if (el.type === 'number' && !wert) el.value = '';
     else el.value = wert == null ? '' : String(wert);
   }
   $('#ustFelder').hidden = Boolean(daten.vermieter.kleinunternehmer);
@@ -400,13 +401,31 @@ function leerRaus(objekt) {
     .filter(([, wert]) => wert !== '' && wert !== null && wert !== undefined));
 }
 
-function uebernehmen(teil, { ersetzen = false } = {}) {
+/**
+ * Uebernimmt gelesene Daten.
+ *
+ * Bei einer neuen Vorlage (Scan oder Text) faengt die Rechnung frisch an:
+ * auf dem Blatt steht dann nur, was in der Vorlage stand. Erhalten bleiben
+ * allein die eigenen Vermieterdaten sowie Rechnungsnummer und -datum.
+ */
+function uebernehmen(teil, { frisch = false } = {}) {
+  const bisher = daten;
+  const grundlage = frisch ? leereRechnung() : daten;
+
   const neu = normalisierenEingang({
-    vermieter: { ...daten.vermieter, ...(teil.vermieter || {}) },
-    gast: ersetzen ? (teil.gast || {}) : { ...daten.gast, ...leerRaus(teil.gast) },
-    rechnung: { ...daten.rechnung, ...leerRaus(teil.rechnung) },
-    positionen: daten.positionen,
-    intern: { ...daten.intern, ...leerRaus(teil.intern) },
+    vermieter: { ...bisher.vermieter, ...(teil.vermieter || {}) },
+    gast: frisch ? (teil.gast || {}) : { ...grundlage.gast, ...leerRaus(teil.gast) },
+    rechnung: {
+      ...grundlage.rechnung,
+      ...(frisch ? {
+        nummer: bisher.rechnung.nummer,
+        datum: heuteIso(),
+        zahlungsziel: bisher.rechnung.zahlungsziel,
+      } : {}),
+      ...leerRaus(teil.rechnung),
+    },
+    positionen: frisch ? [] : grundlage.positionen,
+    intern: frisch ? (teil.intern || {}) : { ...grundlage.intern, ...leerRaus(teil.intern) },
   });
 
   if (!neu.rechnung.nummer) neu.rechnung.nummer = naechsteNummer();
@@ -422,6 +441,7 @@ function uebernehmen(teil, { ersetzen = false } = {}) {
   }
 
   daten = neu;
+  naechteManuell = false;
   schreibeFelder();
   zeichnePositionen();
   aktualisiere({ sofort: true });
@@ -442,7 +462,7 @@ Regeln:
 - "gesamtpreis" ist der Gesamtpreis der Buchung, also das, was der Gast zahlt. Die Kommission des Portals wird NICHT abgezogen, sie gehört nach "kommission".
 - Nennt der Gast in einer Nachricht eine abweichende Rechnungsanschrift ("Bitte stellen Sie die Rechnung auf …"), gilt diese statt des Namens aus der Buchung.
 - Datumsangaben wie "Mo., 10. Aug. 2026" ins Format JJJJ-MM-TT umrechnen.
-- Was nicht erkennbar ist, bleibt leer bzw. 0. Nichts erfinden.`;
+- Was nicht erkennbar ist, bleibt leer bzw. 0. Nichts erfinden, nichts ergänzen: keine Namen, Anschriften, Nummern oder Beträge, die nicht in den Bildern stehen.`;
 
 const LESEFEHLER = {
   not_granted: 'Ohne Erlaubnis kann ich die Bilder nicht lesen – erlaube es beim nächsten Versuch oder füge den Text ein.',
@@ -509,7 +529,7 @@ async function leseScans() {
       signal: leseAbbruch.signal,
     });
     lesenMoeglich = true;
-    uebernehmen(gelesen, { ersetzen: true });
+    uebernehmen(gelesen, { frisch: true });
     setzePhase('rechnung');
     const fehlt = [
       !daten.gast.firma && !daten.gast.name ? 'den Empfänger' : '',
@@ -605,7 +625,7 @@ async function erzeuge() {
 
   if (text) {
     const alsJson = jsonAusText(text);
-    uebernehmen(alsJson || analysiereText(text), { ersetzen: Boolean(alsJson) });
+    uebernehmen(alsJson || analysiereText(text), { frisch: true });
     setzePhase('rechnung');
     if (!daten.positionen.length) {
       oeffneEditor(true);

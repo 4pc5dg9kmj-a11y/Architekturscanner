@@ -58,6 +58,11 @@ vollständig sind.
   benennen, damit er sie korrigieren kann.
 * Fehlt etwas Wesentliches (Preis, Zeitraum, Empfänger), einmal gezielt nachfragen
   statt zu raten.
+* **Nur übernehmen, was in den Bildern steht.** Keine Namen, Anschriften,
+  Buchungsnummern oder Beträge aus früheren Rechnungen, aus dem Verlauf dieses
+  Gesprächs oder aus Beispielen ergänzen. Einzige Ausnahme ist die
+  fortlaufende Rechnungsnummer – und die Vermieterdaten, die ohnehin
+  feststehen.
 
 ## Wenn der Nutzer selbst tippen will
 

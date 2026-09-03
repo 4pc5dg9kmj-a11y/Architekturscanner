@@ -58,7 +58,7 @@ export function leereRechnung() {
       anreise: '',
       abreise: '',
       naechte: 0,
-      gaeste: 1,
+      gaeste: 0,
       zahlungsziel: 14,
       bezahlt: false,
       hinweis: '',

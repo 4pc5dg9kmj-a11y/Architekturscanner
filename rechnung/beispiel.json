@@ -1,18 +1,18 @@
 {
   "gast": {
-    "firma": "BSU InfraBau GmbH",
+    "firma": "Musterfirma GmbH",
     "name": "",
-    "strasse": "Jägerstr. 27",
-    "plz": "57299",
-    "ort": "Burbach",
+    "strasse": "Beispielweg 1",
+    "plz": "12345",
+    "ort": "Musterstadt",
     "land": "DE",
-    "email": "Hasret.demirkiran@bsu-gmbh.de"
+    "email": "rechnung@musterfirma.de"
   },
   "rechnung": {
     "nummer": "2026-018",
     "datum": "2026-08-27",
     "portal": "Booking.com",
-    "buchungsnummer": "6138652495",
+    "buchungsnummer": "1234567890",
     "anreise": "2026-08-10",
     "abreise": "2026-08-11",
     "naechte": 1,

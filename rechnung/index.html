@@ -203,7 +203,7 @@ button,input,select,textarea{font:inherit;color:inherit}
       <p class="hinweis" id="textwegHinweis" hidden></p>
       <div class="feld">
         <label for="textEingabe">Text aus der Buchung oder von Claude</label>
-        <textarea id="textEingabe" placeholder="Bestätigungsnummer: 6138652495&#10;BSU InfraBau GmbH&#10;Jägerstr. 27&#10;57299 Burbach&#10;Gesamtpreis der Buchung € 69"></textarea>
+        <textarea id="textEingabe" placeholder="Text aus der Buchung einfügen – Anschrift, Zeitraum, Buchungsnummer und Preis werden daraus gelesen."></textarea>
       </div>
     </div>
 
@@ -238,8 +238,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 
     <aside class="editor" id="editor" hidden>
       <h2>Empfänger</h2>
-      <div class="feld"><label for="f-firma">Firma</label><input id="f-firma" data-pfad="gast.firma" placeholder="BSU InfraBau GmbH"></div>
-      <div class="feld"><label for="f-name">Name</label><input id="f-name" data-pfad="gast.name" placeholder="Philipp Zahnow"></div>
+      <div class="feld"><label for="f-firma">Firma</label><input id="f-firma" data-pfad="gast.firma"></div>
+      <div class="feld"><label for="f-name">Name</label><input id="f-name" data-pfad="gast.name"></div>
       <div class="feld"><label for="f-strasse">Straße</label><input id="f-strasse" data-pfad="gast.strasse"></div>
       <div class="reihe z13">
         <div class="feld"><label for="f-plz">PLZ</label><input id="f-plz" data-pfad="gast.plz" inputmode="numeric"></div>
@@ -820,7 +820,7 @@ function leereRechnung() {
       anreise: '',
       abreise: '',
       naechte: 0,
-      gaeste: 1,
+      gaeste: 0,
       zahlungsziel: 14,
       bezahlt: false,
       hinweis: '',
@@ -1245,18 +1245,22 @@ function baueRechnungPdf(input, { alsDokument = false } = {}) {
 function standardPosition(daten) {
   const r = daten.rechnung || {};
   const v = daten.vermieter || {};
-  const naechte = Number(r.naechte) || naechteZwischen(r.anreise, r.abreise) || 1;
+  // Nur nennen, was bekannt ist – nichts hinzudichten.
+  const naechte = Number(r.naechte) || naechteZwischen(r.anreise, r.abreise) || 0;
   const gesamt = parseBetrag((daten.intern || {}).gesamtpreis);
 
-  const details = [];
-  const ort = v.ort || 'Guxhagen';
   const zeitraum = [formatDatum(r.anreise), formatDatum(r.abreise)].filter(Boolean).join(' – ');
-  const erste = [
-    `${naechte} ${naechte === 1 ? 'Nacht' : 'Nächte'}`,
-    zeitraum,
-    ort,
-  ].filter(Boolean).join(' · ');
-  details.push(erste);
+  // Der Ort allein sagt nichts – er begleitet Zeitraum oder Nächte.
+  const erste = (naechte || zeitraum)
+    ? [
+      naechte ? `${naechte} ${naechte === 1 ? 'Nacht' : 'Nächte'}` : '',
+      zeitraum,
+      v.ort || '',
+    ].filter(Boolean).join(' · ')
+    : '';
+
+  const details = [];
+  if (erste) details.push(erste);
   if (r.buchungsnummer) {
     details.push(r.portal
       ? `Buchung ${r.buchungsnummer} über ${r.portal}`
@@ -1267,8 +1271,8 @@ function standardPosition(daten) {
     auto: true,
     titel: `Übernachtung im ${v.objekt || 'Apartment'}`,
     details,
-    menge: naechte,
-    einheit: naechte === 1 ? 'Nacht' : 'Nächte',
+    menge: naechte || 1,
+    einheit: naechte ? (naechte === 1 ? 'Nacht' : 'Nächte') : '',
     // Ungerundet, damit Menge x Einzelpreis exakt den Gesamtpreis ergibt.
     einzelpreis: naechte ? gesamt / naechte : gesamt,
   };
@@ -1506,6 +1510,7 @@ function schreibeFelder() {
     if (el.type === 'checkbox') el.checked = Boolean(wert);
     else if (el.dataset.pfad === 'vermieter.preiseInklUst') el.value = wert === false ? 'false' : 'true';
     else if (el.dataset.pfad === 'intern.kommission') el.value = wert == null || wert === '' ? '' : String(wert).replace('.', ',');
+    else if (el.type === 'number' && !wert) el.value = '';
     else el.value = wert == null ? '' : String(wert);
   }
   $('#ustFelder').hidden = Boolean(daten.vermieter.kleinunternehmer);
@@ -1810,13 +1815,31 @@ function leerRaus(objekt) {
     .filter(([, wert]) => wert !== '' && wert !== null && wert !== undefined));
 }
 
-function uebernehmen(teil, { ersetzen = false } = {}) {
+/**
+ * Uebernimmt gelesene Daten.
+ *
+ * Bei einer neuen Vorlage (Scan oder Text) faengt die Rechnung frisch an:
+ * auf dem Blatt steht dann nur, was in der Vorlage stand. Erhalten bleiben
+ * allein die eigenen Vermieterdaten sowie Rechnungsnummer und -datum.
+ */
+function uebernehmen(teil, { frisch = false } = {}) {
+  const bisher = daten;
+  const grundlage = frisch ? leereRechnung() : daten;
+
   const neu = normalisierenEingang({
-    vermieter: { ...daten.vermieter, ...(teil.vermieter || {}) },
-    gast: ersetzen ? (teil.gast || {}) : { ...daten.gast, ...leerRaus(teil.gast) },
-    rechnung: { ...daten.rechnung, ...leerRaus(teil.rechnung) },
-    positionen: daten.positionen,
-    intern: { ...daten.intern, ...leerRaus(teil.intern) },
+    vermieter: { ...bisher.vermieter, ...(teil.vermieter || {}) },
+    gast: frisch ? (teil.gast || {}) : { ...grundlage.gast, ...leerRaus(teil.gast) },
+    rechnung: {
+      ...grundlage.rechnung,
+      ...(frisch ? {
+        nummer: bisher.rechnung.nummer,
+        datum: heuteIso(),
+        zahlungsziel: bisher.rechnung.zahlungsziel,
+      } : {}),
+      ...leerRaus(teil.rechnung),
+    },
+    positionen: frisch ? [] : grundlage.positionen,
+    intern: frisch ? (teil.intern || {}) : { ...grundlage.intern, ...leerRaus(teil.intern) },
   });
 
   if (!neu.rechnung.nummer) neu.rechnung.nummer = naechsteNummer();
@@ -1832,6 +1855,7 @@ function uebernehmen(teil, { ersetzen = false } = {}) {
   }
 
   daten = neu;
+  naechteManuell = false;
   schreibeFelder();
   zeichnePositionen();
   aktualisiere({ sofort: true });
@@ -1852,7 +1876,7 @@ Regeln:
 - "gesamtpreis" ist der Gesamtpreis der Buchung, also das, was der Gast zahlt. Die Kommission des Portals wird NICHT abgezogen, sie gehört nach "kommission".
 - Nennt der Gast in einer Nachricht eine abweichende Rechnungsanschrift ("Bitte stellen Sie die Rechnung auf …"), gilt diese statt des Namens aus der Buchung.
 - Datumsangaben wie "Mo., 10. Aug. 2026" ins Format JJJJ-MM-TT umrechnen.
-- Was nicht erkennbar ist, bleibt leer bzw. 0. Nichts erfinden.`;
+- Was nicht erkennbar ist, bleibt leer bzw. 0. Nichts erfinden, nichts ergänzen: keine Namen, Anschriften, Nummern oder Beträge, die nicht in den Bildern stehen.`;
 
 const LESEFEHLER = {
   not_granted: 'Ohne Erlaubnis kann ich die Bilder nicht lesen – erlaube es beim nächsten Versuch oder füge den Text ein.',
@@ -1919,7 +1943,7 @@ async function leseScans() {
       signal: leseAbbruch.signal,
     });
     lesenMoeglich = true;
-    uebernehmen(gelesen, { ersetzen: true });
+    uebernehmen(gelesen, { frisch: true });
     setzePhase('rechnung');
     const fehlt = [
       !daten.gast.firma && !daten.gast.name ? 'den Empfänger' : '',
@@ -2015,7 +2039,7 @@ async function erzeuge() {
 
   if (text) {
     const alsJson = jsonAusText(text);
-    uebernehmen(alsJson || analysiereText(text), { ersetzen: Boolean(alsJson) });
+    uebernehmen(alsJson || analysiereText(text), { frisch: true });
     setzePhase('rechnung');
     if (!daten.positionen.length) {
       oeffneEditor(true);
