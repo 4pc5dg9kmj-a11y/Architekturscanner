@@ -1,8 +1,12 @@
-/* Bedienoberflaeche der Rechnungs-App (laeuft nur im Browser). */
+/* Bedienoberflaeche der Rechnungs-App (laeuft nur im Browser).
+ *
+ * Fuenf Schritte: Scan einfuegen, Rechnung erzeugen, aendern, speichern,
+ * versenden. Alles andere liegt hinter "Mehr".
+ */
 
 import {
-  baueRechnungPdf, dateiname, formatEuro, heuteIso, isoDatum, leereRechnung,
-  naechteZwischen, normalisiere, parseBetrag, formatDatum,
+  baueRechnungPdf, dateiname, formatDatum, formatEuro, heuteIso, leereRechnung,
+  naechteZwischen, normalisiere, parseBetrag,
 } from './invoice.mjs';
 import { zeichneSeite } from './pdf.mjs';
 import { standardPosition } from './positionen.mjs';
@@ -22,10 +26,13 @@ let daten = leereRechnung();
 let bilder = [];
 let sampeln = null;
 let bildGrenzen = null;
+let leseAbbruch = null;
+let phase = 'scan';
+let editorOffen = false;
 let naechteManuell = false;
 let zeichnenTimer = null;
 
-/* ------------------------------------------------------------- Speicher */
+/* ------------------------------------------------------------------ Speicher */
 
 function lade(schluessel, vorgabe) {
   try {
@@ -38,14 +45,14 @@ function speichere(schluessel, wert) {
   try { localStorage.setItem(schluessel, JSON.stringify(wert)); } catch { /* Kontingent */ }
 }
 
-/* ----------------------------------------------------------------- Hilfen */
+/* -------------------------------------------------------------------- Hilfen */
 
 function melde(text) {
   const el = $('#meldung');
   el.textContent = text;
   el.classList.add('auf');
   clearTimeout(melde._t);
-  melde._t = setTimeout(() => el.classList.remove('auf'), 2200);
+  melde._t = setTimeout(() => el.classList.remove('auf'), 2600);
 }
 
 function hole(objekt, pfad) {
@@ -84,10 +91,14 @@ function schreibeFelder() {
     else if (el.dataset.pfad === 'intern.kommission') el.value = wert == null || wert === '' ? '' : String(wert).replace('.', ',');
     else el.value = wert == null ? '' : String(wert);
   }
-  $('#ustFelder').style.display = daten.vermieter.kleinunternehmer ? 'none' : '';
+  $('#ustFelder').hidden = Boolean(daten.vermieter.kleinunternehmer);
 }
 
-/* -------------------------------------------------------------- Positionen */
+function escape(text) {
+  return String(text ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/* ---------------------------------------------------------------- Positionen */
 
 const VORLAGEN = {
   reinigung: { titel: 'Endreinigung', details: [], menge: 1, einheit: 'Pauschale', einzelpreis: 0 },
@@ -96,6 +107,12 @@ const VORLAGEN = {
   parkplatz: { titel: 'Stellplatz', details: [], menge: 1, einheit: 'Nacht', einzelpreis: 0 },
   leer: { titel: '', details: [], menge: 1, einheit: '', einzelpreis: 0 },
 };
+
+function preisText(wert) {
+  const zahl = Number(wert) || 0;
+  const gerundet = Math.round(zahl * 100) / 100;
+  return String(Math.abs(zahl - gerundet) < 0.0001 ? gerundet.toFixed(2) : zahl).replace('.', ',');
+}
 
 function zeichnePositionen() {
   const box = $('#positionen');
@@ -106,14 +123,13 @@ function zeichnePositionen() {
     el.innerHTML = `
       <div class="kopfzeile">
         <span class="nr">${index + 1}</span>
-        <strong style="font-size:13px;color:var(--grau)">Position</strong>
         <span class="zeilensumme" data-summe>${formatEuro(position.menge * position.einzelpreis)}</span>
-        <button class="weg" data-weg title="Position entfernen">Entfernen</button>
+        <button class="weg" data-weg>Entfernen</button>
       </div>
       <div class="feld"><label>Bezeichnung</label>
         <input data-feld="titel" value="${escape(position.titel)}" placeholder="Übernachtung im Wohlfühlapartment"></div>
       <div class="feld"><label>Details (eine Zeile je Angabe)</label>
-        <textarea data-feld="details" rows="3" placeholder="Guxhagen (Zeitraum: …)&#10;1 Übernachtung&#10;Buchungsnr.: …">${escape((position.details || []).join('\n'))}</textarea></div>
+        <textarea data-feld="details" rows="2">${escape((position.details || []).join('\n'))}</textarea></div>
       <div class="reihe z3">
         <div class="feld"><label>Menge</label><input data-feld="menge" inputmode="decimal" value="${escape(String(position.menge).replace('.', ','))}"></div>
         <div class="feld"><label>Einheit</label><input data-feld="einheit" value="${escape(position.einheit || '')}" placeholder="Nächte"></div>
@@ -132,6 +148,7 @@ function zeichnePositionen() {
         if (name === 'details') position.details = feld.value.split('\n').map((z) => z.trim()).filter(Boolean);
         else if (name === 'menge' || name === 'einzelpreis') position[name] = parseBetrag(feld.value);
         else position[name] = feld.value;
+        position.auto = false;
         el.querySelector('[data-summe]').textContent = formatEuro(position.menge * position.einzelpreis);
         aktualisiere();
       });
@@ -140,17 +157,7 @@ function zeichnePositionen() {
   });
 }
 
-function preisText(wert) {
-  const zahl = Number(wert) || 0;
-  const gerundet = Math.round(zahl * 100) / 100;
-  return String(Math.abs(zahl - gerundet) < 0.0001 ? gerundet.toFixed(2) : zahl).replace('.', ',');
-}
-
-function escape(text) {
-  return String(text ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
-
-/* ------------------------------------------------------------- Vorschau/PDF */
+/* --------------------------------------------------------------- Vorschau/PDF */
 
 function baueModell() {
   return normalisiere(daten);
@@ -161,12 +168,17 @@ function aktualisiere({ sofort = false } = {}) {
   $('#kopfSumme').textContent = modell.rechnung.nummer ? `Nr. ${modell.rechnung.nummer}` : '';
   $('#fussSumme').childNodes[0].nodeValue = formatEuro(modell.summen.gesamt);
   $('#fussDetail').textContent = modell.rechnung.bezahlt
-    ? 'Bereits bezahlt'
-    : modell.faelligkeit ? `Fällig am ${formatDatum(modell.faelligkeit)}` : 'Gesamt zu zahlen';
+    ? 'bereits bezahlt'
+    : modell.faelligkeit ? `fällig ${formatDatum(modell.faelligkeit)}` : 'gesamt';
+
+  const empfaenger = daten.gast.firma || daten.gast.name;
+  const zeitraum = [formatDatum(daten.rechnung.anreise), formatDatum(daten.rechnung.abreise)]
+    .filter(Boolean).join(' – ');
+  $('#vorschauNeben').textContent = [empfaenger, zeitraum].filter(Boolean).join(' · ');
 
   const kommission = parseBetrag(daten.intern.kommission);
   $('#auszahlung').textContent = kommission
-    ? `Auszahlung nach Kommission: ${formatEuro(modell.summen.gesamt - kommission)} (Kommission ${formatEuro(kommission)}).`
+    ? `Auszahlung nach Kommission: ${formatEuro(modell.summen.gesamt - kommission)}`
     : '';
 
   speichere(SPEICHER.entwurf, daten);
@@ -176,25 +188,19 @@ function aktualisiere({ sofort = false } = {}) {
   zeichnenTimer = setTimeout(() => zeichneVorschau(modell), sofort ? 0 : 250);
 }
 
-function pdfBlob(modell) {
-  return new Blob([baueRechnungPdf(modell)], { type: 'application/pdf' });
-}
-
 function zeichneVorschau(modell) {
   const leer = !modell.zeilen.length;
   const blaetter = $('#blaetter');
   $('#vorschauLeer').hidden = !leer;
-  blaetter.style.display = leer ? 'none' : '';
-  $('#vorschauInfo').textContent = leer
-    ? 'Live-Vorschau'
-    : `Live-Vorschau · ${modell.rechnung.nummer || 'ohne Nummer'}`;
+  blaetter.hidden = leer;
+  $('#vorschauInfo').textContent = modell.rechnung.nummer
+    ? `Rechnung ${modell.rechnung.nummer}` : 'Rechnung';
   if (leer) return;
 
   try {
-    // Dieselben Zeichenbefehle wie im PDF – nur auf den Bildschirm.
     const doc = baueRechnungPdf(modell, { alsDokument: true });
-    const breite = Math.max(240, blaetter.clientWidth - 28);
-    const skala = Math.min(1.6, breite / doc.width);
+    const breite = Math.max(240, blaetter.clientWidth || 520);
+    const skala = Math.min(1.5, breite / doc.width);
     const dichte = Math.min(2, window.devicePixelRatio || 1);
     blaetter.innerHTML = '';
     for (let seite = 0; seite < doc.pageCount; seite += 1) {
@@ -209,14 +215,27 @@ function zeichneVorschau(modell) {
   }
 }
 
-async function herunterladen() {
-  const modell = baueModell();
-  if (!modell.zeilen.length) { melde('Bitte zuerst eine Position anlegen.'); return; }
+/* ------------------------------------------------------- Speichern, Versenden */
+
+async function ueberClaudeSpeichern(bytes, name) {
+  try {
+    const speicherer = await window.claude?.use?.('downloads');
+    if (!speicherer) return 'nicht-verfuegbar';
+    await speicherer.save({ filename: name, data: bytes });
+    return 'gespeichert';
+  } catch (fehler) {
+    if (fehler && fehler.code === 'declined') return 'abgebrochen';
+    return 'nicht-verfuegbar';
+  }
+}
+
+async function sichere(modell, { still = false } = {}) {
+  const bytes = baueRechnungPdf(modell);
   const name = dateiname(modell);
-  const ergebnis = await ueberClaudeSpeichern(baueRechnungPdf(modell), name);
-  if (ergebnis === 'abgebrochen') return;
+  const ergebnis = await ueberClaudeSpeichern(bytes, name);
+  if (ergebnis === 'abgebrochen') return false;
   if (ergebnis === 'nicht-verfuegbar') {
-    const url = URL.createObjectURL(pdfBlob(modell));
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
     const a = document.createElement('a');
     a.href = url;
     a.download = name;
@@ -226,33 +245,62 @@ async function herunterladen() {
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
   merkeHistorie(modell);
-  melde('PDF gespeichert.');
+  if (!still) melde('Rechnung gespeichert.');
+  return true;
 }
 
-/* In der Claude-Vorschau darf die Seite den Download nicht selbst starten –
- * dort uebernimmt das die Speichern-Funktion der Umgebung. Ueberall sonst
- * greift der normale Browser-Download. */
-async function ueberClaudeSpeichern(bytes, name) {
-  try {
-    const speichern = await window.claude?.use?.('downloads');
-    if (!speichern) return 'nicht-verfuegbar';
-    await speichern.save({ filename: name, data: bytes });
-    return 'gespeichert';
-  } catch (fehler) {
-    if (fehler && fehler.code === 'declined') { melde('Speichern abgebrochen.'); return 'abgebrochen'; }
-    return 'nicht-verfuegbar';
-  }
+function mailText(modell) {
+  const v = modell.vermieter;
+  const zeitraum = [formatDatum(modell.rechnung.anreise), formatDatum(modell.rechnung.abreise)]
+    .filter(Boolean).join(' bis ');
+  const zeilen = [
+    'Guten Tag,',
+    '',
+    `anbei die Rechnung ${modell.rechnung.nummer} über ${formatEuro(modell.summen.gesamt)} für Ihren Aufenthalt${zeitraum ? ` vom ${zeitraum}` : ''} im ${v.objekt}.`,
+  ];
+  zeilen.push('');
+  zeilen.push(modell.rechnung.bezahlt
+    ? 'Der Betrag ist bereits bezahlt – die Rechnung dient nur Ihrer Unterlage.'
+    : `Bitte überweisen Sie den Betrag${modell.faelligkeit ? ` bis zum ${formatDatum(modell.faelligkeit)}` : ''} auf ${v.iban} unter Angabe der Rechnungsnummer.`);
+  zeilen.push('', 'Freundliche Grüße', v.name);
+  return zeilen.join('\n');
 }
 
-function drucken() {
+async function versenden() {
   const modell = baueModell();
-  if (!modell.zeilen.length) { melde('Bitte zuerst eine Position anlegen.'); return; }
-  const url = URL.createObjectURL(pdfBlob(modell));
-  const fenster = window.open(url, '_blank');
-  if (!fenster) melde('Bitte Pop-ups erlauben.');
+  if (!modell.zeilen.length) { melde('Noch keine Position auf der Rechnung.'); return; }
+
+  const bytes = baueRechnungPdf(modell);
+  const name = dateiname(modell);
+  const betreff = `Rechnung ${modell.rechnung.nummer} · ${modell.vermieter.objekt}`;
+  const text = mailText(modell);
+
+  try {
+    const datei = new File([bytes], name, { type: 'application/pdf' });
+    if (navigator.canShare?.({ files: [datei] })) {
+      await navigator.share({ files: [datei], title: betreff, text });
+      merkeHistorie(modell);
+      melde('Weitergegeben.');
+      return;
+    }
+  } catch (fehler) {
+    if (fehler && (fehler.name === 'AbortError' || fehler.name === 'NotAllowedError')) return;
+  }
+
+  const gesichert = await sichere(modell, { still: true });
+  if (!gesichert) return;
+  const brief = document.createElement('a');
+  brief.href = `mailto:${encodeURIComponent(modell.gast.email || '')}`
+    + `?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text)}`;
+  brief.target = '_blank';
+  brief.rel = 'noopener';
+  document.body.appendChild(brief);
+  brief.click();
+  brief.remove();
+  melde('Rechnung gespeichert – im Mailprogramm nur noch anhängen.');
 }
 
-/* ---------------------------------------------------------------- Historie */
+/* ------------------------------------------------------------------ Historie */
 
 function merkeHistorie(modell) {
   const historie = lade(SPEICHER.historie, []);
@@ -276,21 +324,20 @@ function zeichneHistorie() {
   box.innerHTML = '';
   historie.forEach((eintrag, index) => {
     const zeile = document.createElement('div');
-    zeile.className = 'position';
-    zeile.style.padding = '10px 12px';
-    zeile.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <strong>${escape(eintrag.nummer || '—')}</strong>
-        <span style="color:var(--grau)">${escape(eintrag.empfaenger || '')}</span>
-        <span style="margin-left:auto;font-weight:700">${formatEuro(eintrag.betrag)}</span>
-        <button class="knopf klein leise" style="background:var(--gruen-hell);color:var(--gruen)" data-laden>Laden</button>
-      </div>`;
+    zeile.className = 'eintrag';
+    zeile.innerHTML = `<span class="num">${escape(eintrag.nummer || '—')}</span>
+      <span style="color:var(--muted)">${escape(eintrag.empfaenger || '')}</span>
+      <span class="wachs"></span>
+      <span class="num">${formatEuro(eintrag.betrag)}</span>
+      <button class="knopf klein rand" data-laden>Öffnen</button>`;
     zeile.querySelector('[data-laden]').addEventListener('click', () => {
       daten = normalisierenEingang(historie[index].daten);
       naechteManuell = true;
       schreibeFelder();
       zeichnePositionen();
+      setzePhase('rechnung');
       aktualisiere({ sofort: true });
-      melde(`Rechnung ${eintrag.nummer} geladen.`);
+      melde(`Rechnung ${eintrag.nummer} geöffnet.`);
     });
     box.appendChild(zeile);
   });
@@ -303,11 +350,10 @@ function naechsteNummer() {
     .map((h) => String(h.nummer || '').match(new RegExp(`^${jahr}-(\\d+)$`)))
     .filter(Boolean)
     .map((m) => Number(m[1]));
-  const naechste = (nummern.length ? Math.max(...nummern) : 0) + 1;
-  return `${jahr}-${String(naechste).padStart(3, '0')}`;
+  return `${jahr}-${String((nummern.length ? Math.max(...nummern) : 0) + 1).padStart(3, '0')}`;
 }
 
-/* ------------------------------------------------------------------ Kunden */
+/* -------------------------------------------------------------------- Kunden */
 
 function zeichneKunden() {
   const kunden = lade(SPEICHER.kunden, []);
@@ -321,7 +367,7 @@ function zeichneKunden() {
   });
 }
 
-/* ------------------------------------------------------------------ Import */
+/* -------------------------------------------------------------------- Import */
 
 function normalisierenEingang(eingang) {
   const basis = leereRechnung();
@@ -342,6 +388,11 @@ function normalisierenEingang(eingang) {
   };
 }
 
+function leerRaus(objekt) {
+  return Object.fromEntries(Object.entries(objekt || {})
+    .filter(([, wert]) => wert !== '' && wert !== null && wert !== undefined));
+}
+
 function uebernehmen(teil, { ersetzen = false } = {}) {
   const neu = normalisierenEingang({
     vermieter: { ...daten.vermieter, ...(teil.vermieter || {}) },
@@ -355,8 +406,6 @@ function uebernehmen(teil, { ersetzen = false } = {}) {
   if (!neu.rechnung.datum) neu.rechnung.datum = heuteIso();
   if (!neu.rechnung.naechte) neu.rechnung.naechte = naechteZwischen(neu.rechnung.anreise, neu.rechnung.abreise);
 
-  // Positionen: mitgelieferte gewinnen, sonst wird aus dem Gesamtpreis die
-  // Uebernachtungszeile neu gebaut. Von Hand ergaenzte Zeilen bleiben erhalten.
   const gesamt = parseBetrag((teil.intern || {}).gesamtpreis);
   const vonHand = neu.positionen.filter((position) => !position.auto);
   if (teil.positionen && teil.positionen.length) {
@@ -371,77 +420,9 @@ function uebernehmen(teil, { ersetzen = false } = {}) {
   aktualisiere({ sofort: true });
 }
 
-function leerRaus(objekt) {
-  return Object.fromEntries(Object.entries(objekt || {})
-    .filter(([, wert]) => wert !== '' && wert !== null && wert !== undefined));
-}
+/* --------------------------------------------------- Scans von Claude lesen */
 
-const PROMPT = `Lies die angehängten Screenshots (Booking.com / Airbnb) und gib mir NUR dieses JSON zurück – keine Erklärung:
-
-{
-  "gast": {"firma":"","name":"","strasse":"","plz":"","ort":"","land":"","email":""},
-  "rechnung": {"portal":"Booking.com","buchungsnummer":"","anreise":"JJJJ-MM-TT","abreise":"JJJJ-MM-TT","naechte":0,"gaeste":1,"hinweis":""},
-  "intern": {"gesamtpreis":0,"kommission":0}
-}
-
-Regeln: "gesamtpreis" ist der Gesamtpreis der Buchung (das, was der Gast zahlt) – die Kommission wird NICHT abgezogen. Wenn der Gast in einer Nachricht eine abweichende Rechnungsanschrift nennt, nimm diese. Felder, die nicht erkennbar sind, leer lassen.`;
-
-function kopiere(text, meldung) {
-  const fertig = () => melde(meldung);
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(fertig).catch(() => ersatzKopie(text, fertig));
-  } else ersatzKopie(text, fertig);
-}
-
-function ersatzKopie(text, fertig) {
-  const feld = document.createElement('textarea');
-  feld.value = text;
-  document.body.appendChild(feld);
-  feld.select();
-  try { document.execCommand('copy'); fertig(); } catch { melde('Kopieren nicht möglich.'); }
-  feld.remove();
-}
-
-function jsonAusText(roh) {
-  const text = String(roh || '').trim();
-  const start = text.indexOf('{');
-  const ende = text.lastIndexOf('}');
-  if (start < 0 || ende < start) throw new Error('Kein JSON gefunden');
-  return JSON.parse(text.slice(start, ende + 1));
-}
-
-function zeigeBilder() {
-  const box = $('#bilder');
-  box.innerHTML = '';
-  bilder.forEach((bild, index) => {
-    const figur = document.createElement('figure');
-    figur.innerHTML = `<img src="${bild.url}" alt="Screenshot ${index + 1}"><button title="Entfernen">×</button>`;
-    figur.querySelector('img').addEventListener('click', () => {
-      $('#lupe img').src = bild.url;
-      $('#lupe').classList.add('auf');
-    });
-    figur.querySelector('button').addEventListener('click', () => {
-      bilder.splice(index, 1);
-      zeigeBilder();
-    });
-    box.appendChild(figur);
-  });
-  const knopf = $('#btnBilder');
-  if (knopf) knopf.disabled = !bilder.length;
-}
-
-function nimmDateien(dateien) {
-  for (const datei of dateien) {
-    if (!datei.type.startsWith('image/')) continue;
-    const leser = new FileReader();
-    leser.onload = () => { bilder.push({ url: leser.result, datei }); zeigeBilder(); };
-    leser.readAsDataURL(datei);
-  }
-}
-
-/* ------------------------------------------------- Screenshots von Claude lesen */
-
-const PROMPT_BILDER = `Die Bilder sind Screenshots einer Ferienwohnungs-Buchung (Booking.com, Airbnb) und/oder einer Nachricht des Gasts. Lies sie aus und antworte NUR mit diesem JSON, ohne Erklärung:
+const PROMPT_BILDER = `Die Bilder sind Screenshots oder Scans einer Ferienwohnungs-Buchung (Booking.com, Airbnb) und/oder einer Nachricht des Gasts. Lies sie aus und antworte NUR mit diesem JSON, ohne Erklärung:
 
 {
   "gast": {"firma":"","name":"","strasse":"","plz":"","ort":"","land":"","email":""},
@@ -457,33 +438,30 @@ Regeln:
 - Was nicht erkennbar ist, bleibt leer bzw. 0. Nichts erfinden.`;
 
 const LESEFEHLER = {
-  not_granted: 'Du hast das Lesen abgelehnt – über „Text einfügen“ geht es auch von Hand.',
+  not_granted: 'Ohne Erlaubnis kann ich die Bilder nicht lesen – Text einfügen geht weiterhin.',
   sampling_disabled: 'Für dieses Konto steht das Lesen der Bilder nicht zur Verfügung.',
-  images_unavailable: 'Diese Ansicht kann keine Bilder an Claude geben.',
-  image_rejected: 'Mit diesen Bildern kommt Claude nicht zurecht – bitte andere Screenshots.',
+  images_unavailable: 'Diese Ansicht kann keine Bilder lesen.',
+  image_rejected: 'Mit diesen Bildern komme ich nicht zurecht – bitte andere Aufnahmen.',
   rate_limited: 'Gerade zu viele Anfragen. Bitte in einer Minute noch einmal.',
   session_expired: 'Bitte neu bei Claude anmelden und noch einmal versuchen.',
   invalid_json: 'Die Antwort war unvollständig. Bitte noch einmal versuchen.',
-  refused: 'Claude hat die Bilder nicht ausgewertet. Bitte von Hand eintragen.',
+  refused: 'Die Bilder wurden nicht ausgewertet. Bitte Text einfügen.',
   empty_completion: 'Keine Antwort erhalten. Bitte noch einmal versuchen.',
   prompt_too_large: 'Zu viele Bilder auf einmal – bitte weniger auswählen.',
 };
 
-let leseAbbruch = null;
-
-async function leseScreenshots() {
-  if (!sampeln || !bilder.length) return;
+async function leseScans() {
   const grenze = bildGrenzen?.maxCount ?? 4;
   const dateien = bilder.slice(0, grenze).map((bild) => bild.datei);
+  const status = $('#bilderStatus');
+  const start = Date.now();
+  const takt = setInterval(() => {
+    status.textContent = `Ich lese den Scan … ${Math.round((Date.now() - start) / 1000)} s`;
+  }, 1000);
 
   leseAbbruch = new AbortController();
-  const start = Date.now();
-  const status = $('#bilderStatus');
-  const takt = setInterval(() => {
-    status.textContent = `Claude liest die Screenshots … ${Math.round((Date.now() - start) / 1000)} s`;
-  }, 1000);
-  status.textContent = 'Claude liest die Screenshots …';
-  $('#btnBilder').disabled = true;
+  status.textContent = 'Ich lese den Scan …';
+  $('#btnErzeugen').disabled = true;
   $('#btnBilderStop').hidden = false;
 
   try {
@@ -492,35 +470,134 @@ async function leseScreenshots() {
       signal: leseAbbruch.signal,
     });
     uebernehmen(gelesen, { ersetzen: true });
+    setzePhase('rechnung');
     const fehlt = [
-      !daten.gast.firma && !daten.gast.name ? 'Empfänger' : '',
-      !daten.positionen.length ? 'Betrag' : '',
-      !daten.rechnung.anreise ? 'Anreise' : '',
+      !daten.gast.firma && !daten.gast.name ? 'den Empfänger' : '',
+      !daten.positionen.length ? 'den Betrag' : '',
     ].filter(Boolean);
-    status.textContent = fehlt.length
-      ? `Übernommen – bitte ${fehlt.join(' und ')} ergänzen.`
-      : 'Übernommen – bitte kurz prüfen.';
-    if (bilder.length > grenze) {
-      melde(`Nur die ersten ${grenze} Screenshots wurden gelesen.`);
+    if (fehlt.length) {
+      oeffneEditor(true);
+      melde(`Bitte ${fehlt.join(' und ')} ergänzen.`);
+    } else {
+      melde('Fertig – bitte kurz prüfen.');
     }
+    if (bilder.length > grenze) melde(`Nur die ersten ${grenze} Scans wurden gelesen.`);
+    status.textContent = '';
   } catch (fehler) {
     const code = fehler && fehler.code;
-    if (code === 'cancelled') status.textContent = 'Abgebrochen.';
-    else status.textContent = LESEFEHLER[code] || 'Das Lesen hat nicht geklappt. Bitte noch einmal versuchen.';
+    status.textContent = code === 'cancelled'
+      ? 'Abgebrochen.'
+      : LESEFEHLER[code] || 'Das Lesen hat nicht geklappt. Bitte noch einmal versuchen.';
   } finally {
     clearInterval(takt);
     leseAbbruch = null;
-    $('#btnBilder').disabled = !bilder.length;
+    $('#btnErzeugen').disabled = false;
     $('#btnBilderStop').hidden = true;
   }
 }
 
-/* -------------------------------------------------------------------- Start */
+/* ------------------------------------------------------------------- Bilder */
 
-function zeigeImport(name) {
-  $$('.importreiter button').forEach((b) => b.classList.toggle('aktiv', b.dataset.import === name));
-  $$('[data-importfeld]').forEach((feld) => { feld.hidden = feld.dataset.importfeld !== name; });
+function zeigeBilder() {
+  const box = $('#bilder');
+  box.innerHTML = '';
+  bilder.forEach((bild, index) => {
+    const figur = document.createElement('figure');
+    figur.innerHTML = `<img src="${bild.url}" alt="Scan ${index + 1}"><button title="Entfernen">×</button>`;
+    figur.querySelector('img').addEventListener('click', () => {
+      $('#lupe img').src = bild.url;
+      $('#lupe').classList.add('auf');
+    });
+    figur.querySelector('button').addEventListener('click', () => {
+      bilder.splice(index, 1);
+      zeigeBilder();
+    });
+    box.appendChild(figur);
+  });
 }
+
+function nimmDateien(dateien) {
+  for (const datei of dateien) {
+    if (!datei.type.startsWith('image/')) continue;
+    const leser = new FileReader();
+    leser.onload = () => { bilder.push({ url: leser.result, datei }); zeigeBilder(); };
+    leser.readAsDataURL(datei);
+  }
+}
+
+/* ------------------------------------------------------------ Schritte/Phase */
+
+function setzePhase(neu) {
+  phase = neu;
+  $('#schrittScan').hidden = neu !== 'scan';
+  $('#schrittRechnung').hidden = neu !== 'rechnung';
+  $('#aktionen').hidden = neu !== 'rechnung';
+  $('#btnZuruecksetzen').hidden = neu !== 'rechnung';
+  if (neu === 'rechnung') aktualisiere({ sofort: true });
+  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+}
+
+function oeffneEditor(offen) {
+  editorOffen = offen;
+  $('#editor').hidden = !offen;
+  $('#schrittRechnung').classList.toggle('mit-editor', offen);
+  $('#btnAendern').textContent = offen ? 'Fertig' : 'Ändern';
+  if (offen) aktualisiere({ sofort: true });
+}
+
+function jsonAusText(roh) {
+  const text = String(roh || '').trim();
+  const start = text.indexOf('{');
+  const ende = text.lastIndexOf('}');
+  if (start < 0 || ende < start) return null;
+  try { return JSON.parse(text.slice(start, ende + 1)); } catch { return null; }
+}
+
+async function erzeuge() {
+  const text = $('#textEingabe').value.trim();
+
+  if (bilder.length && sampeln && bildGrenzen) { await leseScans(); return; }
+
+  if (bilder.length && !text) {
+    $('#textweg').hidden = false;
+    $('#bilderStatus').textContent = 'Hier kann ich die Bilder nicht lesen – bitte den Text einfügen.';
+    return;
+  }
+
+  if (text) {
+    const alsJson = jsonAusText(text);
+    uebernehmen(alsJson || analysiereText(text), { ersetzen: Boolean(alsJson) });
+    setzePhase('rechnung');
+    if (!daten.positionen.length) {
+      oeffneEditor(true);
+      melde('Betrag fehlt noch – bitte ergänzen.');
+    } else {
+      melde('Fertig – bitte kurz prüfen.');
+    }
+    return;
+  }
+
+  neueRechnung();
+  setzePhase('rechnung');
+  oeffneEditor(true);
+}
+
+function neueRechnung() {
+  const profil = lade(SPEICHER.profil, null);
+  daten = leereRechnung();
+  if (profil) daten.vermieter = { ...daten.vermieter, ...profil };
+  daten.rechnung.nummer = naechsteNummer();
+  naechteManuell = false;
+  bilder = [];
+  zeigeBilder();
+  $('#textEingabe').value = '';
+  $('#bilderStatus').textContent = '';
+  schreibeFelder();
+  zeichnePositionen();
+  aktualisiere({ sofort: true });
+}
+
+/* ---------------------------------------------------------------- Ereignisse */
 
 function bindeEreignisse() {
   document.addEventListener('input', (ereignis) => {
@@ -528,45 +605,16 @@ function bindeEreignisse() {
     if (!el) return;
     setze(daten, el.dataset.pfad, leseFeld(el));
     if (el.dataset.pfad === 'rechnung.naechte') naechteManuell = true;
-    if (el.dataset.pfad === 'rechnung.anreise' || el.dataset.pfad === 'rechnung.abreise') {
-      if (!naechteManuell) {
-        daten.rechnung.naechte = naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
-        $('[data-pfad="rechnung.naechte"]').value = daten.rechnung.naechte || '';
-      }
+    if ((el.dataset.pfad === 'rechnung.anreise' || el.dataset.pfad === 'rechnung.abreise') && !naechteManuell) {
+      daten.rechnung.naechte = naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
+      $('[data-pfad="rechnung.naechte"]').value = daten.rechnung.naechte || '';
     }
     if (el.dataset.pfad === 'vermieter.kleinunternehmer') {
-      $('#ustFelder').style.display = daten.vermieter.kleinunternehmer ? 'none' : '';
+      $('#ustFelder').hidden = Boolean(daten.vermieter.kleinunternehmer);
     }
     aktualisiere();
   });
 
-  $('#btnPdf').addEventListener('click', herunterladen);
-  $('#btnPdfOben').addEventListener('click', herunterladen);
-  $('#btnDrucken').addEventListener('click', drucken);
-  $('#btnOeffnen').addEventListener('click', drucken);
-
-  $$('.importreiter button').forEach((knopf) => {
-    knopf.addEventListener('click', () => zeigeImport(knopf.dataset.import));
-  });
-
-  $('#btnPrompt').addEventListener('click', () => kopiere(PROMPT, 'Prompt kopiert – zusammen mit den Screenshots an Claude schicken.'));
-  $('#btnJson').addEventListener('click', () => {
-    try {
-      uebernehmen(jsonAusText($('#jsonEingabe').value), { ersetzen: true });
-      melde('Daten übernommen.');
-    } catch (fehler) {
-      melde(`JSON nicht lesbar: ${fehler.message}`);
-    }
-  });
-  $('#btnText').addEventListener('click', () => {
-    const text = $('#textEingabe').value;
-    if (!text.trim()) { melde('Bitte zuerst Text einfügen.'); return; }
-    uebernehmen(analysiereText(text));
-    melde('Erkannte Daten übernommen – bitte prüfen.');
-  });
-
-  $('#btnBilder').addEventListener('click', leseScreenshots);
-  $('#btnBilderStop').addEventListener('click', () => leseAbbruch?.abort());
   $('#ablage').addEventListener('click', () => $('#dateiEingabe').click());
   $('#dateiEingabe').addEventListener('change', (e) => nimmDateien(e.target.files));
   ['dragenter', 'dragover'].forEach((typ) => $('#ablage').addEventListener(typ, (e) => {
@@ -578,9 +626,36 @@ function bindeEreignisse() {
   }));
   window.addEventListener('paste', (e) => {
     const dateien = Array.from(e.clipboardData?.files || []);
-    if (dateien.length) { nimmDateien(dateien); melde('Screenshot eingefügt.'); }
+    if (dateien.length) { nimmDateien(dateien); melde('Scan eingefügt.'); }
   });
   $('#lupe').addEventListener('click', () => $('#lupe').classList.remove('auf'));
+
+  $('#btnErzeugen').addEventListener('click', erzeuge);
+  $('#btnBilderStop').addEventListener('click', () => leseAbbruch?.abort());
+  $('#wegText').addEventListener('click', () => {
+    $('#textweg').hidden = false;
+    $('#textEingabe').focus();
+  });
+  $('#wegLeer').addEventListener('click', () => {
+    neueRechnung();
+    setzePhase('rechnung');
+    oeffneEditor(true);
+  });
+  $('#wegPrompt').addEventListener('click', () => {
+    const text = `${PROMPT_BILDER}\n\n(Die Screenshots hier anhängen.)`;
+    navigator.clipboard?.writeText(text)
+      .then(() => melde('Prompt kopiert – mit den Screenshots an Claude schicken.'))
+      .catch(() => melde('Kopieren nicht möglich.'));
+  });
+
+  $('#btnAendern').addEventListener('click', () => oeffneEditor(!editorOffen));
+  $('#btnPdf').addEventListener('click', () => sichere(baueModell()));
+  $('#btnVersenden').addEventListener('click', versenden);
+  $('#btnZuruecksetzen').addEventListener('click', () => {
+    neueRechnung();
+    oeffneEditor(false);
+    setzePhase('scan');
+  });
 
   $$('.schnellwahl button').forEach((knopf) => knopf.addEventListener('click', () => {
     const art = knopf.dataset.vorlage;
@@ -599,16 +674,16 @@ function bindeEreignisse() {
     if (index >= 0) kunden[index] = kunde; else kunden.push(kunde);
     speichere(SPEICHER.kunden, kunden);
     zeichneKunden();
-    melde('Kunde gespeichert.');
+    melde('Gast gemerkt.');
   });
   $('#btnKundeLoeschen').addEventListener('click', () => {
     const wahl = $('#kundenwahl').value;
-    if (wahl === '') { melde('Bitte zuerst einen Kunden auswählen.'); return; }
+    if (wahl === '') { melde('Bitte zuerst einen Gast auswählen.'); return; }
     const kunden = lade(SPEICHER.kunden, []);
     kunden.splice(Number(wahl), 1);
     speichere(SPEICHER.kunden, kunden);
     zeichneKunden();
-    melde('Kunde gelöscht.');
+    melde('Gast gelöscht.');
   });
   $('#kundenwahl').addEventListener('change', (e) => {
     if (e.target.value === '') return;
@@ -619,78 +694,48 @@ function bindeEreignisse() {
     aktualisiere();
   });
 
-  $('#btnJsonKopieren').addEventListener('click', () => kopiere(JSON.stringify(daten, null, 2), 'JSON kopiert.'));
-  $('#btnZuruecksetzen').addEventListener('click', () => {
-    const profil = lade(SPEICHER.profil, null);
-    daten = leereRechnung();
-    if (profil) daten.vermieter = { ...daten.vermieter, ...profil };
-    daten.rechnung.nummer = naechsteNummer();
-    naechteManuell = false;
-    bilder = [];
-    zeigeBilder();
-    schreibeFelder();
-    zeichnePositionen();
-    aktualisiere({ sofort: true });
-    melde('Neue Rechnung angelegt.');
-  });
-
-  $('#reiterDaten').addEventListener('click', () => {
-    document.body.classList.remove('zeigt-vorschau');
-    $('#reiterDaten').classList.add('aktiv');
-    $('#reiterVorschau').classList.remove('aktiv');
-  });
-  $('#reiterVorschau').addEventListener('click', () => {
-    document.body.classList.add('zeigt-vorschau');
-    $('#reiterVorschau').classList.add('aktiv');
-    $('#reiterDaten').classList.remove('aktiv');
-    aktualisiere({ sofort: true });
-  });
-
   document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); herunterladen(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      if (phase === 'rechnung') sichere(baueModell());
+    }
   });
 
   let groesseTimer = null;
   window.addEventListener('resize', () => {
     clearTimeout(groesseTimer);
-    groesseTimer = setTimeout(() => aktualisiere({ sofort: true }), 200);
+    groesseTimer = setTimeout(() => { if (phase === 'rechnung') aktualisiere({ sofort: true }); }, 200);
   });
 }
 
-/* In der Claude-Vorschau lassen sich keine neuen Fenster oeffnen – dort fuehrt
- * nur der Speichern-Weg zum Ziel. */
-async function passeUmgebungAn() {
-  const speichern = await window.claude?.use?.('downloads').catch(() => null);
-  if (speichern) {
-    $('#btnDrucken').hidden = true;
-    $('#btnOeffnen').hidden = true;
-  }
+/* -------------------------------------------------------------------- Start */
 
+async function passeUmgebungAn() {
   sampeln = await window.claude?.use?.('sample').catch(() => null);
   bildGrenzen = sampeln ? (await sampeln.limits().catch(() => null))?.images : null;
-  if (!bildGrenzen) return;
 
-  // Screenshots sind hier der kürzeste Weg – also gleich vorn.
-  $('#lesezeile').hidden = false;
-  $('#btnBilder').disabled = !bilder.length;
-  $('#dateiEingabe').accept = bildGrenzen.mediaTypes.join(',');
-  $('#bilderHinweis').textContent = bildGrenzen.maxCount > 1
-    ? `Bis zu ${bildGrenzen.maxCount} Screenshots aus Booking oder Airbnb – Claude liest Gast, Zeitraum und Preis heraus.`
-    : 'Screenshot aus Booking oder Airbnb – Claude liest Gast, Zeitraum und Preis heraus.';
-  if (!daten.positionen.length) zeigeImport('bilder');
+  if (bildGrenzen) {
+    $('#dateiEingabe').accept = bildGrenzen.mediaTypes.join(',');
+    $('#ablageNeben').textContent = bildGrenzen.maxCount > 1
+      ? `Bis zu ${bildGrenzen.maxCount} Bilder – Buchung und Nachricht des Gasts`
+      : 'Ein Bild der Buchung';
+    return;
+  }
+
+  // Ohne Leseerlaubnis fuehrt der Weg ueber Text oder Claude im Chat.
+  $('#startUnter').textContent = 'Text aus der Buchung einfügen – oder die Scans von Claude lesen lassen.';
+  $('#ablageNeben').textContent = 'Hier dienen die Bilder als Vorlage zum Abtippen';
+  $('#wegPrompt').hidden = false;
 }
 
 function ausHash() {
   const treffer = location.hash.match(/daten=([^&]+)/);
   if (!treffer) return null;
   try {
-    const text = decodeURIComponent(escapeDecode(atob(treffer[1].replace(/-/g, '+').replace(/_/g, '/'))));
-    return JSON.parse(text);
+    const binaer = atob(treffer[1].replace(/-/g, '+').replace(/_/g, '/'));
+    const prozent = Array.from(binaer, (z) => `%${z.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
+    return JSON.parse(decodeURIComponent(prozent));
   } catch { return null; }
-}
-
-function escapeDecode(binaer) {
-  return Array.from(binaer, (zeichen) => `%${zeichen.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
 }
 
 export function start() {
@@ -708,9 +753,8 @@ export function start() {
   if (!daten.rechnung.naechte) {
     daten.rechnung.naechte = naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
   }
-  if (uebergabe && !daten.positionen.length) {
-    const gesamt = parseBetrag(daten.intern.gesamtpreis);
-    if (gesamt) daten.positionen = [standardPosition(daten)];
+  if (uebergabe && !daten.positionen.length && parseBetrag(daten.intern.gesamtpreis)) {
+    daten.positionen = [standardPosition(daten)];
   }
   naechteManuell = Boolean(daten.rechnung.naechte)
     && daten.rechnung.naechte !== naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
@@ -721,6 +765,7 @@ export function start() {
   zeichnePositionen();
   zeichneKunden();
   zeichneHistorie();
+  setzePhase(daten.positionen.length ? 'rechnung' : 'scan');
   aktualisiere({ sofort: true });
 
   const alsApp = document.querySelector('link[rel="manifest"]');

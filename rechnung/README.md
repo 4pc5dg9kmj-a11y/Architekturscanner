@@ -11,32 +11,29 @@ PDF-Knopf und als schmaler Strich über der Summe. Die Entwürfe dazu liegen in
 
 ![Aufbau](../docs/rechnung-vorschau.png)
 
-## Drei Wege zur Rechnung
+## Fünf Schritte
 
-**1. Über Claude (schnellster Weg)**
-Screenshots in den Chat werfen: „Mach mir daraus eine Rechnung.“ Claude liest die
-Daten aus, ruft die CLI auf und schickt das fertige PDF zurück. Die Anleitung
-dafür steckt in `.claude/skills/rechnung/SKILL.md`.
+1. **Scan einfügen** – Screenshot oder Foto der Buchung hineinziehen, tippen
+   oder einfach einfügen (⌘V). Kein Bild zur Hand? *Text statt Bild einfügen*
+   nimmt den Text aus der Booking-Nachricht oder ein JSON von Claude;
+   *Leere Rechnung schreiben* beginnt von Hand.
+2. **Rechnung erzeugen** – ein Knopf. Als Artifact auf claude.ai liest Claude
+   die Bilder aus (auf dem Konto des Betrachters, nach dessen Zustimmung) und
+   füllt Empfänger, Zeitraum, Buchungsnummer und Preis; sonst greift die
+   Texterkennung.
+3. **Ändern** – öffnet den Bogen neben der Rechnung: Empfänger, Buchung,
+   Positionen. Vermieterdaten, Steuer, Gästeliste und frühere Rechnungen
+   liegen darunter unter *Mehr*.
+4. **Speichern** – die Rechnung als PDF.
+5. **Versenden** – gibt die PDF ans Teilen-Menü des Geräts (Mail, Nachrichten);
+   wo das nicht geht, wird sie gespeichert und das Mailprogramm mit fertigem
+   Text und der Adresse des Gasts geöffnet.
 
-**2. In der App**
-`rechnung/index.html` im Browser öffnen (Doppelklick genügt):
+Alle Zeilen bleiben frei bearbeitbar: Bezeichnung, Detailzeilen, Menge,
+Einheit, Einzelpreis. Die Vorschau zeichnet dieselben Befehle wie das PDF und
+sieht deshalb aus wie die fertige Datei – auch auf dem Handy.
 
-* **Von Claude (JSON)** – Prompt kopieren, mit den Screenshots an Claude schicken,
-  Antwort einfügen, *Daten übernehmen*.
-* **Text einfügen** – Text aus der Booking-/Airbnb-Nachricht einfügen;
-  Buchungsnummer, Zeitraum, Preis und Anschrift werden erkannt.
-* **Screenshots** – Bilder hineinlegen und *Rechnung aus Screenshots*: Claude
-  liest Gast, Zeitraum, Buchungsnummer und Preis heraus und füllt das Formular.
-  Das geht nur dort, wo die Seite Claude fragen darf (als Artifact auf
-  claude.ai); in der eigenständigen Fassung dienen die Bilder als Vorlage zum
-  Abtippen.
-
-Alle Zeilen bleiben danach frei bearbeitbar: Bezeichnung, Detailzeilen, Menge,
-Einheit, Einzelpreis. Rechts läuft die Live-Vorschau mit – sie zeichnet dieselben
-Befehle wie das PDF auf ein Canvas, sieht also aus wie die fertige Datei und
-funktioniert auch auf dem Handy. Unten steht *PDF herunterladen*.
-
-**3. Auf der Kommandozeile**
+## Auf der Kommandozeile
 
 ```bash
 node rechnung/cli.mjs rechnung/beispiel.json          # -> Rechnung_2026-018_BSU-InfraBau-GmbH.pdf

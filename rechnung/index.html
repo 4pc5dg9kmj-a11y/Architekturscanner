@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#114732">
-<title>Rechnung erstellen · Wohlfühlapartment</title>
+<meta name="theme-color" content="#ffffff">
+<title>Rechnung · Wohlfühlapartment Guxhagen</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,147 +12,161 @@
 <style>
 :root{
   --ink:#15181a; --mid:#3d443f; --muted:#8b918e; --leise:#b9bfbb;
-  --linie:#e4e7e5; --linie-stark:#d7dcd9; --flaeche:#ffffff; --grund:#f3f4f2;
-  --accent:#1f5f46; --accent-weich:#eef3f0; --radius:4px;
+  --linie:#e4e7e5; --linie-stark:#d7dcd9; --flaeche:#ffffff; --grund:#f5f6f4;
+  --accent:#1f5f46; --radius:5px;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-html,body{margin:0;height:100%}
+html,body{margin:0;min-height:100%}
 body{
-  font:15px/1.5 "Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+  font:15px/1.55 "Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
   color:var(--ink);background:var(--flaeche);-webkit-text-size-adjust:100%;
 }
 button,input,select,textarea{font:inherit;color:inherit}
-.num,input[inputmode="decimal"],input[inputmode="numeric"]{font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---------------------------------------------------------------- Kopfleiste */
 .kopf{
-  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
-  padding:0 24px;height:60px;padding-top:env(safe-area-inset-top);
+  position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;
+  height:58px;padding:0 20px;padding-top:env(safe-area-inset-top);
   background:var(--flaeche);border-bottom:1px solid var(--linie);
 }
-.kopf h1{font-size:15px;margin:0;font-weight:600;letter-spacing:-.01em}
-.kopf h1,.kopf .objekt,.kopf .summe{white-space:nowrap}
-.kopf .objekt{font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
-.kopf .summe{margin-left:auto;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
-@media (max-width:700px){.kopf .objekt{display:none}}
+.kopf h1{font-size:15px;margin:0;font-weight:600;letter-spacing:-.01em;white-space:nowrap}
+.kopf .objekt{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kopf .rechts{margin-left:auto;display:flex;align-items:center;gap:14px}
+.kopf .nummer{font-size:13px;color:var(--muted)}
+@media (max-width:640px){.kopf .objekt{display:none}}
 
-.knopf{
-  border:0;border-radius:var(--radius);padding:10px 16px;background:var(--accent);color:#fff;
-  font-size:13.5px;cursor:pointer;white-space:nowrap;
-}
-.knopf:hover{filter:brightness(1.08)}
-.knopf:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
-  outline:2px solid var(--accent);outline-offset:2px;
-}
-.knopf.leise{background:none;color:var(--ink);padding:9px 10px}
-.knopf.leise:hover{color:var(--accent);filter:none}
-.knopf.rand{background:none;color:var(--ink);border:1px solid var(--linie)}
-.knopf.klein{padding:7px 10px;font-size:13px}
-.knopf:disabled{opacity:.45;cursor:not-allowed}
+/* -------------------------------------------------------------------- Knöpfe */
+.knopf{border:0;border-radius:var(--radius);padding:11px 18px;background:var(--accent);color:#fff;
+  font-size:14px;cursor:pointer;white-space:nowrap;transition:filter .15s}
+.knopf:hover{filter:brightness(1.1)}
+.knopf.rand{background:none;color:var(--ink);border:1px solid var(--linie-stark)}
+.knopf.rand:hover{border-color:var(--ink);filter:none}
+.knopf.leise{background:none;color:var(--muted);padding:11px 4px}
+.knopf.leise:hover{color:var(--ink);filter:none}
+.knopf.klein{padding:8px 12px;font-size:13px}
+.knopf:disabled{opacity:.4;cursor:not-allowed;filter:none}
 
-/* -------------------------------------------------------------------- Layout */
-.buehne{display:grid;grid-template-columns:minmax(0,620px) minmax(0,1fr);align-items:stretch;min-height:calc(100vh - 60px)}
-.eingaben{border-right:1px solid var(--linie);padding:24px 24px 8px}
-.vorschau{background:var(--grund);padding:26px 0}
-@media (max-width:1000px){
-  .buehne{grid-template-columns:1fr}
-  .eingaben{border-right:0;padding:18px 18px 8px}
-  .vorschau{display:none}
-  body.zeigt-vorschau .eingaben{display:none}
-  body.zeigt-vorschau .vorschau{display:block;min-height:60vh}
-}
-.reiter{display:none;gap:20px;padding:14px 18px 0;border-bottom:1px solid var(--linie)}
-@media (max-width:1000px){.reiter{display:flex}}
-.reiter button{background:none;border:0;padding:0 0 11px;font-size:14px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
-.reiter button.aktiv{color:var(--ink);border-bottom-color:var(--accent)}
+/* --------------------------------------------------------------------- Bühne */
+.buehne{max-width:1160px;margin:0 auto;padding:0 20px 120px}
 
-/* ------------------------------------------------------------------ Abschnitte */
-.karte{border-bottom:1px solid var(--linie);margin:0}
-.karte:last-of-type{border-bottom:0}
-.karte>summary{
-  list-style:none;cursor:pointer;padding:18px 0 16px;display:flex;align-items:center;gap:10px;
-  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
-}
-.karte>summary::-webkit-details-marker{display:none}
-.karte>summary::after{content:"+";margin-left:auto;font-size:15px;letter-spacing:0;color:var(--leise)}
-.karte[open]>summary::after{content:"–"}
-.karte[open]>summary{color:var(--ink)}
-.karte .inhalt{padding:0 0 24px}
-.hinweis{font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.55}
+/* Schritt 1 – Scan einfügen */
+.start{max-width:560px;margin:0 auto;padding:56px 0 0;text-align:center}
+.start h2{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0 0 10px;text-wrap:balance}
+.start p.unter{color:var(--muted);margin:0 0 34px;font-size:15px}
+.ablage{border:1px dashed var(--linie-stark);border-radius:10px;padding:52px 24px;cursor:pointer;
+  background:var(--flaeche);transition:border-color .15s,background .15s}
+.ablage:hover,.ablage.hover{border-color:var(--accent);background:#fbfdfc}
+.ablage .zeichen{display:block;margin:0 auto 14px;color:var(--leise)}
+.ablage .haupt{font-size:15.5px}
+.ablage .neben{font-size:13px;color:var(--muted);margin-top:6px}
+.wege{display:flex;justify-content:center;gap:26px;margin-top:22px;flex-wrap:wrap}
+.wege button{border:0;background:none;padding:0;font-size:13.5px;color:var(--muted);cursor:pointer;
+  border-bottom:1px solid transparent}
+.wege button:hover{color:var(--ink);border-bottom-color:var(--linie-stark)}
 
-/* ---------------------------------------------------------------------- Felder */
+.schritte{display:flex;flex-direction:column;gap:0;margin:52px auto 0;max-width:420px;text-align:left}
+.schritte li{display:flex;gap:14px;align-items:baseline;padding:11px 0;border-top:1px solid var(--linie);
+  font-size:13.5px;color:var(--muted);list-style:none}
+.schritte li:first-child{border-top:0}
+.schritte .zahl{font-size:11px;letter-spacing:.1em;color:var(--leise);min-width:16px;font-variant-numeric:tabular-nums}
+.schritte li.jetzt{color:var(--ink)}
+.schritte li.jetzt .zahl{color:var(--accent)}
+
+.bilder{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin-top:18px}
+.bilder figure{margin:0;position:relative}
+.bilder img{width:100%;height:128px;object-fit:cover;border:1px solid var(--linie);border-radius:4px;cursor:zoom-in}
+.bilder button{position:absolute;top:5px;right:5px;border:0;background:rgba(21,24,26,.66);color:#fff;
+  cursor:pointer;font-size:12px;line-height:1;padding:4px 7px;border-radius:4px}
+.lupe{position:fixed;inset:0;background:rgba(21,24,26,.92);display:none;place-items:center;z-index:60;padding:16px}
+.lupe.auf{display:grid}
+.lupe img{max-width:100%;max-height:100%;object-fit:contain}
+
+.textweg{margin-top:22px;text-align:left}
+.textweg textarea{width:100%;min-height:130px;border:1px solid var(--linie);border-radius:var(--radius);
+  padding:12px 14px;resize:vertical;line-height:1.5}
+.textweg textarea:focus{outline:0;border-color:var(--accent)}
+.status{font-size:13px;color:var(--muted);min-height:20px}
+.erzeugen{display:flex;align-items:center;gap:14px;justify-content:center;margin-top:24px;flex-wrap:wrap}
+
+/* Schritt 2 – die Rechnung */
+.ergebnis{display:grid;grid-template-columns:minmax(0,1fr);gap:26px;padding-top:26px}
+.ergebnis.mit-editor{grid-template-columns:minmax(0,1fr) minmax(0,470px)}
+@media (max-width:900px){.ergebnis.mit-editor{grid-template-columns:minmax(0,1fr)}}
+.blatt{background:var(--grund);border-radius:10px;padding:26px}
+.blatt .zeile{display:flex;align-items:baseline;gap:10px;margin:0 0 16px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.blatt .zeile strong{white-space:nowrap}
+.blatt .zeile strong{color:var(--ink);font-weight:600;font-size:14px}
+.blaetter{display:flex;flex-direction:column;align-items:center;gap:20px;max-height:calc(100vh - 260px);overflow:auto}
+.blaetter canvas{background:#fff;border-radius:2px;box-shadow:0 1px 2px rgba(21,24,26,.08),0 12px 34px rgba(21,24,26,.10);max-width:100%}
+.leer{padding:70px 20px;text-align:center;color:var(--muted);font-size:14px}
+
+/* Schritt 3 – ändern */
+.editor{border:1px solid var(--linie);border-radius:10px;padding:4px 22px 22px}
+.editor h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:22px 0 14px;font-weight:600}
+.editor h2:first-of-type{margin-top:18px}
 .feld{display:flex;flex-direction:column;gap:5px;margin-bottom:16px;min-width:0}
 .feld label{font-size:11.5px;color:var(--muted)}
-.feld input,.feld select,.feld textarea{
-  border:0;border-bottom:1px solid var(--linie);border-radius:0;background:none;
-  padding:6px 0 8px;width:100%;font-size:15px;
-}
+.feld input,.feld select,.feld textarea{border:0;border-bottom:1px solid var(--linie);border-radius:0;
+  background:none;padding:6px 0 8px;width:100%;font-size:15px}
 .feld input:focus,.feld select:focus,.feld textarea:focus{outline:0;border-bottom-color:var(--accent)}
 .feld input::placeholder,.feld textarea::placeholder{color:var(--leise)}
-.feld textarea{resize:vertical;min-height:56px;line-height:1.5}
+.feld textarea{resize:vertical;min-height:54px;line-height:1.5}
 .feld select{appearance:none;-webkit-appearance:none;padding-right:18px;
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b918e' stroke-width='1.4'/%3E%3C/svg%3E") no-repeat right 2px center}
-.reihe{display:grid;gap:22px}
+.reihe{display:grid;gap:20px}
 .reihe.z2{grid-template-columns:1fr 1fr}
 .reihe.z3{grid-template-columns:1fr 1fr 1fr}
-.reihe.z13{grid-template-columns:1fr 2fr}
-@media (max-width:560px){.reihe.z3{grid-template-columns:1fr 1fr}.reihe.z13{grid-template-columns:1fr}}
-.schalter{display:flex;align-items:center;gap:10px;margin:4px 0 18px;font-size:14px;color:var(--mid)}
+.reihe.z13{grid-template-columns:1fr 1.6fr}
+@media (max-width:520px){.reihe.z3,.reihe.z13{grid-template-columns:1fr 1fr}}
+.schalter{display:flex;align-items:center;gap:10px;margin:2px 0 16px;font-size:14px;color:var(--mid)}
 .schalter input{width:17px;height:17px;accent-color:var(--accent)}
+.hinweis{font-size:12.5px;color:var(--muted);margin:0 0 14px}
 
-/* ------------------------------------------------------------------ Positionen */
-.position{border-bottom:1px solid var(--linie);padding:16px 0}
-.position .kopfzeile{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.position{border-top:1px solid var(--linie);padding:14px 0}
+.position .kopfzeile{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
 .position .nr{font-size:11.5px;color:var(--leise);font-variant-numeric:tabular-nums}
 .position .zeilensumme{margin-left:auto;font-size:15px;font-variant-numeric:tabular-nums}
 .weg{border:0;background:none;color:var(--muted);cursor:pointer;font-size:12.5px;padding:2px 0}
 .weg:hover{color:#b3261e}
-.schnellwahl{display:flex;flex-wrap:wrap;gap:18px;margin-top:16px}
+.schnellwahl{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px}
 .schnellwahl button{border:0;background:none;padding:0;font-size:13.5px;color:var(--muted);cursor:pointer}
 .schnellwahl button:hover{color:var(--accent)}
 .schnellwahl button:first-child{color:var(--ink)}
+.mehr{border-top:1px solid var(--linie);margin-top:20px}
+.mehr>summary{list-style:none;cursor:pointer;padding:16px 0 4px;font-size:11px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
+.mehr>summary::-webkit-details-marker{display:none}
+.mehr>summary::after{content:"+";margin-left:auto;font-size:15px;letter-spacing:0}
+.mehr[open]>summary::after{content:"–"}
+.eintrag{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--linie);font-size:14px}
+.eintrag .wachs{flex:1}
 
-/* --------------------------------------------------------------------- Import */
-.importreiter{display:flex;gap:22px;border-bottom:1px solid var(--linie);margin-bottom:16px}
-.importreiter button{border:0;background:none;padding:0 0 11px;font-size:13.5px;color:var(--muted);
-  cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
-.importreiter button.aktiv{color:var(--ink);border-bottom-color:var(--accent)}
-.ablage{border:1px dashed var(--linie-stark);border-radius:var(--radius);padding:22px 14px;
-  text-align:center;color:var(--leise);cursor:pointer;font-size:13.5px}
-.ablage.hover{border-color:var(--accent);color:var(--accent)}
-.bilder{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin-top:12px}
-.bilder figure{margin:0;position:relative}
-.bilder img{width:100%;height:112px;object-fit:cover;border:1px solid var(--linie);cursor:zoom-in}
-.lesezeile{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
-.lesezeile .status{font-size:12.5px;color:var(--muted)}
-.bilder button{position:absolute;top:4px;right:4px;border:0;background:rgba(21,24,26,.62);color:#fff;
-  cursor:pointer;font-size:12px;padding:2px 6px;border-radius:3px}
-.lupe{position:fixed;inset:0;background:rgba(21,24,26,.9);display:none;place-items:center;z-index:50;padding:16px}
-.lupe.auf{display:grid}
-.lupe img{max-width:100%;max-height:100%;object-fit:contain}
+/* Aktionsleiste */
+.aktionen{position:fixed;left:0;right:0;bottom:0;z-index:25;display:flex;align-items:center;gap:12px;
+  padding:12px 20px;padding-bottom:calc(12px + env(safe-area-inset-bottom));
+  background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid var(--linie)}
+.aktionen .betrag{font-size:19px;font-weight:600;line-height:1.15;font-variant-numeric:tabular-nums}
+.aktionen .betrag small{display:block;font-weight:400;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.aktionen .wachs{flex:1}
+@media (max-width:560px){
+  .buehne{padding:0 14px 110px}
+  .blatt{padding:14px}
+  .blatt .zeile{font-size:12.5px;margin-bottom:12px}
+  .start{padding-top:38px}
+  .start h2{font-size:23px}
+  .aktionen{gap:8px;padding:10px 14px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .aktionen .knopf{padding:11px 13px;font-size:13.5px}
+  .aktionen .betrag{font-size:17px}
+}
 
-/* ------------------------------------------------------------------- Vorschau */
-.vorschau .rahmen{position:sticky;top:86px}
-.vorschau .zeile{display:flex;align-items:center;gap:10px;padding:0 26px 16px;
-  font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
-.blaetter{display:flex;flex-direction:column;align-items:center;gap:20px;
-  padding:0 26px 26px;max-height:calc(100vh - 150px);overflow:auto}
-.blaetter canvas{background:#fff;border:1px solid var(--linie);max-width:100%}
-.vorschau .leer{padding:60px 26px;text-align:center;color:var(--muted);font-size:13.5px}
-
-/* ------------------------------------------------------------------- Fussleiste */
-.fussleiste{position:sticky;bottom:0;z-index:15;display:flex;gap:14px;align-items:center;
-  padding:12px 24px;padding-bottom:calc(12px + env(safe-area-inset-bottom));
-  background:var(--flaeche);border-top:1px solid var(--linie)}
-.fussleiste .gesamt{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
-.fussleiste .gesamt small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
-.wachs{flex:1}
-.meldung{position:fixed;left:50%;bottom:84px;transform:translate(-50%,12px);background:var(--ink);color:#fff;
-  padding:10px 18px;border-radius:var(--radius);font-size:13.5px;opacity:0;pointer-events:none;
-  transition:opacity .18s,transform .18s;z-index:60}
+.meldung{position:fixed;left:50%;bottom:92px;transform:translate(-50%,10px);background:var(--ink);color:#fff;
+  padding:11px 18px;border-radius:var(--radius);font-size:13.5px;opacity:0;pointer-events:none;
+  transition:opacity .18s,transform .18s;z-index:70;max-width:calc(100% - 32px);text-align:center}
 .meldung.auf{opacity:1;transform:translate(-50%,0)}
-@media (prefers-reduced-motion:reduce){.meldung{transition:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
@@ -160,216 +174,192 @@ button,input,select,textarea{font:inherit;color:inherit}
 <header class="kopf">
   <h1>Rechnung</h1>
   <span class="objekt">Wohlfühlapartment Guxhagen</span>
-  <div class="summe" id="kopfSumme">0,00 €</div>
-  <button class="knopf leise" id="btnPdfOben">PDF sichern</button>
+  <div class="rechts">
+    <span class="nummer" id="kopfSumme"></span>
+    <button class="knopf leise" id="btnZuruecksetzen" hidden>Neu</button>
+  </div>
 </header>
 
-<nav class="reiter">
-  <button id="reiterDaten" class="aktiv">Eingaben</button>
-  <button id="reiterVorschau">Vorschau</button>
-</nav>
-
 <main class="buehne">
-  <section class="eingaben">
 
-    <details class="karte" open id="kImport">
-      <summary>Daten übernehmen</summary>
-      <div class="inhalt">
-        <div class="importreiter">
-          <button data-import="claude" class="aktiv">Von Claude (JSON)</button>
-          <button data-import="text">Text einfügen</button>
-          <button data-import="bilder">Screenshots</button>
-        </div>
+  <!-- Schritt 1 ------------------------------------------------------------ -->
+  <section class="start" id="schrittScan">
+    <h2>Scan einfügen</h2>
+    <p class="unter" id="startUnter">Screenshot aus Booking oder Airbnb – der Rest geht von allein.</p>
 
-        <div data-importfeld="claude">
-          <p class="hinweis">Screenshots an Claude geben, Prompt kopieren, Antwort hier einfügen – oder den fertigen Link von Claude öffnen.</p>
-          <button class="knopf klein rand" id="btnPrompt">Prompt für Claude kopieren</button>
-          <div class="feld" style="margin-top:10px">
-            <label for="jsonEingabe">JSON von Claude</label>
-            <textarea id="jsonEingabe" rows="6" placeholder='{ "gast": { "firma": "..." }, "rechnung": { ... } }'></textarea>
-          </div>
-          <button class="knopf" id="btnJson">Daten übernehmen</button>
-        </div>
+    <div class="ablage" id="ablage">
+      <svg class="zeichen" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"></path>
+        <path d="M12 3v12"></path><path d="M8 7l4-4 4 4"></path>
+      </svg>
+      <div class="haupt">Scan hierher ziehen oder tippen</div>
+      <div class="neben" id="ablageNeben">Foto, Screenshot oder mehrere auf einmal</div>
+    </div>
 
-        <div data-importfeld="text" hidden>
-          <p class="hinweis">Text aus der Booking-/Airbnb-Nachricht kopieren und hier einfügen – Buchungsnummer, Zeitraum, Preis und Anschrift werden erkannt.</p>
-          <div class="feld">
-            <label for="textEingabe">Kopierter Text</label>
-            <textarea id="textEingabe" rows="7" placeholder="Bestätigungsnummer: 6138652495&#10;BSU InfraBau GmbH&#10;Jägerstr. 27&#10;57299 Burbach …"></textarea>
-          </div>
-          <button class="knopf" id="btnText">Erkennen &amp; übernehmen</button>
-        </div>
+    <div class="bilder" id="bilder"></div>
 
-        <div data-importfeld="bilder" hidden>
-          <p class="hinweis" id="bilderHinweis">Screenshots aus Booking oder Airbnb hinzufügen – Claude liest Gast, Zeitraum und Preis heraus.</p>
-          <div class="ablage" id="ablage">Screenshots hierher ziehen oder tippen zum Auswählen</div>
-          <input type="file" id="dateiEingabe" accept="image/*" multiple hidden>
-          <div class="bilder" id="bilder"></div>
-          <div class="lesezeile" id="lesezeile" hidden>
-            <button class="knopf" id="btnBilder">Rechnung aus Screenshots</button>
-            <button class="knopf leise" id="btnBilderStop" hidden>Abbrechen</button>
-            <span class="status" id="bilderStatus"></span>
-          </div>
-        </div>
+    <div class="textweg" id="textweg" hidden>
+      <div class="feld">
+        <label for="textEingabe">Text aus der Buchung oder von Claude</label>
+        <textarea id="textEingabe" placeholder="Bestätigungsnummer: 6138652495&#10;BSU InfraBau GmbH&#10;Jägerstr. 27&#10;57299 Burbach&#10;Gesamtpreis der Buchung € 69"></textarea>
       </div>
-    </details>
+    </div>
 
-    <details class="karte" open>
-      <summary>Rechnungsempfänger</summary>
-      <div class="inhalt">
-        <div class="reihe z13">
-          <div class="feld">
-            <label for="kundenwahl">Gespeicherte Kunden</label>
+    <div class="erzeugen">
+      <button class="knopf" id="btnErzeugen">Rechnung erzeugen</button>
+      <button class="knopf leise" id="btnBilderStop" hidden>Abbrechen</button>
+      <span class="status" id="bilderStatus"></span>
+    </div>
+
+    <div class="wege">
+      <button id="wegText">Text statt Bild einfügen</button>
+      <button id="wegLeer">Leere Rechnung schreiben</button>
+      <button id="wegPrompt" hidden>Prompt für Claude kopieren</button>
+    </div>
+
+    <ol class="schritte" id="schritteRail">
+      <li class="jetzt"><span class="zahl">01</span><span>Scan einfügen</span></li>
+      <li><span class="zahl">02</span><span>Rechnung erzeugen</span></li>
+      <li><span class="zahl">03</span><span>Ändern, wenn etwas fehlt</span></li>
+      <li><span class="zahl">04</span><span>Als PDF speichern</span></li>
+      <li><span class="zahl">05</span><span>An den Gast versenden</span></li>
+    </ol>
+  </section>
+
+  <!-- Schritt 2 bis 5 ------------------------------------------------------ -->
+  <section class="ergebnis" id="schrittRechnung" hidden>
+    <div class="blatt">
+      <p class="zeile"><strong id="vorschauInfo">Rechnung</strong><span id="vorschauNeben"></span></p>
+      <div class="blaetter" id="blaetter" aria-label="Rechnungsvorschau"></div>
+      <div class="leer" id="vorschauLeer" hidden>Noch keine Position – füge im Ändern-Bereich eine hinzu.</div>
+    </div>
+
+    <aside class="editor" id="editor" hidden>
+      <h2>Empfänger</h2>
+      <div class="feld"><label for="f-firma">Firma</label><input id="f-firma" data-pfad="gast.firma" placeholder="BSU InfraBau GmbH"></div>
+      <div class="feld"><label for="f-name">Name</label><input id="f-name" data-pfad="gast.name" placeholder="Philipp Zahnow"></div>
+      <div class="feld"><label for="f-strasse">Straße</label><input id="f-strasse" data-pfad="gast.strasse"></div>
+      <div class="reihe z13">
+        <div class="feld"><label for="f-plz">PLZ</label><input id="f-plz" data-pfad="gast.plz" inputmode="numeric"></div>
+        <div class="feld"><label for="f-ort">Ort</label><input id="f-ort" data-pfad="gast.ort"></div>
+      </div>
+      <div class="reihe z2">
+        <div class="feld"><label for="f-land">Land</label><input id="f-land" data-pfad="gast.land" placeholder="DE"></div>
+        <div class="feld"><label for="f-mail">E-Mail</label><input id="f-mail" data-pfad="gast.email" type="email"></div>
+      </div>
+
+      <h2>Buchung</h2>
+      <div class="reihe z2">
+        <div class="feld"><label for="f-nummer">Rechnungsnummer</label><input id="f-nummer" data-pfad="rechnung.nummer"></div>
+        <div class="feld"><label for="f-datum">Rechnungsdatum</label><input id="f-datum" data-pfad="rechnung.datum" type="date"></div>
+      </div>
+      <div class="reihe z2">
+        <div class="feld"><label for="f-anreise">Anreise</label><input id="f-anreise" data-pfad="rechnung.anreise" type="date"></div>
+        <div class="feld"><label for="f-abreise">Abreise</label><input id="f-abreise" data-pfad="rechnung.abreise" type="date"></div>
+      </div>
+      <div class="reihe z3">
+        <div class="feld"><label for="f-naechte">Nächte</label><input id="f-naechte" data-pfad="rechnung.naechte" type="number" min="0" step="1"></div>
+        <div class="feld"><label for="f-gaeste">Gäste</label><input id="f-gaeste" data-pfad="rechnung.gaeste" type="number" min="1" step="1"></div>
+        <div class="feld"><label for="f-ziel">Zahlungsziel</label><input id="f-ziel" data-pfad="rechnung.zahlungsziel" type="number" min="0" step="1"></div>
+      </div>
+      <div class="reihe z2">
+        <div class="feld"><label for="f-portal">Portal</label>
+          <select id="f-portal" data-pfad="rechnung.portal">
+            <option value="">– keins –</option><option>Booking.com</option><option>Airbnb</option>
+            <option>Fewo-direkt</option><option>Direktbuchung</option>
+          </select>
+        </div>
+        <div class="feld"><label for="f-buchungsnr">Buchungsnummer</label><input id="f-buchungsnr" data-pfad="rechnung.buchungsnummer" inputmode="numeric"></div>
+      </div>
+      <label class="schalter"><input type="checkbox" id="f-bezahlt" data-pfad="rechnung.bezahlt"> Bereits bezahlt</label>
+
+      <h2>Positionen</h2>
+      <div id="positionen"></div>
+      <div class="schnellwahl">
+        <button data-vorlage="uebernachtung">+ Übernachtung</button>
+        <button data-vorlage="reinigung">+ Endreinigung</button>
+        <button data-vorlage="kurtaxe">+ Kurtaxe</button>
+        <button data-vorlage="fruehstueck">+ Frühstück</button>
+        <button data-vorlage="parkplatz">+ Stellplatz</button>
+        <button data-vorlage="leer">+ Frei</button>
+      </div>
+
+      <details class="mehr">
+        <summary>Gast merken &amp; frühere Rechnungen</summary>
+        <div class="reihe z13" style="margin-top:12px">
+          <div class="feld"><label for="kundenwahl">Gespeicherte Gäste</label>
             <select id="kundenwahl"><option value="">– auswählen –</option></select>
           </div>
-          <div class="feld">
-            <label>&nbsp;</label>
-            <div style="display:flex;gap:8px">
-              <button class="knopf klein rand" id="btnKundeMerken">Kunde merken</button>
+          <div class="feld"><label>&nbsp;</label>
+            <div style="display:flex;gap:10px">
+              <button class="knopf klein rand" id="btnKundeMerken">Merken</button>
               <button class="knopf klein rand" id="btnKundeLoeschen">Löschen</button>
             </div>
           </div>
         </div>
-        <div class="feld"><label for="f-firma">Firma</label><input id="f-firma" data-pfad="gast.firma" placeholder="BSU InfraBau GmbH"></div>
-        <div class="feld"><label for="f-name">Name / Ansprechpartner</label><input id="f-name" data-pfad="gast.name" placeholder="Philipp Zahnow"></div>
-        <div class="feld"><label for="f-strasse">Straße und Hausnummer</label><input id="f-strasse" data-pfad="gast.strasse" placeholder="Jägerstr. 27"></div>
-        <div class="reihe z13">
-          <div class="feld"><label for="f-plz">PLZ</label><input id="f-plz" data-pfad="gast.plz" inputmode="numeric" placeholder="57299"></div>
-          <div class="feld"><label for="f-ort">Ort</label><input id="f-ort" data-pfad="gast.ort" placeholder="Burbach"></div>
-        </div>
-        <div class="reihe z2">
-          <div class="feld"><label for="f-land">Land</label><input id="f-land" data-pfad="gast.land" placeholder="DE"></div>
-          <div class="feld"><label for="f-mail">E-Mail</label><input id="f-mail" data-pfad="gast.email" type="email" placeholder="rechnung@firma.de"></div>
-        </div>
-      </div>
-    </details>
-
-    <details class="karte" open>
-      <summary>Buchung &amp; Rechnung</summary>
-      <div class="inhalt">
-        <div class="reihe z2">
-          <div class="feld"><label for="f-nummer">Rechnungsnummer</label><input id="f-nummer" data-pfad="rechnung.nummer" placeholder="2026-018"></div>
-          <div class="feld"><label for="f-datum">Rechnungsdatum</label><input id="f-datum" data-pfad="rechnung.datum" type="date"></div>
-        </div>
-        <div class="reihe z2">
-          <div class="feld"><label for="f-portal">Buchungsportal</label>
-            <select id="f-portal" data-pfad="rechnung.portal">
-              <option value="">– keins –</option><option>Booking.com</option><option>Airbnb</option>
-              <option>Fewo-direkt</option><option>Direktbuchung</option>
-            </select>
-          </div>
-          <div class="feld"><label for="f-buchungsnr">Buchungsnummer</label><input id="f-buchungsnr" data-pfad="rechnung.buchungsnummer" inputmode="numeric" placeholder="6138652495"></div>
-        </div>
-        <div class="reihe z2">
-          <div class="feld"><label for="f-anreise">Anreise</label><input id="f-anreise" data-pfad="rechnung.anreise" type="date"></div>
-          <div class="feld"><label for="f-abreise">Abreise</label><input id="f-abreise" data-pfad="rechnung.abreise" type="date"></div>
-        </div>
-        <div class="reihe z3">
-          <div class="feld"><label for="f-naechte">Nächte</label><input id="f-naechte" data-pfad="rechnung.naechte" type="number" min="0" step="1"></div>
-          <div class="feld"><label for="f-gaeste">Gäste</label><input id="f-gaeste" data-pfad="rechnung.gaeste" type="number" min="1" step="1"></div>
-          <div class="feld"><label for="f-ziel">Zahlungsziel (Tage)</label><input id="f-ziel" data-pfad="rechnung.zahlungsziel" type="number" min="0" step="1"></div>
-        </div>
-        <label class="schalter"><input type="checkbox" id="f-bezahlt" data-pfad="rechnung.bezahlt"> Bereits bezahlt (nur Beleg, keine Überweisung)</label>
-        <div class="feld"><label for="f-hinweis">Zusätzlicher Hinweis auf der Rechnung</label><textarea id="f-hinweis" data-pfad="rechnung.hinweis" rows="2" placeholder="z. B. Anschlussbuchung, Frühstück inklusive …"></textarea></div>
-      </div>
-    </details>
-
-    <details class="karte" open>
-      <summary>Positionen</summary>
-      <div class="inhalt">
-        <div id="positionen"></div>
-        <div class="schnellwahl">
-          <button data-vorlage="uebernachtung">+ Übernachtung</button>
-          <button data-vorlage="reinigung">+ Endreinigung</button>
-          <button data-vorlage="kurtaxe">+ Kurtaxe</button>
-          <button data-vorlage="fruehstueck">+ Frühstück</button>
-          <button data-vorlage="parkplatz">+ Stellplatz</button>
-          <button data-vorlage="leer">+ Freie Position</button>
-        </div>
-      </div>
-    </details>
-
-    <details class="karte">
-      <summary>Vermieter, Steuer &amp; Bank</summary>
-      <div class="inhalt">
-        <p class="hinweis">Wird auf diesem Gerät gespeichert und für jede weitere Rechnung übernommen.</p>
-        <div class="feld"><label for="v-objekt">Objektname (Titel oben)</label><input id="v-objekt" data-pfad="vermieter.objekt"></div>
-        <div class="feld"><label for="v-name">Vermieter</label><input id="v-name" data-pfad="vermieter.name"></div>
-        <div class="feld"><label for="v-strasse">Straße</label><input id="v-strasse" data-pfad="vermieter.strasse"></div>
-        <div class="reihe z13">
-          <div class="feld"><label for="v-plz">PLZ</label><input id="v-plz" data-pfad="vermieter.plz"></div>
-          <div class="feld"><label for="v-ort">Ort</label><input id="v-ort" data-pfad="vermieter.ort"></div>
-        </div>
-        <div class="reihe z2">
-          <div class="feld"><label for="v-tel">Telefon</label><input id="v-tel" data-pfad="vermieter.telefon"></div>
-          <div class="feld"><label for="v-mail">E-Mail</label><input id="v-mail" data-pfad="vermieter.email"></div>
-        </div>
-        <div class="reihe z2">
-          <div class="feld"><label for="v-steuernr">Steuernummer</label><input id="v-steuernr" data-pfad="vermieter.steuernummer"></div>
-          <div class="feld"><label for="v-ustid">USt-IdNr. (optional)</label><input id="v-ustid" data-pfad="vermieter.ustId"></div>
-        </div>
-        <div class="feld"><label for="v-iban">IBAN</label><input id="v-iban" data-pfad="vermieter.iban"></div>
-        <div class="reihe z2">
-          <div class="feld"><label for="v-bic">BIC (optional)</label><input id="v-bic" data-pfad="vermieter.bic"></div>
-          <div class="feld"><label for="v-gruss">Grußformel im Fuß</label><input id="v-gruss" data-pfad="vermieter.grussformel"></div>
-        </div>
-        <label class="schalter"><input type="checkbox" id="v-klein" data-pfad="vermieter.kleinunternehmer"> Kleinunternehmer nach § 19 UStG (keine Umsatzsteuer)</label>
-        <div class="reihe z2" id="ustFelder">
-          <div class="feld"><label for="v-satz">Umsatzsteuersatz (%)</label><input id="v-satz" data-pfad="vermieter.ustSatz" type="number" min="0" step="0.1"></div>
-          <div class="feld"><label for="v-inkl">Preise verstehen sich</label>
-            <select id="v-inkl" data-pfad="vermieter.preiseInklUst">
-              <option value="true">inkl. USt. (Bruttopreise)</option>
-              <option value="false">zzgl. USt. (Nettopreise)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </details>
-
-    <details class="karte">
-      <summary>Interne Notizen</summary>
-      <div class="inhalt">
-        <div class="reihe z2">
-          <div class="feld"><label for="i-kommission">Portal-Kommission (€)</label><input id="i-kommission" data-pfad="intern.kommission" inputmode="decimal" placeholder="8,28"></div>
-          <div class="feld"><label for="i-notiz">Notiz</label><input id="i-notiz" data-pfad="intern.notiz"></div>
-        </div>
-        <p class="hinweis" id="auszahlung"></p>
-      </div>
-    </details>
-
-    <details class="karte">
-      <summary>Gespeicherte Rechnungen</summary>
-      <div class="inhalt">
         <div id="historie"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-          <button class="knopf klein rand" id="btnJsonKopieren">Aktuelle Daten als JSON kopieren</button>
-          <button class="knopf klein rand" id="btnZuruecksetzen">Neue leere Rechnung</button>
+      </details>
+
+      <details class="mehr">
+        <summary>Vermieter, Steuer &amp; Bank</summary>
+        <div style="margin-top:12px">
+          <div class="feld"><label for="v-objekt">Objektname</label><input id="v-objekt" data-pfad="vermieter.objekt"></div>
+          <div class="feld"><label for="v-name">Vermieter</label><input id="v-name" data-pfad="vermieter.name"></div>
+          <div class="feld"><label for="v-strasse">Straße</label><input id="v-strasse" data-pfad="vermieter.strasse"></div>
+          <div class="reihe z13">
+            <div class="feld"><label for="v-plz">PLZ</label><input id="v-plz" data-pfad="vermieter.plz"></div>
+            <div class="feld"><label for="v-ort">Ort</label><input id="v-ort" data-pfad="vermieter.ort"></div>
+          </div>
+          <div class="reihe z2">
+            <div class="feld"><label for="v-tel">Telefon</label><input id="v-tel" data-pfad="vermieter.telefon"></div>
+            <div class="feld"><label for="v-mail">E-Mail</label><input id="v-mail" data-pfad="vermieter.email"></div>
+          </div>
+          <div class="reihe z2">
+            <div class="feld"><label for="v-steuernr">Steuernummer</label><input id="v-steuernr" data-pfad="vermieter.steuernummer"></div>
+            <div class="feld"><label for="v-ustid">USt-IdNr.</label><input id="v-ustid" data-pfad="vermieter.ustId"></div>
+          </div>
+          <div class="feld"><label for="v-iban">IBAN</label><input id="v-iban" data-pfad="vermieter.iban"></div>
+          <div class="reihe z2">
+            <div class="feld"><label for="v-bic">BIC</label><input id="v-bic" data-pfad="vermieter.bic"></div>
+            <div class="feld"><label for="v-gruss">Grußformel</label><input id="v-gruss" data-pfad="vermieter.grussformel"></div>
+          </div>
+          <label class="schalter"><input type="checkbox" id="v-klein" data-pfad="vermieter.kleinunternehmer"> Kleinunternehmer nach § 19 UStG</label>
+          <div class="reihe z2" id="ustFelder">
+            <div class="feld"><label for="v-satz">Umsatzsteuer (%)</label><input id="v-satz" data-pfad="vermieter.ustSatz" type="number" min="0" step="0.1"></div>
+            <div class="feld"><label for="v-inkl">Preise</label>
+              <select id="v-inkl" data-pfad="vermieter.preiseInklUst">
+                <option value="true">inkl. USt.</option><option value="false">zzgl. USt.</option>
+              </select>
+            </div>
+          </div>
         </div>
-      </div>
-    </details>
+      </details>
 
-  </section>
-
-  <section class="vorschau">
-    <div class="rahmen">
-      <div class="zeile"><span id="vorschauInfo">Live-Vorschau</span>
-        <span class="wachs"></span>
-        <button class="knopf klein rand" id="btnOeffnen">In neuem Tab</button>
-      </div>
-      <div class="blaetter" id="blaetter" aria-label="Rechnungsvorschau"></div>
-      <div class="leer" id="vorschauLeer" hidden>Noch keine Position – füge unten eine Position hinzu.</div>
-    </div>
+      <details class="mehr">
+        <summary>Notiz &amp; Kommission (nicht auf der Rechnung)</summary>
+        <div style="margin-top:12px">
+          <div class="reihe z2">
+            <div class="feld"><label for="i-kommission">Kommission (€)</label><input id="i-kommission" data-pfad="intern.kommission" inputmode="decimal"></div>
+            <div class="feld"><label for="i-notiz">Notiz</label><input id="i-notiz" data-pfad="intern.notiz"></div>
+          </div>
+          <div class="feld"><label for="f-hinweis">Hinweis auf der Rechnung</label><textarea id="f-hinweis" data-pfad="rechnung.hinweis" rows="2"></textarea></div>
+          <p class="hinweis" id="auszahlung"></p>
+        </div>
+      </details>
+    </aside>
   </section>
 </main>
 
-<div class="fussleiste">
-  <div class="gesamt" id="fussSumme">0,00 €<small id="fussDetail">Gesamt zu zahlen</small></div>
+<div class="aktionen" id="aktionen" hidden>
+  <div class="betrag" id="fussSumme">0,00 €<small id="fussDetail"></small></div>
   <span class="wachs"></span>
-  <button class="knopf leise" id="btnDrucken">Drucken</button>
-  <button class="knopf" id="btnPdf">PDF sichern</button>
+  <button class="knopf rand" id="btnAendern">Ändern</button>
+  <button class="knopf rand" id="btnPdf">Speichern</button>
+  <button class="knopf" id="btnVersenden">Versenden</button>
 </div>
 
-<div class="lupe" id="lupe"><img alt="Screenshot groß"></div>
+<input type="file" id="dateiEingabe" accept="image/*" multiple hidden>
+<div class="lupe" id="lupe"><img alt="Scan groß"></div>
 <div class="meldung" id="meldung"></div>
 
 <script>
@@ -1421,7 +1411,11 @@ function analysiereText(rohtext) {
 }
 
 /* ---- ui.mjs ---- */
-/* Bedienoberflaeche der Rechnungs-App (laeuft nur im Browser). */
+/* Bedienoberflaeche der Rechnungs-App (laeuft nur im Browser).
+ *
+ * Fuenf Schritte: Scan einfuegen, Rechnung erzeugen, aendern, speichern,
+ * versenden. Alles andere liegt hinter "Mehr".
+ */
 
 
 
@@ -1440,10 +1434,13 @@ let daten = leereRechnung();
 let bilder = [];
 let sampeln = null;
 let bildGrenzen = null;
+let leseAbbruch = null;
+let phase = 'scan';
+let editorOffen = false;
 let naechteManuell = false;
 let zeichnenTimer = null;
 
-/* ------------------------------------------------------------- Speicher */
+/* ------------------------------------------------------------------ Speicher */
 
 function lade(schluessel, vorgabe) {
   try {
@@ -1456,14 +1453,14 @@ function speichere(schluessel, wert) {
   try { localStorage.setItem(schluessel, JSON.stringify(wert)); } catch { /* Kontingent */ }
 }
 
-/* ----------------------------------------------------------------- Hilfen */
+/* -------------------------------------------------------------------- Hilfen */
 
 function melde(text) {
   const el = $('#meldung');
   el.textContent = text;
   el.classList.add('auf');
   clearTimeout(melde._t);
-  melde._t = setTimeout(() => el.classList.remove('auf'), 2200);
+  melde._t = setTimeout(() => el.classList.remove('auf'), 2600);
 }
 
 function hole(objekt, pfad) {
@@ -1502,10 +1499,14 @@ function schreibeFelder() {
     else if (el.dataset.pfad === 'intern.kommission') el.value = wert == null || wert === '' ? '' : String(wert).replace('.', ',');
     else el.value = wert == null ? '' : String(wert);
   }
-  $('#ustFelder').style.display = daten.vermieter.kleinunternehmer ? 'none' : '';
+  $('#ustFelder').hidden = Boolean(daten.vermieter.kleinunternehmer);
 }
 
-/* -------------------------------------------------------------- Positionen */
+function escape(text) {
+  return String(text ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+/* ---------------------------------------------------------------- Positionen */
 
 const VORLAGEN = {
   reinigung: { titel: 'Endreinigung', details: [], menge: 1, einheit: 'Pauschale', einzelpreis: 0 },
@@ -1514,6 +1515,12 @@ const VORLAGEN = {
   parkplatz: { titel: 'Stellplatz', details: [], menge: 1, einheit: 'Nacht', einzelpreis: 0 },
   leer: { titel: '', details: [], menge: 1, einheit: '', einzelpreis: 0 },
 };
+
+function preisText(wert) {
+  const zahl = Number(wert) || 0;
+  const gerundet = Math.round(zahl * 100) / 100;
+  return String(Math.abs(zahl - gerundet) < 0.0001 ? gerundet.toFixed(2) : zahl).replace('.', ',');
+}
 
 function zeichnePositionen() {
   const box = $('#positionen');
@@ -1524,14 +1531,13 @@ function zeichnePositionen() {
     el.innerHTML = `
       <div class="kopfzeile">
         <span class="nr">${index + 1}</span>
-        <strong style="font-size:13px;color:var(--grau)">Position</strong>
         <span class="zeilensumme" data-summe>${formatEuro(position.menge * position.einzelpreis)}</span>
-        <button class="weg" data-weg title="Position entfernen">Entfernen</button>
+        <button class="weg" data-weg>Entfernen</button>
       </div>
       <div class="feld"><label>Bezeichnung</label>
         <input data-feld="titel" value="${escape(position.titel)}" placeholder="Übernachtung im Wohlfühlapartment"></div>
       <div class="feld"><label>Details (eine Zeile je Angabe)</label>
-        <textarea data-feld="details" rows="3" placeholder="Guxhagen (Zeitraum: …)&#10;1 Übernachtung&#10;Buchungsnr.: …">${escape((position.details || []).join('\n'))}</textarea></div>
+        <textarea data-feld="details" rows="2">${escape((position.details || []).join('\n'))}</textarea></div>
       <div class="reihe z3">
         <div class="feld"><label>Menge</label><input data-feld="menge" inputmode="decimal" value="${escape(String(position.menge).replace('.', ','))}"></div>
         <div class="feld"><label>Einheit</label><input data-feld="einheit" value="${escape(position.einheit || '')}" placeholder="Nächte"></div>
@@ -1550,6 +1556,7 @@ function zeichnePositionen() {
         if (name === 'details') position.details = feld.value.split('\n').map((z) => z.trim()).filter(Boolean);
         else if (name === 'menge' || name === 'einzelpreis') position[name] = parseBetrag(feld.value);
         else position[name] = feld.value;
+        position.auto = false;
         el.querySelector('[data-summe]').textContent = formatEuro(position.menge * position.einzelpreis);
         aktualisiere();
       });
@@ -1558,17 +1565,7 @@ function zeichnePositionen() {
   });
 }
 
-function preisText(wert) {
-  const zahl = Number(wert) || 0;
-  const gerundet = Math.round(zahl * 100) / 100;
-  return String(Math.abs(zahl - gerundet) < 0.0001 ? gerundet.toFixed(2) : zahl).replace('.', ',');
-}
-
-function escape(text) {
-  return String(text ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-}
-
-/* ------------------------------------------------------------- Vorschau/PDF */
+/* --------------------------------------------------------------- Vorschau/PDF */
 
 function baueModell() {
   return normalisiere(daten);
@@ -1579,12 +1576,17 @@ function aktualisiere({ sofort = false } = {}) {
   $('#kopfSumme').textContent = modell.rechnung.nummer ? `Nr. ${modell.rechnung.nummer}` : '';
   $('#fussSumme').childNodes[0].nodeValue = formatEuro(modell.summen.gesamt);
   $('#fussDetail').textContent = modell.rechnung.bezahlt
-    ? 'Bereits bezahlt'
-    : modell.faelligkeit ? `Fällig am ${formatDatum(modell.faelligkeit)}` : 'Gesamt zu zahlen';
+    ? 'bereits bezahlt'
+    : modell.faelligkeit ? `fällig ${formatDatum(modell.faelligkeit)}` : 'gesamt';
+
+  const empfaenger = daten.gast.firma || daten.gast.name;
+  const zeitraum = [formatDatum(daten.rechnung.anreise), formatDatum(daten.rechnung.abreise)]
+    .filter(Boolean).join(' – ');
+  $('#vorschauNeben').textContent = [empfaenger, zeitraum].filter(Boolean).join(' · ');
 
   const kommission = parseBetrag(daten.intern.kommission);
   $('#auszahlung').textContent = kommission
-    ? `Auszahlung nach Kommission: ${formatEuro(modell.summen.gesamt - kommission)} (Kommission ${formatEuro(kommission)}).`
+    ? `Auszahlung nach Kommission: ${formatEuro(modell.summen.gesamt - kommission)}`
     : '';
 
   speichere(SPEICHER.entwurf, daten);
@@ -1594,25 +1596,19 @@ function aktualisiere({ sofort = false } = {}) {
   zeichnenTimer = setTimeout(() => zeichneVorschau(modell), sofort ? 0 : 250);
 }
 
-function pdfBlob(modell) {
-  return new Blob([baueRechnungPdf(modell)], { type: 'application/pdf' });
-}
-
 function zeichneVorschau(modell) {
   const leer = !modell.zeilen.length;
   const blaetter = $('#blaetter');
   $('#vorschauLeer').hidden = !leer;
-  blaetter.style.display = leer ? 'none' : '';
-  $('#vorschauInfo').textContent = leer
-    ? 'Live-Vorschau'
-    : `Live-Vorschau · ${modell.rechnung.nummer || 'ohne Nummer'}`;
+  blaetter.hidden = leer;
+  $('#vorschauInfo').textContent = modell.rechnung.nummer
+    ? `Rechnung ${modell.rechnung.nummer}` : 'Rechnung';
   if (leer) return;
 
   try {
-    // Dieselben Zeichenbefehle wie im PDF – nur auf den Bildschirm.
     const doc = baueRechnungPdf(modell, { alsDokument: true });
-    const breite = Math.max(240, blaetter.clientWidth - 28);
-    const skala = Math.min(1.6, breite / doc.width);
+    const breite = Math.max(240, blaetter.clientWidth || 520);
+    const skala = Math.min(1.5, breite / doc.width);
     const dichte = Math.min(2, window.devicePixelRatio || 1);
     blaetter.innerHTML = '';
     for (let seite = 0; seite < doc.pageCount; seite += 1) {
@@ -1627,14 +1623,27 @@ function zeichneVorschau(modell) {
   }
 }
 
-async function herunterladen() {
-  const modell = baueModell();
-  if (!modell.zeilen.length) { melde('Bitte zuerst eine Position anlegen.'); return; }
+/* ------------------------------------------------------- Speichern, Versenden */
+
+async function ueberClaudeSpeichern(bytes, name) {
+  try {
+    const speicherer = await window.claude?.use?.('downloads');
+    if (!speicherer) return 'nicht-verfuegbar';
+    await speicherer.save({ filename: name, data: bytes });
+    return 'gespeichert';
+  } catch (fehler) {
+    if (fehler && fehler.code === 'declined') return 'abgebrochen';
+    return 'nicht-verfuegbar';
+  }
+}
+
+async function sichere(modell, { still = false } = {}) {
+  const bytes = baueRechnungPdf(modell);
   const name = dateiname(modell);
-  const ergebnis = await ueberClaudeSpeichern(baueRechnungPdf(modell), name);
-  if (ergebnis === 'abgebrochen') return;
+  const ergebnis = await ueberClaudeSpeichern(bytes, name);
+  if (ergebnis === 'abgebrochen') return false;
   if (ergebnis === 'nicht-verfuegbar') {
-    const url = URL.createObjectURL(pdfBlob(modell));
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
     const a = document.createElement('a');
     a.href = url;
     a.download = name;
@@ -1644,33 +1653,62 @@ async function herunterladen() {
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
   merkeHistorie(modell);
-  melde('PDF gespeichert.');
+  if (!still) melde('Rechnung gespeichert.');
+  return true;
 }
 
-/* In der Claude-Vorschau darf die Seite den Download nicht selbst starten –
- * dort uebernimmt das die Speichern-Funktion der Umgebung. Ueberall sonst
- * greift der normale Browser-Download. */
-async function ueberClaudeSpeichern(bytes, name) {
-  try {
-    const speichern = await window.claude?.use?.('downloads');
-    if (!speichern) return 'nicht-verfuegbar';
-    await speichern.save({ filename: name, data: bytes });
-    return 'gespeichert';
-  } catch (fehler) {
-    if (fehler && fehler.code === 'declined') { melde('Speichern abgebrochen.'); return 'abgebrochen'; }
-    return 'nicht-verfuegbar';
-  }
+function mailText(modell) {
+  const v = modell.vermieter;
+  const zeitraum = [formatDatum(modell.rechnung.anreise), formatDatum(modell.rechnung.abreise)]
+    .filter(Boolean).join(' bis ');
+  const zeilen = [
+    'Guten Tag,',
+    '',
+    `anbei die Rechnung ${modell.rechnung.nummer} über ${formatEuro(modell.summen.gesamt)} für Ihren Aufenthalt${zeitraum ? ` vom ${zeitraum}` : ''} im ${v.objekt}.`,
+  ];
+  zeilen.push('');
+  zeilen.push(modell.rechnung.bezahlt
+    ? 'Der Betrag ist bereits bezahlt – die Rechnung dient nur Ihrer Unterlage.'
+    : `Bitte überweisen Sie den Betrag${modell.faelligkeit ? ` bis zum ${formatDatum(modell.faelligkeit)}` : ''} auf ${v.iban} unter Angabe der Rechnungsnummer.`);
+  zeilen.push('', 'Freundliche Grüße', v.name);
+  return zeilen.join('\n');
 }
 
-function drucken() {
+async function versenden() {
   const modell = baueModell();
-  if (!modell.zeilen.length) { melde('Bitte zuerst eine Position anlegen.'); return; }
-  const url = URL.createObjectURL(pdfBlob(modell));
-  const fenster = window.open(url, '_blank');
-  if (!fenster) melde('Bitte Pop-ups erlauben.');
+  if (!modell.zeilen.length) { melde('Noch keine Position auf der Rechnung.'); return; }
+
+  const bytes = baueRechnungPdf(modell);
+  const name = dateiname(modell);
+  const betreff = `Rechnung ${modell.rechnung.nummer} · ${modell.vermieter.objekt}`;
+  const text = mailText(modell);
+
+  try {
+    const datei = new File([bytes], name, { type: 'application/pdf' });
+    if (navigator.canShare?.({ files: [datei] })) {
+      await navigator.share({ files: [datei], title: betreff, text });
+      merkeHistorie(modell);
+      melde('Weitergegeben.');
+      return;
+    }
+  } catch (fehler) {
+    if (fehler && (fehler.name === 'AbortError' || fehler.name === 'NotAllowedError')) return;
+  }
+
+  const gesichert = await sichere(modell, { still: true });
+  if (!gesichert) return;
+  const brief = document.createElement('a');
+  brief.href = `mailto:${encodeURIComponent(modell.gast.email || '')}`
+    + `?subject=${encodeURIComponent(betreff)}&body=${encodeURIComponent(text)}`;
+  brief.target = '_blank';
+  brief.rel = 'noopener';
+  document.body.appendChild(brief);
+  brief.click();
+  brief.remove();
+  melde('Rechnung gespeichert – im Mailprogramm nur noch anhängen.');
 }
 
-/* ---------------------------------------------------------------- Historie */
+/* ------------------------------------------------------------------ Historie */
 
 function merkeHistorie(modell) {
   const historie = lade(SPEICHER.historie, []);
@@ -1694,21 +1732,20 @@ function zeichneHistorie() {
   box.innerHTML = '';
   historie.forEach((eintrag, index) => {
     const zeile = document.createElement('div');
-    zeile.className = 'position';
-    zeile.style.padding = '10px 12px';
-    zeile.innerHTML = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <strong>${escape(eintrag.nummer || '—')}</strong>
-        <span style="color:var(--grau)">${escape(eintrag.empfaenger || '')}</span>
-        <span style="margin-left:auto;font-weight:700">${formatEuro(eintrag.betrag)}</span>
-        <button class="knopf klein leise" style="background:var(--gruen-hell);color:var(--gruen)" data-laden>Laden</button>
-      </div>`;
+    zeile.className = 'eintrag';
+    zeile.innerHTML = `<span class="num">${escape(eintrag.nummer || '—')}</span>
+      <span style="color:var(--muted)">${escape(eintrag.empfaenger || '')}</span>
+      <span class="wachs"></span>
+      <span class="num">${formatEuro(eintrag.betrag)}</span>
+      <button class="knopf klein rand" data-laden>Öffnen</button>`;
     zeile.querySelector('[data-laden]').addEventListener('click', () => {
       daten = normalisierenEingang(historie[index].daten);
       naechteManuell = true;
       schreibeFelder();
       zeichnePositionen();
+      setzePhase('rechnung');
       aktualisiere({ sofort: true });
-      melde(`Rechnung ${eintrag.nummer} geladen.`);
+      melde(`Rechnung ${eintrag.nummer} geöffnet.`);
     });
     box.appendChild(zeile);
   });
@@ -1721,11 +1758,10 @@ function naechsteNummer() {
     .map((h) => String(h.nummer || '').match(new RegExp(`^${jahr}-(\\d+)$`)))
     .filter(Boolean)
     .map((m) => Number(m[1]));
-  const naechste = (nummern.length ? Math.max(...nummern) : 0) + 1;
-  return `${jahr}-${String(naechste).padStart(3, '0')}`;
+  return `${jahr}-${String((nummern.length ? Math.max(...nummern) : 0) + 1).padStart(3, '0')}`;
 }
 
-/* ------------------------------------------------------------------ Kunden */
+/* -------------------------------------------------------------------- Kunden */
 
 function zeichneKunden() {
   const kunden = lade(SPEICHER.kunden, []);
@@ -1739,7 +1775,7 @@ function zeichneKunden() {
   });
 }
 
-/* ------------------------------------------------------------------ Import */
+/* -------------------------------------------------------------------- Import */
 
 function normalisierenEingang(eingang) {
   const basis = leereRechnung();
@@ -1760,6 +1796,11 @@ function normalisierenEingang(eingang) {
   };
 }
 
+function leerRaus(objekt) {
+  return Object.fromEntries(Object.entries(objekt || {})
+    .filter(([, wert]) => wert !== '' && wert !== null && wert !== undefined));
+}
+
 function uebernehmen(teil, { ersetzen = false } = {}) {
   const neu = normalisierenEingang({
     vermieter: { ...daten.vermieter, ...(teil.vermieter || {}) },
@@ -1773,8 +1814,6 @@ function uebernehmen(teil, { ersetzen = false } = {}) {
   if (!neu.rechnung.datum) neu.rechnung.datum = heuteIso();
   if (!neu.rechnung.naechte) neu.rechnung.naechte = naechteZwischen(neu.rechnung.anreise, neu.rechnung.abreise);
 
-  // Positionen: mitgelieferte gewinnen, sonst wird aus dem Gesamtpreis die
-  // Uebernachtungszeile neu gebaut. Von Hand ergaenzte Zeilen bleiben erhalten.
   const gesamt = parseBetrag((teil.intern || {}).gesamtpreis);
   const vonHand = neu.positionen.filter((position) => !position.auto);
   if (teil.positionen && teil.positionen.length) {
@@ -1789,77 +1828,9 @@ function uebernehmen(teil, { ersetzen = false } = {}) {
   aktualisiere({ sofort: true });
 }
 
-function leerRaus(objekt) {
-  return Object.fromEntries(Object.entries(objekt || {})
-    .filter(([, wert]) => wert !== '' && wert !== null && wert !== undefined));
-}
+/* --------------------------------------------------- Scans von Claude lesen */
 
-const PROMPT = `Lies die angehängten Screenshots (Booking.com / Airbnb) und gib mir NUR dieses JSON zurück – keine Erklärung:
-
-{
-  "gast": {"firma":"","name":"","strasse":"","plz":"","ort":"","land":"","email":""},
-  "rechnung": {"portal":"Booking.com","buchungsnummer":"","anreise":"JJJJ-MM-TT","abreise":"JJJJ-MM-TT","naechte":0,"gaeste":1,"hinweis":""},
-  "intern": {"gesamtpreis":0,"kommission":0}
-}
-
-Regeln: "gesamtpreis" ist der Gesamtpreis der Buchung (das, was der Gast zahlt) – die Kommission wird NICHT abgezogen. Wenn der Gast in einer Nachricht eine abweichende Rechnungsanschrift nennt, nimm diese. Felder, die nicht erkennbar sind, leer lassen.`;
-
-function kopiere(text, meldung) {
-  const fertig = () => melde(meldung);
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(fertig).catch(() => ersatzKopie(text, fertig));
-  } else ersatzKopie(text, fertig);
-}
-
-function ersatzKopie(text, fertig) {
-  const feld = document.createElement('textarea');
-  feld.value = text;
-  document.body.appendChild(feld);
-  feld.select();
-  try { document.execCommand('copy'); fertig(); } catch { melde('Kopieren nicht möglich.'); }
-  feld.remove();
-}
-
-function jsonAusText(roh) {
-  const text = String(roh || '').trim();
-  const start = text.indexOf('{');
-  const ende = text.lastIndexOf('}');
-  if (start < 0 || ende < start) throw new Error('Kein JSON gefunden');
-  return JSON.parse(text.slice(start, ende + 1));
-}
-
-function zeigeBilder() {
-  const box = $('#bilder');
-  box.innerHTML = '';
-  bilder.forEach((bild, index) => {
-    const figur = document.createElement('figure');
-    figur.innerHTML = `<img src="${bild.url}" alt="Screenshot ${index + 1}"><button title="Entfernen">×</button>`;
-    figur.querySelector('img').addEventListener('click', () => {
-      $('#lupe img').src = bild.url;
-      $('#lupe').classList.add('auf');
-    });
-    figur.querySelector('button').addEventListener('click', () => {
-      bilder.splice(index, 1);
-      zeigeBilder();
-    });
-    box.appendChild(figur);
-  });
-  const knopf = $('#btnBilder');
-  if (knopf) knopf.disabled = !bilder.length;
-}
-
-function nimmDateien(dateien) {
-  for (const datei of dateien) {
-    if (!datei.type.startsWith('image/')) continue;
-    const leser = new FileReader();
-    leser.onload = () => { bilder.push({ url: leser.result, datei }); zeigeBilder(); };
-    leser.readAsDataURL(datei);
-  }
-}
-
-/* ------------------------------------------------- Screenshots von Claude lesen */
-
-const PROMPT_BILDER = `Die Bilder sind Screenshots einer Ferienwohnungs-Buchung (Booking.com, Airbnb) und/oder einer Nachricht des Gasts. Lies sie aus und antworte NUR mit diesem JSON, ohne Erklärung:
+const PROMPT_BILDER = `Die Bilder sind Screenshots oder Scans einer Ferienwohnungs-Buchung (Booking.com, Airbnb) und/oder einer Nachricht des Gasts. Lies sie aus und antworte NUR mit diesem JSON, ohne Erklärung:
 
 {
   "gast": {"firma":"","name":"","strasse":"","plz":"","ort":"","land":"","email":""},
@@ -1875,33 +1846,30 @@ Regeln:
 - Was nicht erkennbar ist, bleibt leer bzw. 0. Nichts erfinden.`;
 
 const LESEFEHLER = {
-  not_granted: 'Du hast das Lesen abgelehnt – über „Text einfügen“ geht es auch von Hand.',
+  not_granted: 'Ohne Erlaubnis kann ich die Bilder nicht lesen – Text einfügen geht weiterhin.',
   sampling_disabled: 'Für dieses Konto steht das Lesen der Bilder nicht zur Verfügung.',
-  images_unavailable: 'Diese Ansicht kann keine Bilder an Claude geben.',
-  image_rejected: 'Mit diesen Bildern kommt Claude nicht zurecht – bitte andere Screenshots.',
+  images_unavailable: 'Diese Ansicht kann keine Bilder lesen.',
+  image_rejected: 'Mit diesen Bildern komme ich nicht zurecht – bitte andere Aufnahmen.',
   rate_limited: 'Gerade zu viele Anfragen. Bitte in einer Minute noch einmal.',
   session_expired: 'Bitte neu bei Claude anmelden und noch einmal versuchen.',
   invalid_json: 'Die Antwort war unvollständig. Bitte noch einmal versuchen.',
-  refused: 'Claude hat die Bilder nicht ausgewertet. Bitte von Hand eintragen.',
+  refused: 'Die Bilder wurden nicht ausgewertet. Bitte Text einfügen.',
   empty_completion: 'Keine Antwort erhalten. Bitte noch einmal versuchen.',
   prompt_too_large: 'Zu viele Bilder auf einmal – bitte weniger auswählen.',
 };
 
-let leseAbbruch = null;
-
-async function leseScreenshots() {
-  if (!sampeln || !bilder.length) return;
+async function leseScans() {
   const grenze = bildGrenzen?.maxCount ?? 4;
   const dateien = bilder.slice(0, grenze).map((bild) => bild.datei);
+  const status = $('#bilderStatus');
+  const start = Date.now();
+  const takt = setInterval(() => {
+    status.textContent = `Ich lese den Scan … ${Math.round((Date.now() - start) / 1000)} s`;
+  }, 1000);
 
   leseAbbruch = new AbortController();
-  const start = Date.now();
-  const status = $('#bilderStatus');
-  const takt = setInterval(() => {
-    status.textContent = `Claude liest die Screenshots … ${Math.round((Date.now() - start) / 1000)} s`;
-  }, 1000);
-  status.textContent = 'Claude liest die Screenshots …';
-  $('#btnBilder').disabled = true;
+  status.textContent = 'Ich lese den Scan …';
+  $('#btnErzeugen').disabled = true;
   $('#btnBilderStop').hidden = false;
 
   try {
@@ -1910,35 +1878,134 @@ async function leseScreenshots() {
       signal: leseAbbruch.signal,
     });
     uebernehmen(gelesen, { ersetzen: true });
+    setzePhase('rechnung');
     const fehlt = [
-      !daten.gast.firma && !daten.gast.name ? 'Empfänger' : '',
-      !daten.positionen.length ? 'Betrag' : '',
-      !daten.rechnung.anreise ? 'Anreise' : '',
+      !daten.gast.firma && !daten.gast.name ? 'den Empfänger' : '',
+      !daten.positionen.length ? 'den Betrag' : '',
     ].filter(Boolean);
-    status.textContent = fehlt.length
-      ? `Übernommen – bitte ${fehlt.join(' und ')} ergänzen.`
-      : 'Übernommen – bitte kurz prüfen.';
-    if (bilder.length > grenze) {
-      melde(`Nur die ersten ${grenze} Screenshots wurden gelesen.`);
+    if (fehlt.length) {
+      oeffneEditor(true);
+      melde(`Bitte ${fehlt.join(' und ')} ergänzen.`);
+    } else {
+      melde('Fertig – bitte kurz prüfen.');
     }
+    if (bilder.length > grenze) melde(`Nur die ersten ${grenze} Scans wurden gelesen.`);
+    status.textContent = '';
   } catch (fehler) {
     const code = fehler && fehler.code;
-    if (code === 'cancelled') status.textContent = 'Abgebrochen.';
-    else status.textContent = LESEFEHLER[code] || 'Das Lesen hat nicht geklappt. Bitte noch einmal versuchen.';
+    status.textContent = code === 'cancelled'
+      ? 'Abgebrochen.'
+      : LESEFEHLER[code] || 'Das Lesen hat nicht geklappt. Bitte noch einmal versuchen.';
   } finally {
     clearInterval(takt);
     leseAbbruch = null;
-    $('#btnBilder').disabled = !bilder.length;
+    $('#btnErzeugen').disabled = false;
     $('#btnBilderStop').hidden = true;
   }
 }
 
-/* -------------------------------------------------------------------- Start */
+/* ------------------------------------------------------------------- Bilder */
 
-function zeigeImport(name) {
-  $$('.importreiter button').forEach((b) => b.classList.toggle('aktiv', b.dataset.import === name));
-  $$('[data-importfeld]').forEach((feld) => { feld.hidden = feld.dataset.importfeld !== name; });
+function zeigeBilder() {
+  const box = $('#bilder');
+  box.innerHTML = '';
+  bilder.forEach((bild, index) => {
+    const figur = document.createElement('figure');
+    figur.innerHTML = `<img src="${bild.url}" alt="Scan ${index + 1}"><button title="Entfernen">×</button>`;
+    figur.querySelector('img').addEventListener('click', () => {
+      $('#lupe img').src = bild.url;
+      $('#lupe').classList.add('auf');
+    });
+    figur.querySelector('button').addEventListener('click', () => {
+      bilder.splice(index, 1);
+      zeigeBilder();
+    });
+    box.appendChild(figur);
+  });
 }
+
+function nimmDateien(dateien) {
+  for (const datei of dateien) {
+    if (!datei.type.startsWith('image/')) continue;
+    const leser = new FileReader();
+    leser.onload = () => { bilder.push({ url: leser.result, datei }); zeigeBilder(); };
+    leser.readAsDataURL(datei);
+  }
+}
+
+/* ------------------------------------------------------------ Schritte/Phase */
+
+function setzePhase(neu) {
+  phase = neu;
+  $('#schrittScan').hidden = neu !== 'scan';
+  $('#schrittRechnung').hidden = neu !== 'rechnung';
+  $('#aktionen').hidden = neu !== 'rechnung';
+  $('#btnZuruecksetzen').hidden = neu !== 'rechnung';
+  if (neu === 'rechnung') aktualisiere({ sofort: true });
+  window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
+}
+
+function oeffneEditor(offen) {
+  editorOffen = offen;
+  $('#editor').hidden = !offen;
+  $('#schrittRechnung').classList.toggle('mit-editor', offen);
+  $('#btnAendern').textContent = offen ? 'Fertig' : 'Ändern';
+  if (offen) aktualisiere({ sofort: true });
+}
+
+function jsonAusText(roh) {
+  const text = String(roh || '').trim();
+  const start = text.indexOf('{');
+  const ende = text.lastIndexOf('}');
+  if (start < 0 || ende < start) return null;
+  try { return JSON.parse(text.slice(start, ende + 1)); } catch { return null; }
+}
+
+async function erzeuge() {
+  const text = $('#textEingabe').value.trim();
+
+  if (bilder.length && sampeln && bildGrenzen) { await leseScans(); return; }
+
+  if (bilder.length && !text) {
+    $('#textweg').hidden = false;
+    $('#bilderStatus').textContent = 'Hier kann ich die Bilder nicht lesen – bitte den Text einfügen.';
+    return;
+  }
+
+  if (text) {
+    const alsJson = jsonAusText(text);
+    uebernehmen(alsJson || analysiereText(text), { ersetzen: Boolean(alsJson) });
+    setzePhase('rechnung');
+    if (!daten.positionen.length) {
+      oeffneEditor(true);
+      melde('Betrag fehlt noch – bitte ergänzen.');
+    } else {
+      melde('Fertig – bitte kurz prüfen.');
+    }
+    return;
+  }
+
+  neueRechnung();
+  setzePhase('rechnung');
+  oeffneEditor(true);
+}
+
+function neueRechnung() {
+  const profil = lade(SPEICHER.profil, null);
+  daten = leereRechnung();
+  if (profil) daten.vermieter = { ...daten.vermieter, ...profil };
+  daten.rechnung.nummer = naechsteNummer();
+  naechteManuell = false;
+  bilder = [];
+  zeigeBilder();
+  $('#textEingabe').value = '';
+  $('#bilderStatus').textContent = '';
+  schreibeFelder();
+  zeichnePositionen();
+  aktualisiere({ sofort: true });
+}
+
+/* ---------------------------------------------------------------- Ereignisse */
 
 function bindeEreignisse() {
   document.addEventListener('input', (ereignis) => {
@@ -1946,45 +2013,16 @@ function bindeEreignisse() {
     if (!el) return;
     setze(daten, el.dataset.pfad, leseFeld(el));
     if (el.dataset.pfad === 'rechnung.naechte') naechteManuell = true;
-    if (el.dataset.pfad === 'rechnung.anreise' || el.dataset.pfad === 'rechnung.abreise') {
-      if (!naechteManuell) {
-        daten.rechnung.naechte = naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
-        $('[data-pfad="rechnung.naechte"]').value = daten.rechnung.naechte || '';
-      }
+    if ((el.dataset.pfad === 'rechnung.anreise' || el.dataset.pfad === 'rechnung.abreise') && !naechteManuell) {
+      daten.rechnung.naechte = naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
+      $('[data-pfad="rechnung.naechte"]').value = daten.rechnung.naechte || '';
     }
     if (el.dataset.pfad === 'vermieter.kleinunternehmer') {
-      $('#ustFelder').style.display = daten.vermieter.kleinunternehmer ? 'none' : '';
+      $('#ustFelder').hidden = Boolean(daten.vermieter.kleinunternehmer);
     }
     aktualisiere();
   });
 
-  $('#btnPdf').addEventListener('click', herunterladen);
-  $('#btnPdfOben').addEventListener('click', herunterladen);
-  $('#btnDrucken').addEventListener('click', drucken);
-  $('#btnOeffnen').addEventListener('click', drucken);
-
-  $$('.importreiter button').forEach((knopf) => {
-    knopf.addEventListener('click', () => zeigeImport(knopf.dataset.import));
-  });
-
-  $('#btnPrompt').addEventListener('click', () => kopiere(PROMPT, 'Prompt kopiert – zusammen mit den Screenshots an Claude schicken.'));
-  $('#btnJson').addEventListener('click', () => {
-    try {
-      uebernehmen(jsonAusText($('#jsonEingabe').value), { ersetzen: true });
-      melde('Daten übernommen.');
-    } catch (fehler) {
-      melde(`JSON nicht lesbar: ${fehler.message}`);
-    }
-  });
-  $('#btnText').addEventListener('click', () => {
-    const text = $('#textEingabe').value;
-    if (!text.trim()) { melde('Bitte zuerst Text einfügen.'); return; }
-    uebernehmen(analysiereText(text));
-    melde('Erkannte Daten übernommen – bitte prüfen.');
-  });
-
-  $('#btnBilder').addEventListener('click', leseScreenshots);
-  $('#btnBilderStop').addEventListener('click', () => leseAbbruch?.abort());
   $('#ablage').addEventListener('click', () => $('#dateiEingabe').click());
   $('#dateiEingabe').addEventListener('change', (e) => nimmDateien(e.target.files));
   ['dragenter', 'dragover'].forEach((typ) => $('#ablage').addEventListener(typ, (e) => {
@@ -1996,9 +2034,36 @@ function bindeEreignisse() {
   }));
   window.addEventListener('paste', (e) => {
     const dateien = Array.from(e.clipboardData?.files || []);
-    if (dateien.length) { nimmDateien(dateien); melde('Screenshot eingefügt.'); }
+    if (dateien.length) { nimmDateien(dateien); melde('Scan eingefügt.'); }
   });
   $('#lupe').addEventListener('click', () => $('#lupe').classList.remove('auf'));
+
+  $('#btnErzeugen').addEventListener('click', erzeuge);
+  $('#btnBilderStop').addEventListener('click', () => leseAbbruch?.abort());
+  $('#wegText').addEventListener('click', () => {
+    $('#textweg').hidden = false;
+    $('#textEingabe').focus();
+  });
+  $('#wegLeer').addEventListener('click', () => {
+    neueRechnung();
+    setzePhase('rechnung');
+    oeffneEditor(true);
+  });
+  $('#wegPrompt').addEventListener('click', () => {
+    const text = `${PROMPT_BILDER}\n\n(Die Screenshots hier anhängen.)`;
+    navigator.clipboard?.writeText(text)
+      .then(() => melde('Prompt kopiert – mit den Screenshots an Claude schicken.'))
+      .catch(() => melde('Kopieren nicht möglich.'));
+  });
+
+  $('#btnAendern').addEventListener('click', () => oeffneEditor(!editorOffen));
+  $('#btnPdf').addEventListener('click', () => sichere(baueModell()));
+  $('#btnVersenden').addEventListener('click', versenden);
+  $('#btnZuruecksetzen').addEventListener('click', () => {
+    neueRechnung();
+    oeffneEditor(false);
+    setzePhase('scan');
+  });
 
   $$('.schnellwahl button').forEach((knopf) => knopf.addEventListener('click', () => {
     const art = knopf.dataset.vorlage;
@@ -2017,16 +2082,16 @@ function bindeEreignisse() {
     if (index >= 0) kunden[index] = kunde; else kunden.push(kunde);
     speichere(SPEICHER.kunden, kunden);
     zeichneKunden();
-    melde('Kunde gespeichert.');
+    melde('Gast gemerkt.');
   });
   $('#btnKundeLoeschen').addEventListener('click', () => {
     const wahl = $('#kundenwahl').value;
-    if (wahl === '') { melde('Bitte zuerst einen Kunden auswählen.'); return; }
+    if (wahl === '') { melde('Bitte zuerst einen Gast auswählen.'); return; }
     const kunden = lade(SPEICHER.kunden, []);
     kunden.splice(Number(wahl), 1);
     speichere(SPEICHER.kunden, kunden);
     zeichneKunden();
-    melde('Kunde gelöscht.');
+    melde('Gast gelöscht.');
   });
   $('#kundenwahl').addEventListener('change', (e) => {
     if (e.target.value === '') return;
@@ -2037,78 +2102,48 @@ function bindeEreignisse() {
     aktualisiere();
   });
 
-  $('#btnJsonKopieren').addEventListener('click', () => kopiere(JSON.stringify(daten, null, 2), 'JSON kopiert.'));
-  $('#btnZuruecksetzen').addEventListener('click', () => {
-    const profil = lade(SPEICHER.profil, null);
-    daten = leereRechnung();
-    if (profil) daten.vermieter = { ...daten.vermieter, ...profil };
-    daten.rechnung.nummer = naechsteNummer();
-    naechteManuell = false;
-    bilder = [];
-    zeigeBilder();
-    schreibeFelder();
-    zeichnePositionen();
-    aktualisiere({ sofort: true });
-    melde('Neue Rechnung angelegt.');
-  });
-
-  $('#reiterDaten').addEventListener('click', () => {
-    document.body.classList.remove('zeigt-vorschau');
-    $('#reiterDaten').classList.add('aktiv');
-    $('#reiterVorschau').classList.remove('aktiv');
-  });
-  $('#reiterVorschau').addEventListener('click', () => {
-    document.body.classList.add('zeigt-vorschau');
-    $('#reiterVorschau').classList.add('aktiv');
-    $('#reiterDaten').classList.remove('aktiv');
-    aktualisiere({ sofort: true });
-  });
-
   document.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); herunterladen(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      if (phase === 'rechnung') sichere(baueModell());
+    }
   });
 
   let groesseTimer = null;
   window.addEventListener('resize', () => {
     clearTimeout(groesseTimer);
-    groesseTimer = setTimeout(() => aktualisiere({ sofort: true }), 200);
+    groesseTimer = setTimeout(() => { if (phase === 'rechnung') aktualisiere({ sofort: true }); }, 200);
   });
 }
 
-/* In der Claude-Vorschau lassen sich keine neuen Fenster oeffnen – dort fuehrt
- * nur der Speichern-Weg zum Ziel. */
-async function passeUmgebungAn() {
-  const speichern = await window.claude?.use?.('downloads').catch(() => null);
-  if (speichern) {
-    $('#btnDrucken').hidden = true;
-    $('#btnOeffnen').hidden = true;
-  }
+/* -------------------------------------------------------------------- Start */
 
+async function passeUmgebungAn() {
   sampeln = await window.claude?.use?.('sample').catch(() => null);
   bildGrenzen = sampeln ? (await sampeln.limits().catch(() => null))?.images : null;
-  if (!bildGrenzen) return;
 
-  // Screenshots sind hier der kürzeste Weg – also gleich vorn.
-  $('#lesezeile').hidden = false;
-  $('#btnBilder').disabled = !bilder.length;
-  $('#dateiEingabe').accept = bildGrenzen.mediaTypes.join(',');
-  $('#bilderHinweis').textContent = bildGrenzen.maxCount > 1
-    ? `Bis zu ${bildGrenzen.maxCount} Screenshots aus Booking oder Airbnb – Claude liest Gast, Zeitraum und Preis heraus.`
-    : 'Screenshot aus Booking oder Airbnb – Claude liest Gast, Zeitraum und Preis heraus.';
-  if (!daten.positionen.length) zeigeImport('bilder');
+  if (bildGrenzen) {
+    $('#dateiEingabe').accept = bildGrenzen.mediaTypes.join(',');
+    $('#ablageNeben').textContent = bildGrenzen.maxCount > 1
+      ? `Bis zu ${bildGrenzen.maxCount} Bilder – Buchung und Nachricht des Gasts`
+      : 'Ein Bild der Buchung';
+    return;
+  }
+
+  // Ohne Leseerlaubnis fuehrt der Weg ueber Text oder Claude im Chat.
+  $('#startUnter').textContent = 'Text aus der Buchung einfügen – oder die Scans von Claude lesen lassen.';
+  $('#ablageNeben').textContent = 'Hier dienen die Bilder als Vorlage zum Abtippen';
+  $('#wegPrompt').hidden = false;
 }
 
 function ausHash() {
   const treffer = location.hash.match(/daten=([^&]+)/);
   if (!treffer) return null;
   try {
-    const text = decodeURIComponent(escapeDecode(atob(treffer[1].replace(/-/g, '+').replace(/_/g, '/'))));
-    return JSON.parse(text);
+    const binaer = atob(treffer[1].replace(/-/g, '+').replace(/_/g, '/'));
+    const prozent = Array.from(binaer, (z) => `%${z.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
+    return JSON.parse(decodeURIComponent(prozent));
   } catch { return null; }
-}
-
-function escapeDecode(binaer) {
-  return Array.from(binaer, (zeichen) => `%${zeichen.charCodeAt(0).toString(16).padStart(2, '0')}`).join('');
 }
 
 function start() {
@@ -2126,9 +2161,8 @@ function start() {
   if (!daten.rechnung.naechte) {
     daten.rechnung.naechte = naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
   }
-  if (uebergabe && !daten.positionen.length) {
-    const gesamt = parseBetrag(daten.intern.gesamtpreis);
-    if (gesamt) daten.positionen = [standardPosition(daten)];
+  if (uebergabe && !daten.positionen.length && parseBetrag(daten.intern.gesamtpreis)) {
+    daten.positionen = [standardPosition(daten)];
   }
   naechteManuell = Boolean(daten.rechnung.naechte)
     && daten.rechnung.naechte !== naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
@@ -2139,6 +2173,7 @@ function start() {
   zeichnePositionen();
   zeichneKunden();
   zeichneHistorie();
+  setzePhase(daten.positionen.length ? 'rechnung' : 'scan');
   aktualisiere({ sofort: true });
 
   const alsApp = document.querySelector('link[rel="manifest"]');
