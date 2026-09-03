@@ -1435,6 +1435,12 @@ let bilder = [];
 let sampeln = null;
 let bildGrenzen = null;
 let leseAbbruch = null;
+
+// Fehler, nach denen das Lesen in dieser Ansicht gar nicht möglich ist.
+const OHNE_LESEN = new Set([
+  'not_granted', 'sampling_disabled', 'not_declared',
+  'capability_disabled', 'capability_removed', 'images_unavailable',
+]);
 let phase = 'scan';
 let editorOffen = false;
 let naechteManuell = false;
@@ -1846,9 +1852,9 @@ Regeln:
 - Was nicht erkennbar ist, bleibt leer bzw. 0. Nichts erfinden.`;
 
 const LESEFEHLER = {
-  not_granted: 'Ohne Erlaubnis kann ich die Bilder nicht lesen – Text einfügen geht weiterhin.',
+  not_granted: 'Ohne Erlaubnis kann ich die Bilder nicht lesen – erlaube es beim nächsten Versuch oder füge den Text ein.',
   sampling_disabled: 'Für dieses Konto steht das Lesen der Bilder nicht zur Verfügung.',
-  images_unavailable: 'Diese Ansicht kann keine Bilder lesen.',
+  images_unavailable: 'Diese Ansicht kann keine Bilder an Claude geben – gib die Screenshots Claude im Chat oder füge den Text ein.',
   image_rejected: 'Mit diesen Bildern komme ich nicht zurecht – bitte andere Aufnahmen.',
   rate_limited: 'Gerade zu viele Anfragen. Bitte in einer Minute noch einmal.',
   session_expired: 'Bitte neu bei Claude anmelden und noch einmal versuchen.',
@@ -1858,10 +1864,36 @@ const LESEFEHLER = {
   prompt_too_large: 'Zu viele Bilder auf einmal – bitte weniger auswählen.',
 };
 
+/** Holt die Lesefunktion – auch dann, wenn sie beim Laden noch nicht da war. */
+async function holeSampler() {
+  if (sampeln) return sampeln;
+  try {
+    sampeln = (await window.claude?.use?.('sample')) || null;
+  } catch { sampeln = null; }
+  if (sampeln && !bildGrenzen) {
+    bildGrenzen = (await sampeln.limits().catch(() => null))?.images || null;
+  }
+  return sampeln;
+}
+
+function keinLesen(grund) {
+  $('#bilderStatus').textContent = grund;
+  $('#textweg').hidden = false;
+  $('#wegPrompt').hidden = false;
+}
+
 async function leseScans() {
-  const grenze = bildGrenzen?.maxCount ?? 4;
-  const dateien = bilder.slice(0, grenze).map((bild) => bild.datei);
   const status = $('#bilderStatus');
+  status.textContent = 'Verbinde mit Claude …';
+  const sampler = await holeSampler();
+  if (!sampler) {
+    keinLesen('Diese Ansicht ist nicht mit Claude verbunden. Öffne die Seite in Claude – oder füge den Text der Buchung ein.');
+    return;
+  }
+
+  // Ohne Angabe aus limits() trotzdem versuchen – die Antwort sagt, ob es geht.
+  const grenze = bildGrenzen?.maxCount ?? bilder.length;
+  const dateien = bilder.slice(0, grenze).map((bild) => bild.datei);
   const start = Date.now();
   const takt = setInterval(() => {
     status.textContent = `Ich lese den Scan … ${Math.round((Date.now() - start) / 1000)} s`;
@@ -1873,7 +1905,7 @@ async function leseScans() {
   $('#btnBilderStop').hidden = false;
 
   try {
-    const gelesen = await sampeln.json(PROMPT_BILDER, {
+    const gelesen = await sampler.json(PROMPT_BILDER, {
       images: dateien,
       signal: leseAbbruch.signal,
     });
@@ -1893,9 +1925,13 @@ async function leseScans() {
     status.textContent = '';
   } catch (fehler) {
     const code = fehler && fehler.code;
-    status.textContent = code === 'cancelled'
-      ? 'Abgebrochen.'
-      : LESEFEHLER[code] || 'Das Lesen hat nicht geklappt. Bitte noch einmal versuchen.';
+    if (code === 'cancelled') {
+      status.textContent = 'Abgebrochen.';
+    } else if (OHNE_LESEN.has(code)) {
+      keinLesen(LESEFEHLER[code]);
+    } else {
+      status.textContent = LESEFEHLER[code] || 'Das Lesen hat nicht geklappt. Bitte noch einmal versuchen.';
+    }
   } finally {
     clearInterval(takt);
     leseAbbruch = null;
@@ -1964,13 +2000,7 @@ function jsonAusText(roh) {
 async function erzeuge() {
   const text = $('#textEingabe').value.trim();
 
-  if (bilder.length && sampeln && bildGrenzen) { await leseScans(); return; }
-
-  if (bilder.length && !text) {
-    $('#textweg').hidden = false;
-    $('#bilderStatus').textContent = 'Hier kann ich die Bilder nicht lesen – bitte den Text einfügen.';
-    return;
-  }
+  if (bilder.length) { await leseScans(); return; }
 
   if (text) {
     const alsJson = jsonAusText(text);
@@ -2119,20 +2149,19 @@ function bindeEreignisse() {
 /* -------------------------------------------------------------------- Start */
 
 async function passeUmgebungAn() {
-  sampeln = await window.claude?.use?.('sample').catch(() => null);
-  bildGrenzen = sampeln ? (await sampeln.limits().catch(() => null))?.images : null;
-
-  if (bildGrenzen) {
+  const sampler = await holeSampler();
+  if (sampler && bildGrenzen) {
     $('#dateiEingabe').accept = bildGrenzen.mediaTypes.join(',');
     $('#ablageNeben').textContent = bildGrenzen.maxCount > 1
       ? `Bis zu ${bildGrenzen.maxCount} Bilder – Buchung und Nachricht des Gasts`
       : 'Ein Bild der Buchung';
     return;
   }
+  if (sampler) return;
 
-  // Ohne Leseerlaubnis fuehrt der Weg ueber Text oder Claude im Chat.
-  $('#startUnter').textContent = 'Text aus der Buchung einfügen – oder die Scans von Claude lesen lassen.';
-  $('#ablageNeben').textContent = 'Hier dienen die Bilder als Vorlage zum Abtippen';
+  // Keine Verbindung zu Claude: der Weg über Text bleibt.
+  $('#startUnter').textContent = 'Text aus der Buchung einfügen – oder die Seite in Claude öffnen, dann lese ich die Scans selbst.';
+  $('#ablageNeben').textContent = 'Bilder dienen hier als Vorlage zum Abtippen';
   $('#wegPrompt').hidden = false;
 }
 
