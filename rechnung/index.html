@@ -16,6 +16,7 @@
   --accent:#1f5f46; --accent-weich:#eef3f0; --radius:4px;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;height:100%}
 body{
   font:15px/1.5 "Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
@@ -123,6 +124,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .bilder{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin-top:12px}
 .bilder figure{margin:0;position:relative}
 .bilder img{width:100%;height:112px;object-fit:cover;border:1px solid var(--linie);cursor:zoom-in}
+.lesezeile{display:flex;align-items:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+.lesezeile .status{font-size:12.5px;color:var(--muted)}
 .bilder button{position:absolute;top:4px;right:4px;border:0;background:rgba(21,24,26,.62);color:#fff;
   cursor:pointer;font-size:12px;padding:2px 6px;border-radius:3px}
 .lupe{position:fixed;inset:0;background:rgba(21,24,26,.9);display:none;place-items:center;z-index:50;padding:16px}
@@ -198,10 +201,15 @@ button,input,select,textarea{font:inherit;color:inherit}
         </div>
 
         <div data-importfeld="bilder" hidden>
-          <p class="hinweis">Screenshots als Vorlage zum Abtippen – sie bleiben nur auf diesem Gerät.</p>
+          <p class="hinweis" id="bilderHinweis">Screenshots aus Booking oder Airbnb hinzufügen – Claude liest Gast, Zeitraum und Preis heraus.</p>
           <div class="ablage" id="ablage">Screenshots hierher ziehen oder tippen zum Auswählen</div>
           <input type="file" id="dateiEingabe" accept="image/*" multiple hidden>
           <div class="bilder" id="bilder"></div>
+          <div class="lesezeile" id="lesezeile" hidden>
+            <button class="knopf" id="btnBilder">Rechnung aus Screenshots</button>
+            <button class="knopf leise" id="btnBilderStop" hidden>Abbrechen</button>
+            <span class="status" id="bilderStatus"></span>
+          </div>
         </div>
       </div>
     </details>
@@ -1430,6 +1438,8 @@ const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 let daten = leereRechnung();
 let bilder = [];
+let sampeln = null;
+let bildGrenzen = null;
 let naechteManuell = false;
 let zeichnenTimer = null;
 
@@ -1821,11 +1831,11 @@ function jsonAusText(roh) {
 function zeigeBilder() {
   const box = $('#bilder');
   box.innerHTML = '';
-  bilder.forEach((quelle, index) => {
+  bilder.forEach((bild, index) => {
     const figur = document.createElement('figure');
-    figur.innerHTML = `<img src="${quelle}" alt="Screenshot ${index + 1}"><button title="Entfernen">×</button>`;
+    figur.innerHTML = `<img src="${bild.url}" alt="Screenshot ${index + 1}"><button title="Entfernen">×</button>`;
     figur.querySelector('img').addEventListener('click', () => {
-      $('#lupe img').src = quelle;
+      $('#lupe img').src = bild.url;
       $('#lupe').classList.add('auf');
     });
     figur.querySelector('button').addEventListener('click', () => {
@@ -1834,18 +1844,101 @@ function zeigeBilder() {
     });
     box.appendChild(figur);
   });
+  const knopf = $('#btnBilder');
+  if (knopf) knopf.disabled = !bilder.length;
 }
 
 function nimmDateien(dateien) {
   for (const datei of dateien) {
     if (!datei.type.startsWith('image/')) continue;
     const leser = new FileReader();
-    leser.onload = () => { bilder.push(leser.result); zeigeBilder(); };
+    leser.onload = () => { bilder.push({ url: leser.result, datei }); zeigeBilder(); };
     leser.readAsDataURL(datei);
   }
 }
 
+/* ------------------------------------------------- Screenshots von Claude lesen */
+
+const PROMPT_BILDER = `Die Bilder sind Screenshots einer Ferienwohnungs-Buchung (Booking.com, Airbnb) und/oder einer Nachricht des Gasts. Lies sie aus und antworte NUR mit diesem JSON, ohne Erklärung:
+
+{
+  "gast": {"firma":"","name":"","strasse":"","plz":"","ort":"","land":"","email":""},
+  "rechnung": {"portal":"","buchungsnummer":"","anreise":"JJJJ-MM-TT","abreise":"JJJJ-MM-TT","naechte":0,"gaeste":1,"hinweis":""},
+  "intern": {"gesamtpreis":0,"kommission":0}
+}
+
+Regeln:
+- Alle Bilder gehören zu derselben Buchung.
+- "gesamtpreis" ist der Gesamtpreis der Buchung, also das, was der Gast zahlt. Die Kommission des Portals wird NICHT abgezogen, sie gehört nach "kommission".
+- Nennt der Gast in einer Nachricht eine abweichende Rechnungsanschrift ("Bitte stellen Sie die Rechnung auf …"), gilt diese statt des Namens aus der Buchung.
+- Datumsangaben wie "Mo., 10. Aug. 2026" ins Format JJJJ-MM-TT umrechnen.
+- Was nicht erkennbar ist, bleibt leer bzw. 0. Nichts erfinden.`;
+
+const LESEFEHLER = {
+  not_granted: 'Du hast das Lesen abgelehnt – über „Text einfügen“ geht es auch von Hand.',
+  sampling_disabled: 'Für dieses Konto steht das Lesen der Bilder nicht zur Verfügung.',
+  images_unavailable: 'Diese Ansicht kann keine Bilder an Claude geben.',
+  image_rejected: 'Mit diesen Bildern kommt Claude nicht zurecht – bitte andere Screenshots.',
+  rate_limited: 'Gerade zu viele Anfragen. Bitte in einer Minute noch einmal.',
+  session_expired: 'Bitte neu bei Claude anmelden und noch einmal versuchen.',
+  invalid_json: 'Die Antwort war unvollständig. Bitte noch einmal versuchen.',
+  refused: 'Claude hat die Bilder nicht ausgewertet. Bitte von Hand eintragen.',
+  empty_completion: 'Keine Antwort erhalten. Bitte noch einmal versuchen.',
+  prompt_too_large: 'Zu viele Bilder auf einmal – bitte weniger auswählen.',
+};
+
+let leseAbbruch = null;
+
+async function leseScreenshots() {
+  if (!sampeln || !bilder.length) return;
+  const grenze = bildGrenzen?.maxCount ?? 4;
+  const dateien = bilder.slice(0, grenze).map((bild) => bild.datei);
+
+  leseAbbruch = new AbortController();
+  const start = Date.now();
+  const status = $('#bilderStatus');
+  const takt = setInterval(() => {
+    status.textContent = `Claude liest die Screenshots … ${Math.round((Date.now() - start) / 1000)} s`;
+  }, 1000);
+  status.textContent = 'Claude liest die Screenshots …';
+  $('#btnBilder').disabled = true;
+  $('#btnBilderStop').hidden = false;
+
+  try {
+    const gelesen = await sampeln.json(PROMPT_BILDER, {
+      images: dateien,
+      signal: leseAbbruch.signal,
+    });
+    uebernehmen(gelesen, { ersetzen: true });
+    const fehlt = [
+      !daten.gast.firma && !daten.gast.name ? 'Empfänger' : '',
+      !daten.positionen.length ? 'Betrag' : '',
+      !daten.rechnung.anreise ? 'Anreise' : '',
+    ].filter(Boolean);
+    status.textContent = fehlt.length
+      ? `Übernommen – bitte ${fehlt.join(' und ')} ergänzen.`
+      : 'Übernommen – bitte kurz prüfen.';
+    if (bilder.length > grenze) {
+      melde(`Nur die ersten ${grenze} Screenshots wurden gelesen.`);
+    }
+  } catch (fehler) {
+    const code = fehler && fehler.code;
+    if (code === 'cancelled') status.textContent = 'Abgebrochen.';
+    else status.textContent = LESEFEHLER[code] || 'Das Lesen hat nicht geklappt. Bitte noch einmal versuchen.';
+  } finally {
+    clearInterval(takt);
+    leseAbbruch = null;
+    $('#btnBilder').disabled = !bilder.length;
+    $('#btnBilderStop').hidden = true;
+  }
+}
+
 /* -------------------------------------------------------------------- Start */
+
+function zeigeImport(name) {
+  $$('.importreiter button').forEach((b) => b.classList.toggle('aktiv', b.dataset.import === name));
+  $$('[data-importfeld]').forEach((feld) => { feld.hidden = feld.dataset.importfeld !== name; });
+}
 
 function bindeEreignisse() {
   document.addEventListener('input', (ereignis) => {
@@ -1871,12 +1964,7 @@ function bindeEreignisse() {
   $('#btnOeffnen').addEventListener('click', drucken);
 
   $$('.importreiter button').forEach((knopf) => {
-    knopf.addEventListener('click', () => {
-      $$('.importreiter button').forEach((b) => b.classList.toggle('aktiv', b === knopf));
-      $$('[data-importfeld]').forEach((feld) => {
-        feld.hidden = feld.dataset.importfeld !== knopf.dataset.import;
-      });
-    });
+    knopf.addEventListener('click', () => zeigeImport(knopf.dataset.import));
   });
 
   $('#btnPrompt').addEventListener('click', () => kopiere(PROMPT, 'Prompt kopiert – zusammen mit den Screenshots an Claude schicken.'));
@@ -1895,6 +1983,8 @@ function bindeEreignisse() {
     melde('Erkannte Daten übernommen – bitte prüfen.');
   });
 
+  $('#btnBilder').addEventListener('click', leseScreenshots);
+  $('#btnBilderStop').addEventListener('click', () => leseAbbruch?.abort());
   $('#ablage').addEventListener('click', () => $('#dateiEingabe').click());
   $('#dateiEingabe').addEventListener('change', (e) => nimmDateien(e.target.files));
   ['dragenter', 'dragover'].forEach((typ) => $('#ablage').addEventListener(typ, (e) => {
@@ -1989,9 +2079,23 @@ function bindeEreignisse() {
  * nur der Speichern-Weg zum Ziel. */
 async function passeUmgebungAn() {
   const speichern = await window.claude?.use?.('downloads').catch(() => null);
-  if (!speichern) return;
-  $('#btnDrucken').hidden = true;
-  $('#btnOeffnen').hidden = true;
+  if (speichern) {
+    $('#btnDrucken').hidden = true;
+    $('#btnOeffnen').hidden = true;
+  }
+
+  sampeln = await window.claude?.use?.('sample').catch(() => null);
+  bildGrenzen = sampeln ? (await sampeln.limits().catch(() => null))?.images : null;
+  if (!bildGrenzen) return;
+
+  // Screenshots sind hier der kürzeste Weg – also gleich vorn.
+  $('#lesezeile').hidden = false;
+  $('#btnBilder').disabled = !bilder.length;
+  $('#dateiEingabe').accept = bildGrenzen.mediaTypes.join(',');
+  $('#bilderHinweis').textContent = bildGrenzen.maxCount > 1
+    ? `Bis zu ${bildGrenzen.maxCount} Screenshots aus Booking oder Airbnb – Claude liest Gast, Zeitraum und Preis heraus.`
+    : 'Screenshot aus Booking oder Airbnb – Claude liest Gast, Zeitraum und Preis heraus.';
+  if (!daten.positionen.length) zeigeImport('bilder');
 }
 
 function ausHash() {
@@ -2030,13 +2134,12 @@ function start() {
     && daten.rechnung.naechte !== naechteZwischen(daten.rechnung.anreise, daten.rechnung.abreise);
 
   bindeEreignisse();
+  passeUmgebungAn();
   schreibeFelder();
   zeichnePositionen();
   zeichneKunden();
   zeichneHistorie();
   aktualisiere({ sofort: true });
-
-  passeUmgebungAn();
 
   const alsApp = document.querySelector('link[rel="manifest"]');
   if (alsApp && 'serviceWorker' in navigator && location.protocol.startsWith('http')) {

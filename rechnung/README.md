@@ -25,7 +25,11 @@ dafür steckt in `.claude/skills/rechnung/SKILL.md`.
   Antwort einfügen, *Daten übernehmen*.
 * **Text einfügen** – Text aus der Booking-/Airbnb-Nachricht einfügen;
   Buchungsnummer, Zeitraum, Preis und Anschrift werden erkannt.
-* **Screenshots** – Bilder als Vorlage danebenlegen und abtippen.
+* **Screenshots** – Bilder hineinlegen und *Rechnung aus Screenshots*: Claude
+  liest Gast, Zeitraum, Buchungsnummer und Preis heraus und füllt das Formular.
+  Das geht nur dort, wo die Seite Claude fragen darf (als Artifact auf
+  claude.ai); in der eigenständigen Fassung dienen die Bilder als Vorlage zum
+  Abtippen.
 
 Alle Zeilen bleiben danach frei bearbeitbar: Bezeichnung, Detailzeilen, Menge,
 Einheit, Einzelpreis. Rechts läuft die Live-Vorschau mit – sie zeichnet dieselben
@@ -95,8 +99,12 @@ festlegen, ob die Preise brutto oder netto gemeint sind.
 | `cli.mjs` | Rechnung aus JSON auf der Kommandozeile |
 
 `vorschau.html` ist dieselbe App ohne eigenen Seitenrahmen – zum Veröffentlichen
-als Claude-Artifact. Dort speichert die Vorschau-Umgebung die PDF-Datei
-(`downloads`-Fähigkeit), weil die Seite den Download nicht selbst starten darf.
+als Claude-Artifact. Dort kommen zwei Fähigkeiten der Umgebung dazu: `sample`
+liest die Screenshots (auf das Claude-Konto des Betrachters, nach dessen
+Zustimmung, höchstens so viele Bilder pro Anfrage wie `limits()` erlaubt) und
+`downloads` speichert die PDF-Datei, weil die Seite den Download nicht selbst
+starten darf. Fehlt eine der beiden, blendet die App den jeweiligen Weg aus –
+der Rest funktioniert unverändert.
 
 Nach Änderungen in `src/` neu bündeln:
 
