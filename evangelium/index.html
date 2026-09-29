@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Galerie des Evangeliums</title>
+<meta name="description" content="Eine begehbare Ausstellung in zehn Räumen: das Evangelium Schritt für Schritt, mit Bibelstellen.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..600&family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;500;600&display=swap">
+<style>
+/* Layout: ein dunkler Galeriegang in 3D. Scrollen bewegt die Kamera Raum für Raum nach vorn;
+   Bilder hängen versetzt im Gang, Torbögen trennen die Räume, das Licht wächst zum Ende hin. */
+:root {
+  --ink: #09090a;          /* Grund: fast schwarz, minimal warm */
+  --hall: #121113;         /* Bildgrund */
+  --panel: #171618;        /* Rahmen / Karten */
+  --line: #2c2a28;         /* Linien, Torbögen, Boden */
+  --text: #eeebe4;         /* Schrift */
+  --dim: #8f8a82;          /* Nebentext */
+  --light: #e8c27b;        /* Licht: der einzige Akzent */
+  --blood: #b04a3d;        /* nur im Raum des Kreuzes */
+
+  --f-display: "Bodoni Moda", "Didot", "Bodoni 72", Georgia, serif;
+  --f-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-ref: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --r-card: 28px;
+  --r-art: 20px;
+  --r-pill: 999px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--ink); scroll-snap-type: y proximity; }
+html.flat { scroll-snap-type: none; }
+body {
+  margin: 0;
+  background: var(--ink);
+  color: var(--text);
+  font: 400 15px/1.6 var(--f-body);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+button, a { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--light); outline-offset: 3px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- HUD ---------- */
+.hud {
+  position: fixed; inset: 0 0 auto 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 14px;
+  pointer-events: none;
+}
+.hud > * { pointer-events: auto; }
+.brand { display: flex; flex-direction: column; line-height: 1.15; }
+.brand b { font: italic 500 20px/1 var(--f-display); letter-spacing: .01em; }
+.brand span { font: 500 10px/1.4 var(--f-ref); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); margin-top: 4px; }
+.hud-right { display: flex; gap: 8px; align-items: center; }
+.pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 14px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  font: 500 11px/1 var(--f-ref); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--text);
+  white-space: nowrap;
+}
+button.pill:hover { border-color: var(--dim); }
+.counter { font-variant-numeric: tabular-nums; color: var(--dim); }
+.counter b { color: var(--text); font-weight: 500; }
+
+/* ---------- Bühne ---------- */
+.stage {
+  position: fixed; inset: 0;
+  perspective: 1000px;
+  perspective-origin: 50% 50%;
+  overflow: hidden;
+}
+.glow {
+  position: absolute; inset: -20%;
+  background:
+    radial-gradient(40% 35% at 50% 45%, var(--light), transparent 70%);
+  opacity: .05;
+  pointer-events: none;
+  transition: opacity .6s ease;
+}
+.vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 50%, transparent 55%, var(--ink) 100%);
+  z-index: 2;
+}
+.cam, .world { position: absolute; inset: 0; transform-style: preserve-3d; }
+.floor {
+  position: absolute; left: 50%; top: 50%;
+  width: 2400px; height: 4500px;
+  transform-origin: 50% 0;
+  background-image:
+    repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 375px),
+    repeating-linear-gradient(to right, var(--line) 0 1px, transparent 1px 400px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 85%);
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 85%);
+  opacity: .55;
+  pointer-events: none;
+}
+.arch {
+  position: absolute; left: 50%; top: 50%;
+  border: 1px solid var(--line);
+  border-radius: 999px 999px 36px 36px;
+  pointer-events: none;
+}
+.arch::after {
+  content: ""; position: absolute; inset: 18px;
+  border: 1px solid var(--line); opacity: .5;
+  border-radius: inherit;
+}
+
+/* ---------- Bilder ---------- */
+.frame {
+  position: absolute; left: 50%; top: 50%;
+  width: 440px;
+  perspective: 1600px;
+  will-change: transform, opacity;
+}
+.card {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform .9s cubic-bezier(.2,.8,.2,1);
+}
+.frame.flipped .card { transform: rotateY(180deg); }
+.face {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: 0 50px 120px -40px #000, 0 0 0 1px #0000;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+.back {
+  position: absolute; inset: 0;
+  transform: rotateY(180deg);
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 28px;
+  overflow-y: auto;
+}
+.art {
+  margin: 10px 10px 0;
+  border-radius: var(--r-art);
+  background: var(--hall);
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  position: relative;
+}
+.art svg { display: block; width: 100%; height: 100%; transition: transform 1.2s cubic-bezier(.2,.8,.2,1); }
+.frame:hover .art svg { transform: scale(1.04); }
+.body { padding: 20px 26px 24px; display: flex; flex-direction: column; gap: 10px; }
+.eyebrow {
+  margin: 0;
+  font: 500 10.5px/1 var(--f-ref); letter-spacing: .18em; text-transform: uppercase;
+  color: var(--light);
+}
+.frame h2 {
+  margin: 0;
+  font: 500 32px/1.05 var(--f-display);
+  letter-spacing: -.01em;
+  text-wrap: balance;
+}
+.verse {
+  margin: 0;
+  font: italic 400 17.5px/1.5 var(--f-display);
+  color: var(--text);
+  text-wrap: pretty;
+}
+.verse.sm { font-size: 16px; color: var(--text); }
+cite {
+  font: 500 11px/1.3 var(--f-ref); font-style: normal; letter-spacing: .06em;
+  color: var(--dim);
+}
+.meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 16px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--hall);
+  font: 600 13px/1 var(--f-body);
+  text-decoration: none;
+  transition: border-color .2s, background .2s, color .2s;
+}
+.btn:hover { border-color: var(--light); }
+.btn.solid { background: var(--light); color: var(--ink); border-color: var(--light); }
+.btn.solid:hover { background: var(--text); border-color: var(--text); }
+.btn svg { width: 14px; height: 14px; }
+.q { margin: 0; font: 500 22px/1.3 var(--f-display); text-wrap: balance; }
+.back .meta { margin-top: auto; }
+.back ol { margin: 0; padding-left: 18px; color: var(--dim); display: grid; gap: 6px; }
+.back ol b { color: var(--text); font-weight: 600; }
+.prayer { font: italic 400 16.5px/1.6 var(--f-display); margin: 0; }
+
+/* Eingang */
+.entrance .face { padding: 44px 34px 34px; display: flex; flex-direction: column; gap: 18px; background: radial-gradient(closest-side, var(--ink) 55%, transparent); border-color: transparent; box-shadow: none; overflow: visible; text-align: center; align-items: center; }
+.entrance h1 {
+  margin: 0;
+  font: italic 400 clamp(52px, 13vw, 84px)/.92 var(--f-display);
+  letter-spacing: -.02em;
+}
+.entrance h1 span { display: block; font-style: normal; font-weight: 500; font-size: 12px; letter-spacing: .32em; text-transform: uppercase; font-family: var(--f-ref); color: var(--light); margin-bottom: 18px; }
+.entrance p { margin: 0; color: var(--dim); max-width: 34ch; }
+.hint { display: flex; flex-direction: column; align-items: center; gap: 10px; font: 500 10.5px/1 var(--f-ref); letter-spacing: .18em; text-transform: uppercase; color: var(--dim); margin-top: 6px; }
+.hint i { width: 1px; height: 46px; background: linear-gradient(var(--light), transparent); animation: drip 2.2s ease-in-out infinite; transform-origin: top; }
+@keyframes drip { 0% { transform: scaleY(0); opacity: 1 } 60% { transform: scaleY(1); opacity: 1 } 100% { transform: scaleY(1); opacity: 0 } }
+
+/* sanfte Bewegung in den Bildern */
+.breathe { animation: breathe 5s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
+@keyframes breathe { 0%,100% { opacity: .75; transform: scale(1) } 50% { opacity: 1; transform: scale(1.06) } }
+
+/* ---------- Scroll-Spur ---------- */
+.track section { height: 100vh; scroll-snap-align: start; }
+
+/* ---------- Dock ---------- */
+.dock {
+  position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px;
+  padding: 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  max-width: calc(100vw - 32px);
+}
+.nav-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 0; background: transparent;
+  display: grid; place-items: center;
+  color: var(--dim);
+}
+.nav-btn:hover { color: var(--text); background: var(--hall); }
+.nav-btn svg { width: 16px; height: 16px; }
+.dots { display: flex; align-items: center; gap: 2px; padding: 0 4px; }
+.dot {
+  position: relative;
+  width: 14px; height: 28px; border: 0; padding: 0; background: transparent;
+  display: grid; place-items: center;
+  transition: width .35s cubic-bezier(.2,.8,.2,1);
+}
+.dot::before {
+  content: ""; width: 6px; height: 6px; border-radius: var(--r-pill);
+  background: var(--line);
+  transition: width .35s cubic-bezier(.2,.8,.2,1), background .3s;
+}
+.dot.seen::before { background: var(--dim); }
+.dot.on { width: 30px; }
+.dot.on::before { width: 22px; background: var(--light); }
+.dot .tip {
+  position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%) translateY(4px);
+  padding: 7px 12px; border-radius: var(--r-pill);
+  background: var(--text); color: var(--ink);
+  font: 600 12px/1 var(--f-body); white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+}
+.dot:hover .tip, .dot:focus-visible .tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- Listenansicht (auch bei reduzierter Bewegung) ---------- */
+html.flat .stage { position: relative; inset: auto; perspective: none; overflow: visible; }
+html.flat .cam, html.flat .world { position: relative; inset: auto; transform: none !important; }
+html.flat .world {
+  display: flex; flex-direction: column; align-items: center; gap: 56px;
+  padding: calc(96px + env(safe-area-inset-top, 0px)) 16px 140px;
+}
+html.flat .frame { position: relative; left: auto; top: auto; transform: none !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; width: min(440px, 100%); }
+html.flat .floor, html.flat .arch, html.flat .track, html.flat .vignette { display: none; }
+html.flat .glow { position: fixed; }
+
+@media (max-width: 520px) {
+  .brand span { display: none; }
+  .frame h2 { font-size: 28px; }
+  .verse { font-size: 16.5px; }
+  .body { padding: 16px 20px 20px; }
+  .back { padding: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: .01s !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="hud">
+  <div class="brand"><b>Evangelium</b><span>Eine Ausstellung in zehn Räumen</span></div>
+  <div class="hud-right">
+    <span class="pill counter" id="counter" aria-live="polite">Eingang</span>
+    <button class="pill" id="viewToggle" type="button" aria-pressed="false">Liste</button>
+  </div>
+</header>
+
+<main>
+  <div class="stage" id="stage">
+    <div class="glow" id="glow"></div>
+    <div class="cam" id="cam">
+      <div class="floor" id="floor"></div>
+      <div class="world" id="world"></div>
+    </div>
+    <div class="vignette"></div>
+  </div>
+  <div class="track" id="track" aria-hidden="true"></div>
+</main>
+
+<nav class="dock" aria-label="Räume">
+  <button class="nav-btn" id="prev" type="button" aria-label="Vorheriger Raum">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>
+  </button>
+  <div class="dots" id="dots"></div>
+  <button class="nav-btn" id="next" type="button" aria-label="Nächster Raum">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>
+  </button>
+</nav>
+
+<script>
+/* ---------- Inhalte: Bibelzitate nach Luther 1912 (gemeinfrei) ---------- */
+const ROMAN = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+
+const STATIONS = [
+  { entrance: true, title: "Eingang" },
+  {
+    title: "Geliebt",
+    verse: "Ich habe dich je und je geliebt; darum habe ich dich zu mir gezogen aus lauter Güte.",
+    ref: "Jeremia 31,3", bs: "Jeremia31,3",
+    q: "Was würde sich ändern, wenn du wirklich glaubst, dass Gott dich gewollt hat?",
+    verse2: "Und Gott schuf den Menschen ihm zum Bilde, zum Bilde Gottes schuf er ihn.",
+    ref2: "1. Mose 1,27", bs2: "1.Mose1,27",
+    art: "love"
+  },
+  {
+    title: "Getrennt",
+    verse: "Denn es ist hier kein Unterschied: sie sind allzumal Sünder und mangeln des Ruhmes, den sie bei Gott haben sollten.",
+    ref: "Römer 3,23", bs: "Römer3,23",
+    q: "Wo spürst du in deinem Leben, dass etwas zwischen dir und Gott steht?",
+    verse2: "Sondern eure Untugenden scheiden euch und euren Gott voneinander, und eure Sünden verbergen sein Angesicht vor euch.",
+    ref2: "Jesaja 59,2", bs2: "Jesaja59,2",
+    art: "gap"
+  },
+  {
+    title: "Die Folge",
+    verse: "Denn der Tod ist der Sünde Sold.",
+    ref: "Römer 6,23", bs: "Römer6,23",
+    q: "Kann ein Mensch diese Trennung aus eigener Kraft überwinden?",
+    verse2: "Und wie den Menschen ist gesetzt, einmal zu sterben, darnach aber das Gericht.",
+    ref2: "Hebräer 9,27", bs2: "Hebräer9,27",
+    art: "fall"
+  },
+  {
+    title: "Gott kommt",
+    verse: "Also hat Gott die Welt geliebt, daß er seinen eingeborenen Sohn gab, auf daß alle, die an ihn glauben, nicht verloren werden, sondern das ewige Leben haben.",
+    ref: "Johannes 3,16", bs: "Johannes3,16",
+    q: "Gott wartet nicht, bis wir zu ihm hinaufsteigen. Er kommt herab. Was sagt das über ihn?",
+    verse2: "Und das Wort ward Fleisch und wohnte unter uns, und wir sahen seine Herrlichkeit.",
+    ref2: "Johannes 1,14", bs2: "Johannes1,14",
+    art: "beam"
+  },
+  {
+    title: "Das Kreuz",
+    verse: "Darum preiset Gott seine Liebe gegen uns, daß Christus für uns gestorben ist, da wir noch Sünder waren.",
+    ref: "Römer 5,8", bs: "Römer5,8",
+    q: "Jesus hat getragen, was dich von Gott trennt. Für wen ist er gestorben?",
+    verse2: "Welcher unsre Sünden selbst hinaufgetragen hat an seinem Leibe auf das Holz; durch welches Wunden ihr seid heil geworden.",
+    ref2: "1. Petrus 2,24", bs2: "1.Petrus2,24",
+    art: "cross"
+  },
+  {
+    title: "Auferstanden",
+    verse: "Daß Christus gestorben sei für unsre Sünden nach der Schrift, und daß er begraben sei, und daß er auferstanden sei am dritten Tage nach der Schrift.",
+    ref: "1. Korinther 15,3–4", bs: "1.Korinther15,3-4",
+    q: "Wenn das Grab leer ist, was bedeutet das für deinen eigenen Tod?",
+    verse2: "Ich bin die Auferstehung und das Leben. Wer an mich glaubt, der wird leben, ob er gleich stürbe.",
+    ref2: "Johannes 11,25", bs2: "Johannes11,25",
+    art: "tomb"
+  },
+  {
+    title: "Aus Gnade",
+    verse: "Denn aus Gnade seid ihr selig geworden durch den Glauben, und dasselbige nicht aus euch, Gottes Gabe ist es; nicht aus den Werken, auf daß sich nicht jemand rühme.",
+    ref: "Epheser 2,8–9", bs: "Epheser2,8-9",
+    q: "Ein Geschenk kann man nicht verdienen, nur annehmen. Fällt dir das leicht?",
+    verse2: "Aber die Gabe Gottes ist das ewige Leben in Christo Jesu, unserm HERRN.",
+    ref2: "Römer 6,23", bs2: "Römer6,23",
+    art: "gift"
+  },
+  {
+    title: "Umkehr & Glaube",
+    verse: "Denn so du mit deinem Munde bekennst Jesum, daß er der HERR sei, und glaubst in deinem Herzen, daß ihn Gott von den Toten auferweckt hat, so wirst du selig.",
+    ref: "Römer 10,9", bs: "Römer10,9",
+    q: "Umkehr heißt: sich umdrehen, weg von sich selbst, hin zu Jesus. Wovon müsstest du dich abwenden?",
+    verse2: "So tut nun Buße und bekehrt euch, daß eure Sünden vertilgt werden.",
+    ref2: "Apostelgeschichte 3,19", bs2: "Apostelgeschichte3,19",
+    art: "turn"
+  },
+  {
+    title: "Neues Leben",
+    verse: "Darum, ist jemand in Christo, so ist er eine neue Kreatur; das Alte ist vergangen, siehe, es ist alles neu geworden!",
+    ref: "2. Korinther 5,17", bs: "2.Korinther5,17",
+    q: "Was dürfte in deinem Leben vergehen, und was dürfte neu werden?",
+    verse2: "Ich lebe aber; doch nun nicht ich, sondern Christus lebt in mir.",
+    ref2: "Galater 2,20", bs2: "Galater2,20",
+    art: "dawn"
+  },
+  {
+    title: "Die Tür",
+    verse: "Siehe, ich stehe vor der Tür und klopfe an. So jemand meine Stimme hören wird und die Tür auftun, zu dem werde ich eingehen.",
+    ref: "Offenbarung 3,20", bs: "Offenbarung3,20",
+    final: true,
+    art: "door"
+  }
+];
+const N = STATIONS.length;
+
+/* ---------- Bilder (SVG) ---------- */
+function art(kind, id) {
+  const L = "var(--light)", T = "var(--text)", D = "var(--line)", B = "var(--blood)", I = "var(--hall)";
+  const defs = `<defs>
+    <radialGradient id="g${id}"><stop offset="0" stop-color="${L}" stop-opacity=".9"/><stop offset="1" stop-color="${L}" stop-opacity="0"/></radialGradient>
+    <linearGradient id="v${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${L}" stop-opacity=".85"/><stop offset="1" stop-color="${L}" stop-opacity="0"/></linearGradient>
+    <linearGradient id="u${id}" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="${L}" stop-opacity=".7"/><stop offset="1" stop-color="${L}" stop-opacity="0"/></linearGradient>
+    <radialGradient id="r${id}"><stop offset="0" stop-color="${B}" stop-opacity=".45"/><stop offset="1" stop-color="${B}" stop-opacity="0"/></radialGradient>
+  </defs>`;
+  let s = "";
+  switch (kind) {
+    case "love":
+      s = `<circle cx="200" cy="125" r="120" fill="url(#g${id})" opacity=".35" class="breathe"/>
+        ${[34, 58, 84, 112, 142].map((r, k) => `<circle cx="200" cy="125" r="${r}" fill="none" stroke="${L}" stroke-opacity="${.5 - k * .09}" stroke-width="1"/>`).join("")}
+        <circle cx="200" cy="125" r="9" fill="${L}"/>`;
+      break;
+    case "gap":
+      s = `<circle cx="110" cy="125" r="90" fill="url(#g${id})" opacity=".5" class="breathe"/>
+        <circle cx="110" cy="125" r="26" fill="${L}"/>
+        <path d="M204 0 L196 40 L210 78 L194 118 L208 160 L197 205 L205 250" fill="none" stroke="${T}" stroke-opacity=".55" stroke-width="1.4" stroke-linejoin="round"/>
+        <circle cx="300" cy="125" r="6" fill="${T}" opacity=".7"/>
+        <circle cx="300" cy="125" r="18" fill="none" stroke="${T}" stroke-opacity=".15"/>`;
+      break;
+    case "fall":
+      s = `<path d="M40 40 C 140 40, 180 120, 230 170 S 330 230, 380 236" fill="none" stroke="url(#v${id})" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="40" cy="40" r="5" fill="${L}"/>
+        ${Array.from({length: 7}, (_, k) => `<line x1="${60 + k * 48}" y1="250" x2="${60 + k * 48}" y2="${200 + k * 6}" stroke="${D}" stroke-width="1"/>`).join("")}
+        <circle cx="380" cy="236" r="3" fill="${T}" opacity=".25"/>`;
+      break;
+    case "beam":
+      s = `<path d="M170 0 H230 L214 205 H186 Z" fill="url(#v${id})" opacity=".55"/>
+        <line x1="40" y1="205" x2="360" y2="205" stroke="${D}" stroke-width="1"/>
+        <circle cx="200" cy="200" r="46" fill="url(#g${id})" opacity=".8" class="breathe"/>
+        <circle cx="200" cy="200" r="6" fill="${L}"/>
+        ${[70, 110, 150].map(r => `<path d="M${200 - r} 205 A ${r} ${r * .3} 0 0 1 ${200 + r} 205" fill="none" stroke="${L}" stroke-opacity=".18"/>`).join("")}`;
+      break;
+    case "cross":
+      s = `<circle cx="200" cy="112" r="130" fill="url(#r${id})" class="breathe"/>
+        <circle cx="200" cy="96" r="80" fill="url(#g${id})" opacity=".35"/>
+        <rect x="190" y="26" width="20" height="200" rx="10" fill="${T}"/>
+        <rect x="140" y="72" width="120" height="20" rx="10" fill="${T}"/>
+        <path d="M60 226 Q 200 206 340 226" fill="none" stroke="${D}" stroke-width="1.2"/>`;
+      break;
+    case "tomb":
+      s = `<path d="M0 250 V 170 Q 120 90 250 130 T 400 150 V 250 Z" fill="${D}" opacity=".6"/>
+        <path d="M150 250 V 186 A 40 40 0 0 1 230 186 V 250 Z" fill="${I}"/>
+        <path d="M150 250 V 186 A 40 40 0 0 1 230 186 V 250 Z" fill="url(#u${id})"/>
+        <path d="M190 160 L 120 20 M190 160 L 190 10 M190 160 L 260 20 M190 160 L 320 60 M190 160 L 60 60" stroke="${L}" stroke-opacity=".22" stroke-width="1"/>
+        <circle cx="272" cy="214" r="34" fill="${I}" stroke="${T}" stroke-opacity=".35"/>`;
+      break;
+    case "gift":
+      s = `<line x1="200" y1="0" x2="200" y2="96" stroke="url(#v${id})" stroke-width="1.5" stroke-dasharray="2 6"/>
+        <circle cx="200" cy="110" r="50" fill="url(#g${id})" opacity=".6" class="breathe"/>
+        <path d="M200 88 C 212 104, 216 116, 200 128 C 184 116, 188 104, 200 88 Z" fill="${L}"/>
+        <path d="M110 160 A 90 60 0 0 0 290 160" fill="none" stroke="${T}" stroke-opacity=".75" stroke-width="2" stroke-linecap="round"/>
+        <path d="M140 160 A 60 36 0 0 0 260 160" fill="none" stroke="${T}" stroke-opacity=".2" stroke-width="1"/>`;
+      break;
+    case "turn":
+      s = `<circle cx="300" cy="56" r="70" fill="url(#g${id})" opacity=".6" class="breathe"/>
+        <circle cx="300" cy="56" r="10" fill="${L}"/>
+        <path d="M380 210 H 150 A 50 50 0 0 1 150 110 H 250" fill="none" stroke="${T}" stroke-opacity=".7" stroke-width="2" stroke-linecap="round"/>
+        <path d="M240 100 L 252 110 L 240 120" fill="none" stroke="${T}" stroke-opacity=".7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M100 210 H 20" stroke="${T}" stroke-opacity=".18" stroke-width="2" stroke-dasharray="3 7" stroke-linecap="round"/>`;
+      break;
+    case "dawn":
+      s = `<circle cx="200" cy="190" r="140" fill="url(#g${id})" opacity=".45" class="breathe"/>
+        ${Array.from({length: 9}, (_, k) => { const a = Math.PI * (k + 1) / 10; return `<line x1="${200 + Math.cos(a) * 70}" y1="${190 - Math.sin(a) * 70}" x2="${200 + Math.cos(a) * 150}" y2="${190 - Math.sin(a) * 150}" stroke="${L}" stroke-opacity=".3"/>`; }).join("")}
+        <path d="M140 190 A 60 60 0 0 1 260 190 Z" fill="${L}"/>
+        <line x1="0" y1="190" x2="400" y2="190" stroke="${T}" stroke-opacity=".35"/>
+        <path d="M200 250 V 214 M200 222 C 186 214 180 204 182 196 C 194 198 200 208 200 222 M200 216 C 212 206 222 202 228 204 C 226 214 214 220 200 218" fill="none" stroke="${T}" stroke-width="1.6" stroke-linecap="round"/>`;
+      break;
+    case "door":
+      s = `<path d="M140 226 L 90 250 H 330 L 262 226 Z" fill="url(#u${id})" opacity=".5"/>
+        <path d="M150 226 V 70 A 50 50 0 0 1 250 70 V 226 Z" fill="${L}" opacity=".9"/>
+        <path d="M150 226 V 70 A 50 50 0 0 1 250 70 V 226 Z" fill="none" stroke="${T}" stroke-opacity=".4"/>
+        <path d="M250 226 L 290 238 V 62 L 250 40" fill="${I}" stroke="${T}" stroke-opacity=".35"/>
+        <circle cx="280" cy="140" r="3" fill="${T}" opacity=".6"/>
+        <circle cx="200" cy="120" r="110" fill="url(#g${id})" opacity=".3" class="breathe"/>`;
+      break;
+  }
+  return `<svg viewBox="0 0 400 250" preserveAspectRatio="xMidYMid slice" role="img" aria-hidden="true">${defs}${s}</svg>`;
+}
+
+const link = (bs, label) =>
+  `<a class="btn" href="https://www.bibleserver.com/LUT/${encodeURIComponent(bs)}" target="_blank" rel="noopener">${label}
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 3h7v7M13 3 4 12"/></svg></a>`;
+
+function cardHTML(st, i) {
+  if (st.entrance) {
+    return `<div class="card"><section class="face front">
+      <h1><span>Eine Ausstellung</span>Das Evangelium</h1>
+      <p>Zehn Räume, eine Geschichte. Geh Schritt für Schritt hindurch und lies, was die Bibel über Gott und dich sagt.</p>
+      <button class="btn solid" data-go="1" type="button">Eintreten</button>
+      <div class="hint"><i></i>Scrollen</div>
+    </section></div>`;
+  }
+  const front = `<section class="face front">
+      <div class="art">${art(st.art, i)}</div>
+      <div class="body">
+        <p class="eyebrow">Raum ${ROMAN[i]}</p>
+        <h2>${st.title}</h2>
+        <blockquote class="verse">„${st.verse}“</blockquote>
+        <div class="meta"><cite>${st.ref}</cite>
+          <button class="btn solid" data-flip type="button">${st.final ? "Tür öffnen" : "Tiefer gehen"}</button></div>
+      </div>
+    </section>`;
+  const back = st.final
+    ? `<section class="face back">
+        <p class="eyebrow">Ein Gebet</p>
+        <p class="prayer">Herr Jesus, danke, dass du mich liebst. Ich erkenne, dass ich gesündigt habe und dich brauche. Danke, dass du am Kreuz für mich gestorben und auferstanden bist. Ich öffne dir die Tür. Ich vertraue dir und will dir folgen. Amen.</p>
+        <p class="eyebrow">Wie es weitergeht</p>
+        <ol>
+          <li><b>Lies</b> das Johannesevangelium, jeden Tag ein Kapitel.</li>
+          <li><b>Bete</b>: Sprich mit Gott wie mit einem Freund.</li>
+          <li><b>Such dir</b> eine Gemeinde und erzähl jemandem davon.</li>
+        </ol>
+        <div class="meta">${link("Matthäus11,28", "Matthäus 11,28")}
+          <button class="btn" data-go="0" type="button">Zum Eingang</button></div>
+      </section>`
+    : `<section class="face back">
+        <p class="eyebrow">Zum Nachdenken</p>
+        <p class="q">${st.q}</p>
+        <blockquote class="verse sm">„${st.verse2}“</blockquote>
+        <cite>${st.ref2}</cite>
+        <div class="meta">${link(st.bs, "Im Zusammenhang lesen")}
+          <button class="btn" data-flip type="button">Zurück</button></div>
+      </section>`;
+  return `<div class="card">${front}${back}</div>`;
+}
+
+/* ---------- Aufbau ---------- */
+const $ = s => document.querySelector(s);
+const root = document.documentElement;
+const world = $("#world"), cam = $("#cam"), floor = $("#floor"), glow = $("#glow");
+const track = $("#track"), dotsEl = $("#dots"), counter = $("#counter"), toggle = $("#viewToggle");
+
+const frames = STATIONS.map((st, i) => {
+  const el = document.createElement("article");
+  el.className = "frame" + (st.entrance ? " entrance" : "");
+  el.dataset.i = i;
+  el.setAttribute("aria-label", st.entrance ? "Eingang" : `Raum ${ROMAN[i]}: ${st.title}`);
+  el.innerHTML = cardHTML(st, i);
+  world.appendChild(el);
+  return el;
+});
+const arches = STATIONS.slice(1).map(() => {
+  const a = document.createElement("div");
+  a.className = "arch";
+  world.appendChild(a);
+  return a;
+});
+STATIONS.forEach((st, i) => {
+  track.appendChild(document.createElement("section"));
+  const d = document.createElement("button");
+  d.type = "button"; d.className = "dot"; d.dataset.go = i;
+  const label = st.entrance ? "Eingang" : `${ROMAN[i]} · ${st.title}`;
+  d.setAttribute("aria-label", label);
+  d.innerHTML = `<span class="tip">${label}</span>`;
+  dotsEl.appendChild(d);
+});
+const dots = [...dotsEl.children];
+
+/* ---------- Kamera ---------- */
+const GAP = 1500;
+let vw = innerWidth, vh = innerHeight, spread = 0;
+let target = 0, cur = 0, active = -1, seen = 0;
+let mx = 0, my = 0, tx = 0, ty = 0;
+let flat = false;
+
+const xFor = i => (i === 0 ? 0 : (i % 2 ? -1 : 1) * spread);
+const smooth = t => t * t * (3 - 2 * t);
+function camX(p) {
+  const i = Math.max(0, Math.min(N - 1, Math.floor(p)));
+  const f = Math.max(0, Math.min(1, p - i));
+  return xFor(i) + (xFor(Math.min(N - 1, i + 1)) - xFor(i)) * smooth(f);
+}
+
+function layout() {
+  vw = innerWidth; vh = innerHeight;
+  spread = vw < 700 ? vw * 0.18 : Math.min(vw * 0.26, 380);
+  track.querySelectorAll("section").forEach(s => (s.style.height = vh + "px"));
+  frames.forEach((el, i) => {
+    el.style.transform = "";
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const fit = Math.min(1, (vw - 32) / w, (vh - 150) / h);
+    el.style.transform = `translate(-50%,-50%) translate3d(${xFor(i)}px,0,${-i * GAP}px) scale(${fit})`;
+  });
+  arches.forEach((a, k) => {
+    const z = -(k + 0.5) * GAP;
+    const x = (xFor(k) + xFor(k + 1)) / 2;
+    const aw = Math.max(vw * 1.25, 900), ah = Math.max(vh * 1.35, 900);
+    a.style.width = aw + "px"; a.style.height = ah + "px";
+    a.style.transform = `translate(-50%,-50%) translate3d(${x}px,${(ah - vh) * 0.18}px,${z}px)`;
+  });
+  floor.style.transform = `translate3d(-50%, ${vh * 0.5}px, 0) rotateX(-90deg)`;
+  onScroll();
+}
+
+function onScroll() {
+  if (flat) {
+    let best = 0, bestD = Infinity;
+    frames.forEach((el, i) => {
+      const r = el.getBoundingClientRect();
+      const d = Math.abs(r.top + r.height / 2 - vh / 2);
+      if (d < bestD) { bestD = d; best = i; }
+    });
+    setActive(best);
+    return;
+  }
+  target = Math.max(0, Math.min(N - 1, scrollY / vh));
+  setActive(Math.round(target));
+}
+
+function setActive(i) {
+  if (i === active) return;
+  if (active >= 0) frames[active].classList.remove("flipped");
+  active = i;
+  seen = Math.max(seen, i);
+  dots.forEach((d, k) => {
+    d.classList.toggle("on", k === i);
+    d.classList.toggle("seen", k <= seen);
+    if (k === i) d.setAttribute("aria-current", "step"); else d.removeAttribute("aria-current");
+  });
+  counter.innerHTML = i === 0 ? "Eingang" : `Raum <b>${ROMAN[i]}</b> / X`;
+  glow.style.opacity = (0.05 + (i / (N - 1)) * 0.3).toFixed(3);
+}
+
+let last = performance.now();
+function frameLoop(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (!flat) {
+    const k = 1 - Math.exp(-dt * 5.5);
+    cur += (target - cur) * k;
+    if (Math.abs(target - cur) < 0.0004) cur = target;
+    tx += (mx - tx) * k * 0.7; ty += (my - ty) * k * 0.7;
+
+    const cx = camX(cur);
+    world.style.transform = `translate3d(${-cx}px,0,${cur * GAP}px)`;
+    cam.style.transform = `rotateX(${ty.toFixed(3)}deg) rotateY(${tx.toFixed(3)}deg)`;
+    floor.style.backgroundPosition = `${-cx}px ${-(cur * GAP)}px`;
+
+    frames.forEach((el, i) => {
+      const d = i - cur;
+      // passierte Bilder verschwinden schnell; kommende bleiben gedämpft sichtbar
+      const op = d < 0 ? Math.max(0, 1 + d * 2.8)
+        : d < 0.35 ? 1
+        : d < 1 ? 1 - (d - 0.35) / 0.65 * 0.55
+        : Math.max(0, 0.45 * (1 - (d - 1) / 2.5));
+      el.style.opacity = op.toFixed(3);
+      el.style.visibility = op < 0.01 ? "hidden" : "visible";
+      el.style.pointerEvents = op < 0.3 ? "none" : "auto";
+    });
+    arches.forEach((a, k) => {
+      const d = k + 0.5 - cur;
+      const op = d < 0 ? Math.max(0, 1 + d * 4) : Math.max(0, Math.min(1, 1 - (d - 1) / 2.5));
+      a.style.opacity = (op * 0.9).toFixed(3);
+    });
+  }
+  requestAnimationFrame(frameLoop);
+}
+
+function goTo(i) {
+  i = Math.max(0, Math.min(N - 1, i));
+  const smoothBehavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  if (flat) frames[i].scrollIntoView({ behavior: smoothBehavior, block: "center" });
+  else scrollTo({ top: i * vh, behavior: smoothBehavior });
+}
+
+function setFlat(on) {
+  flat = on;
+  root.classList.toggle("flat", on);
+  toggle.textContent = on ? "Galerie" : "Liste";
+  toggle.setAttribute("aria-pressed", String(on));
+  try { localStorage.setItem("evangelium-view", on ? "flat" : "room"); } catch (e) {}
+  const keep = active < 0 ? 0 : active;
+  active = -1;
+  layout();
+  if (on) frames[keep].scrollIntoView({ block: "center" });
+  else { scrollTo(0, keep * vh); cur = target = keep; }
+  setActive(keep);
+}
+
+/* ---------- Interaktion ---------- */
+document.addEventListener("click", e => {
+  const go = e.target.closest("[data-go]");
+  if (go) { goTo(+go.dataset.go); return; }
+  const frame = e.target.closest(".frame");
+  if (!frame) return;
+  const i = +frame.dataset.i;
+  if (!flat && i !== active && !e.target.closest("a")) { e.preventDefault(); goTo(i); return; }
+  if (e.target.closest("[data-flip]")) {
+    frame.classList.toggle("flipped");
+    const face = frame.querySelector(frame.classList.contains("flipped") ? ".back" : ".front");
+    setTimeout(() => face.querySelector("a, button")?.focus({ preventScroll: true }), 350);
+  }
+});
+world.addEventListener("focusin", e => {
+  const frame = e.target.closest(".frame");
+  if (frame && !flat && +frame.dataset.i !== active) goTo(+frame.dataset.i);
+});
+$("#prev").addEventListener("click", () => goTo(active - 1));
+$("#next").addEventListener("click", () => goTo(active + 1));
+toggle.addEventListener("click", () => setFlat(!flat));
+
+addEventListener("keydown", e => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (["ArrowDown", "ArrowRight", "PageDown"].includes(e.key)) { e.preventDefault(); goTo(active + 1); }
+  else if (["ArrowUp", "ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); goTo(active - 1); }
+  else if (e.key === "Home") { e.preventDefault(); goTo(0); }
+  else if (e.key === "End") { e.preventDefault(); goTo(N - 1); }
+  else if (e.key === "Escape") frames[active]?.classList.remove("flipped");
+});
+addEventListener("pointermove", e => {
+  if (e.pointerType !== "mouse") return;
+  mx = (e.clientX / vw - 0.5) * 5;
+  my = -(e.clientY / vh - 0.5) * 3.5;
+});
+addEventListener("scroll", onScroll, { passive: true });
+let rt;
+addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(layout, 120); });
+
+/* ---------- Start ---------- */
+let startFlat = matchMedia("(prefers-reduced-motion: reduce)").matches;
+try {
+  const v = localStorage.getItem("evangelium-view");
+  if (v) startFlat = v === "flat";
+} catch (e) {}
+root.classList.toggle("flat", startFlat);
+flat = startFlat;
+toggle.textContent = flat ? "Galerie" : "Liste";
+toggle.setAttribute("aria-pressed", String(flat));
+layout();
+cur = target;
+if (document.fonts) document.fonts.ready.then(layout);
+requestAnimationFrame(frameLoop);
+</script>
+</body>
+</html>
