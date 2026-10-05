@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architekturscanner</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header id="toolbar">
+  <span class="brand">📐 Architekturscanner</span>
+  <label class="filebtn">📂 Plan laden (Foto/PDF)
+    <input type="file" id="fileInput" accept="image/*,.pdf">
+  </label>
+  <span class="sep"></span>
+  <button data-tool="select" class="tool active" title="Auswählen / Verschieben (V)">⬚ Auswahl</button>
+  <button data-tool="line"   class="tool" title="Neue Linie zeichnen (L) – Shift = orthogonal">╱ Linie</button>
+  <button data-tool="dim"    class="tool" title="Maßkette: Punkte klicken, Enter/Doppelklick beendet (M)">⟷ Maßkette</button>
+  <button data-tool="text"   class="tool" title="Text platzieren (T)">T Text</button>
+  <button data-tool="calibrate" class="tool" title="Maßstab kalibrieren: 2 Punkte einer bekannten Strecke klicken (K)">⚖ Kalibrieren</button>
+  <button data-tool="pan"    class="tool" title="Ansicht verschieben (H) – auch mittlere Maustaste">✋ Hand</button>
+  <span class="sep"></span>
+  <button id="btnRectify" title="Perspektive entzerren: 4 Ecken des Plans klicken (links oben → rechts oben → rechts unten → links unten)">◇ Entzerren</button>
+  <button id="btnUndo" title="Rückgängig (Strg+Z)">↶</button>
+  <button id="btnRedo" title="Wiederholen (Strg+Y)">↷</button>
+  <span class="sep"></span>
+  <button id="btnSave" title="Projekt als JSON speichern">💾 Projekt</button>
+  <label class="filebtn" title="Projekt-JSON laden">📁 Öffnen
+    <input type="file" id="projInput" accept=".json">
+  </label>
+  <button id="btnExport" class="primary" title="Als DXF exportieren (CAD/DWG-kompatibel)">⬇ DXF-Export</button>
+</header>
+
+<div id="main">
+  <aside id="sidebar">
+    <section>
+      <h3>Layer</h3>
+      <div id="layerList"></div>
+      <button id="btnAddLayer" class="small">＋ Layer hinzufügen</button>
+    </section>
+
+    <section>
+      <h3>Vektorisierung</h3>
+      <label>Mindestlänge <span id="vMinLen">14</span> px
+        <input type="range" id="pMinLen" min="4" max="60" value="14"></label>
+      <label>Lücken schließen <span id="vGap">14</span> px
+        <input type="range" id="pGap" min="2" max="40" value="14"></label>
+      <label>Winkel-Ausrichtung <span id="vAngle">4</span>°
+        <input type="range" id="pAngle" min="0" max="10" value="4"></label>
+      <label><input type="checkbox" id="pOcr" checked> Text erkennen (OCR)</label>
+      <button id="btnRevectorize" class="small">↻ Neu vektorisieren</button>
+    </section>
+
+    <section>
+      <h3>Ansicht</h3>
+      <label>Foto-Unterlage <span id="vOpacity">40</span> %
+        <input type="range" id="pOpacity" min="0" max="100" value="40"></label>
+      <label><input type="checkbox" id="pSnap" checked> Fangen (Endpunkte)</label>
+      <label>Maß-Nachkommastellen
+        <select id="pDecimals"><option>1</option><option selected>2</option><option>3</option></select>
+      </label>
+    </section>
+
+    <section id="helpBox">
+      <h3>Hilfe</h3>
+      <p><b>Maßkette:</b> Werkzeug wählen, Messpunkte nacheinander klicken, mit <kbd>Enter</kbd>/Doppelklick abschließen, dann Abstand der Maßlinie per Klick festlegen. Maße folgen automatisch dem kalibrierten Maßstab. Doppelklick auf eine Maßzahl überschreibt den Text.</p>
+      <p><b>Kalibrieren:</b> Zwei Punkte einer bekannten Strecke klicken (z.&nbsp;B. Maßstabsleiste oder ein vorhandenes Maß) und die reale Länge in Metern eingeben.</p>
+      <p><b>Linien:</b> <kbd>Shift</kbd> = orthogonal, Fang auf Endpunkte. <kbd>Entf</kbd> löscht Auswahl, Rahmen ziehen = Mehrfachauswahl.</p>
+    </section>
+  </aside>
+
+  <div id="canvasWrap">
+    <canvas id="canvas"></canvas>
+    <div id="statusbar">
+      <span id="stScale">Maßstab: nicht kalibriert</span>
+      <span id="stCursor"></span>
+      <span id="stHint">Plan laden, um zu beginnen.</span>
+    </div>
+  </div>
+</div>
+
+<div id="spinner" class="hidden"><div class="spin"></div><span id="spinnerText">Vektorisiere …</span></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

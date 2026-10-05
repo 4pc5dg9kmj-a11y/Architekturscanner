@@ -1,0 +1,17 @@
+# Notenscanner – Abhaengigkeiten (Python 3.10 – 3.12)
+# Basic-Pitch selbst wird OHNE seine TensorFlow-Abhaengigkeit installiert,
+# siehe install.sh / install.bat (wir nutzen das mitgelieferte ONNX-Modell).
+numpy>=1.24
+scipy>=1.10
+librosa>=0.10
+soundfile>=0.12
+onnxruntime>=1.16
+pretty_midi>=0.2.10
+mir_eval>=0.7
+resampy>=0.2.2,<0.4.3
+scikit-learn>=1.2
+typing-extensions>=4.0
+music21>=9.1
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9

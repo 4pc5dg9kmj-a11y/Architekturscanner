@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notenscanner</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --panel: #ffffff; --ink: #1d1b18; --muted: #6b665d;
+    --line: #e2ddd2; --accent: #8a3b12; --accent-ink: #fff; --ok: #2f6b3a; --err: #a12a2a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #171614; --panel: #22201d; --ink: #ece7dd; --muted: #a39d92;
+            --line: #37332d; --accent: #e08a52; --accent-ink: #1a1208; --ok: #7fc28b; --err: #f08a8a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 24px 16px 8px; max-width: 1100px; margin: auto; }
+  h1 { margin: 0; font-size: 26px; letter-spacing: -.01em; }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  main { max-width: 1100px; margin: auto; padding: 8px 16px 48px; display: grid; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  #drop { border: 2px dashed var(--line); border-radius: 10px; padding: 28px; text-align: center;
+          cursor: pointer; transition: border-color .15s; }
+  #drop.over, #drop:hover { border-color: var(--accent); }
+  #drop strong { display: block; font-size: 17px; }
+  #drop span { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 16px; margin-top: 16px; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  label.check { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 14px; }
+  select, input[type=number], input[type=text] {
+    font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 9px; width: 100%; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 18px;
+           background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; flex: 1; min-width: 160px; }
+  .bar div { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  #status { color: var(--muted); }
+  #status.err { color: var(--err); }
+  .facts { display: flex; flex-wrap: wrap; gap: 8px 22px; margin: 0 0 12px; }
+  .facts b { display: block; font-size: 18px; }
+  .facts span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .downloads a { display: inline-block; margin: 0 8px 8px 0; padding: 7px 12px; border-radius: 8px;
+                 border: 1px solid var(--line); color: var(--ink); text-decoration: none; }
+  .downloads a:hover { border-color: var(--accent); }
+  #sheet { background: #fff; border-radius: 8px; overflow-x: auto; margin-top: 8px; }
+  midi-player { width: 100%; margin: 8px 0; }
+  #result { display: none; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎼 Notenscanner</h1>
+  <p>MP3 hochladen – das Programm erkennt Melodie, Begleitung, Bass, Tempo, Takt, Tonart und Akkorde und setzt daraus Noten.</p>
+</header>
+<main>
+  <section class="panel">
+    <div id="drop">
+      <strong id="dropText">MP3-Datei hierher ziehen oder klicken</strong>
+      <span>MP3, WAV, FLAC, OGG, M4A</span>
+      <input id="file" type="file" accept="audio/*,.mp3,.wav,.flac,.ogg,.m4a" hidden>
+    </div>
+    <div class="grid">
+      <label>Besetzung
+        <select id="arrangement"></select>
+      </label>
+      <label>Tempo (BPM, 0 = automatisch)
+        <input id="bpm" type="number" min="0" max="300" value="0">
+      </label>
+      <label>Taktart
+        <select id="beats"><option value="0">automatisch</option><option value="2">2/4</option>
+          <option value="3">3/4</option><option value="4">4/4</option><option value="6">6/4</option></select>
+      </label>
+      <label>Tonart (leer = automatisch)
+        <input id="key" type="text" placeholder="z. B. G, e, B- (= B-Dur)">
+      </label>
+      <label>Feinstes Raster
+        <select id="division"><option value="4">Sechzehntel</option><option value="2">Achtel</option></select>
+      </label>
+      <label>Max. Noten pro Akkord
+        <input id="maxpoly" type="number" min="1" max="10" value="5">
+      </label>
+      <label>Empfindlichkeit <output id="sensOut">0.50</output>
+        <input id="sens" type="range" min="0.2" max="0.8" step="0.05" value="0.5">
+      </label>
+      <label>Kürzeste Note (ms)
+        <input id="minms" type="number" min="20" max="400" value="80">
+      </label>
+      <label class="check"><input id="triplets" type="checkbox"> Triolen erkennen</label>
+      <label class="check"><input id="chords" type="checkbox" checked> Akkordsymbole</label>
+    </div>
+    <div class="row">
+      <button id="go" disabled>Noten erzeugen</button>
+      <div class="bar"><div id="barFill"></div></div>
+      <span id="status">Bitte eine Datei wählen.</span>
+    </div>
+    <p class="hint">Tipp: Niedrige Empfindlichkeit erkennt mehr (auch leise) Noten, hohe nur deutliche.
+      Ein ganzes Lied braucht je nach Länge und Rechner etwa 30 Sekunden bis wenige Minuten.</p>
+  </section>
+
+  <section class="panel" id="result">
+    <div class="facts" id="facts"></div>
+    <div class="downloads" id="downloads"></div>
+    <midi-player id="player" sound-font></midi-player>
+    <div id="sheet"></div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/opensheetmusicdisplay@1.8.9/build/opensheetmusicdisplay.min.js"></script>
+<script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/focus-visible@5,npm/html-midi-player@1.5.0"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+let chosen = null;
+
+fetch("/api/info").then(r => r.json()).then(info => {
+  for (const [k, v] of Object.entries(info.arrangements)) {
+    const o = new Option(v, k);
+    if (k === "band" && !info.demucs) { o.disabled = true; o.text += " – nicht installiert"; }
+    $("arrangement").add(o);
+  }
+  $("arrangement").value = "melodie+klavier";
+});
+
+$("sens").oninput = () => $("sensOut").textContent = Number($("sens").value).toFixed(2);
+$("drop").onclick = () => $("file").click();
+$("file").onchange = () => pick($("file").files[0]);
+["dragenter", "dragover"].forEach(e => $("drop").addEventListener(e, ev => {
+  ev.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave", "drop"].forEach(e => $("drop").addEventListener(e, ev => {
+  ev.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", ev => pick(ev.dataTransfer.files[0]));
+
+function pick(f) {
+  if (!f) return;
+  chosen = f;
+  $("dropText").textContent = "♪ " + f.name;
+  $("go").disabled = false;
+  setStatus("Bereit.");
+}
+
+function setStatus(msg, err = false) {
+  $("status").textContent = msg;
+  $("status").classList.toggle("err", err);
+}
+
+$("go").onclick = async () => {
+  if (!chosen) return;
+  $("go").disabled = true;
+  $("barFill").style.width = "2%";
+  setStatus("Lade hoch …");
+  const fd = new FormData();
+  fd.append("file", chosen);
+  fd.append("arrangement", $("arrangement").value);
+  fd.append("bpm", $("bpm").value || 0);
+  fd.append("beats_per_bar", $("beats").value);
+  fd.append("key", $("key").value);
+  fd.append("division", $("division").value);
+  fd.append("triplets", $("triplets").checked);
+  fd.append("chord_symbols", $("chords").checked);
+  fd.append("max_poly", $("maxpoly").value);
+  fd.append("sensitivity", $("sens").value);
+  fd.append("min_note_ms", $("minms").value);
+  try {
+    const r = await fetch("/api/transcribe", { method: "POST", body: fd });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || "Fehler beim Hochladen");
+    poll(data.job);
+  } catch (e) {
+    setStatus(e.message, true);
+    $("go").disabled = false;
+  }
+};
+
+async function poll(job) {
+  const r = await fetch(`/api/job/${job}`);
+  const j = await r.json();
+  $("barFill").style.width = Math.max(2, j.progress * 100) + "%";
+  if (j.status === "fehler") { setStatus(j.message, true); $("go").disabled = false; return; }
+  if (j.status !== "fertig") { setStatus(j.message + " …"); setTimeout(() => poll(job), 800); return; }
+  setStatus("Fertig.");
+  $("go").disabled = false;
+  show(job, j.result);
+}
+
+async function show(job, res) {
+  $("result").style.display = "block";
+  const facts = [["Titel", res.title], ["Tempo", res.bpm + " BPM"], ["Takt", res.time_signature],
+                 ["Tonart", res.key], ["Takte", res.measures], ["Noten", res.notes]];
+  $("facts").innerHTML = facts.map(([k, v]) => `<div><span>${k}</span><b></b></div>`).join("");
+  [...$("facts").querySelectorAll("b")].forEach((b, i) => b.textContent = facts[i][1]);
+
+  const url = (name) => `/api/job/${job}/file/${encodeURIComponent(name)}`;
+  const labels = { pdf: "PDF (Drucken)", musicxml: "MusicXML (MuseScore, Sibelius, Finale …)", midi: "MIDI" };
+  $("downloads").innerHTML = "";
+  for (const [kind, name] of Object.entries(res.files)) {
+    const a = document.createElement("a");
+    a.href = url(name); a.download = name; a.textContent = "⬇ " + labels[kind];
+    $("downloads").append(a);
+  }
+  $("player").src = url(res.files.midi);
+
+  $("sheet").innerHTML = "";
+  const osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay("sheet",
+    { autoResize: true, drawTitle: true, backend: "svg", drawingParameters: "default" });
+  const xml = await (await fetch(url(res.files.musicxml))).text();
+  await osmd.load(xml);
+  osmd.render();
+  $("result").scrollIntoView({ behavior: "smooth" });
+}
+</script>
+</body>
+</html>
