@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<title>weddify Hochzeitsshop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gloock&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Pinyon+Script&display=swap">
+<style>
+/* Layout: Papeterie-Atelier. Live-Personalisierung oben, danach Marktanalyse als "Briefing", dann Regal (Shop) mit Mockups im Passepartout. */
+:root{
+  --bg:#F5F3F1; --surface:#FFFFFF; --ink:#23263A; --muted:#626578; --line:#DEDAD6;
+  --accent:#9E3D55; --accent-soft:#F2E3E6; --sage:#4F6B5A; --sage-soft:#E3EAE4;
+  --paper:#FBFAF8; --night:#1C2238; --gold:#B08A4A;
+  --f-display:"Gloock", "Georgia", serif;
+  --f-body:"Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --f-script:"Pinyon Script", "Brush Script MT", cursive;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14151D; --surface:#1D1F2A; --ink:#ECE8E5; --muted:#A3A2AE; --line:#33354A;
+  --accent:#E07E95; --accent-soft:#3A2330; --sage:#97B7A2; --sage-soft:#1F2D26;
+  --paper:#F3F0EC; --night:#0F1324; --gold:#D3AE6C; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14151D; --surface:#1D1F2A; --ink:#ECE8E5; --muted:#A3A2AE; --line:#33354A;
+  --accent:#E07E95; --accent-soft:#3A2330; --sage:#97B7A2; --sage-soft:#1F2D26;
+  --paper:#F3F0EC; --night:#0F1324; --gold:#D3AE6C; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px}
+h1,h2,h3{font-family:var(--f-display);font-weight:400;line-height:1.1;text-wrap:balance;margin:0}
+h2{font-size:clamp(1.9rem,4vw,2.8rem)}
+h3{font-size:1.3rem}
+p{margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--muted);max-width:62ch;font-size:1.05rem}
+.mono{font-family:var(--f-mono)}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section{padding-block:72px}
+.sec-head{display:grid;gap:12px;margin-bottom:36px}
+
+/* Header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:24px;height:64px}
+.logo{font-family:var(--f-display);font-size:1.55rem;color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.logo span{color:var(--accent)}
+.nav{display:flex;gap:22px;margin-left:auto}
+.nav a{color:var(--muted);text-decoration:none;font-size:.93rem;font-weight:500}
+.nav a:hover{color:var(--ink)}
+.cart-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:999px;padding:7px 14px;font-weight:600;font-size:.9rem}
+.cart-btn b{background:var(--accent);color:#fff;border-radius:999px;min-width:22px;height:22px;display:inline-grid;place-items:center;font-size:.75rem;padding-inline:6px}
+@media (max-width:820px){.nav{display:none}.cart-btn{margin-left:auto}}
+
+.ribbon{background:var(--ink);color:var(--bg);font-size:.82rem;text-align:center;padding:7px 16px}
+
+/* Hero */
+.hero{padding-block:56px 64px}
+.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.hero h1{font-size:clamp(2.6rem,6vw,4.6rem);letter-spacing:-.015em}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.hero-copy{display:grid;gap:22px;min-width:0}
+.personal{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;display:grid;gap:12px}
+.personal .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field{display:grid;gap:4px}
+.field label{font-size:.75rem;font-family:var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.field input,.field select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;min-width:0}
+.hint{font-size:.82rem;color:var(--muted)}
+.hero-stage{display:grid;grid-template-columns:1fr .62fr;gap:18px;align-items:end;min-width:0}
+.hero-stage .stack{display:grid;gap:18px}
+@media (max-width:900px){.hero-grid{grid-template-columns:1fr}.personal .row{grid-template-columns:1fr}}
+
+/* Mockups */
+.frame{background:#2B2420;padding:9px;border-radius:3px;box-shadow:0 18px 40px -18px rgba(20,20,40,.45)}
+.frame.white{background:#EDEAE6}
+.mock{aspect-ratio:4/5;max-width:100%;background:var(--paper);color:#23263A;position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:9%}
+.mock .script{font-family:var(--f-script);line-height:1;font-size:2.2em;color:#23263A}
+.mock .cap{font-family:var(--f-mono);font-size:.62em;letter-spacing:.18em;text-transform:uppercase;color:#5d5f70}
+.mock .serif{font-family:var(--f-display)}
+.mock svg{display:block;width:100%;height:auto}
+.mock.night{background:#1C2238;color:#F3EEE6}
+.mock.night .script{color:#F3EEE6}
+.mock.night .cap{color:#C9C3BA}
+.m-map{justify-content:flex-start;gap:6%}
+.m-map .mapbox{width:100%;aspect-ratio:1;border-radius:50%;overflow:hidden;background:#EFEBE6}
+.m-news{justify-content:flex-start;align-items:stretch;text-align:left;padding:7%;gap:5px}
+.m-news .mast{font-family:var(--f-display);font-size:1.45em;text-align:center;border-bottom:3px double #23263A;padding-bottom:3px}
+.m-news .meta{display:flex;justify-content:space-between;font-family:var(--f-mono);font-size:.5em;border-bottom:1px solid #23263A;padding-bottom:3px}
+.m-news .head{font-family:var(--f-display);font-size:1.05em;line-height:1.05;margin-top:2px}
+.m-news .cols{display:grid;grid-template-columns:1.2fr 1fr;gap:6px;flex:1}
+.m-news .ph{background:#D8D2CB;border-radius:2px}
+.lines{display:grid;gap:3px;align-content:start}
+.lines i{display:block;height:3px;background:#C9C3BC;border-radius:2px}
+.m-sign{background:#EEE9E3;gap:4%}
+.m-sign .script{font-size:2.5em}
+.m-seat{justify-content:flex-start;gap:6%}
+.m-seat .tables{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:100%}
+.m-seat .t{border-top:1px solid #23263A;padding-top:3px;text-align:left}
+.m-seat .t b{font-family:var(--f-display);font-weight:400;font-size:.8em;display:block}
+.m-card{background:transparent;padding:6%}
+.m-card .c{background:var(--paper);width:82%;aspect-ratio:5/7;box-shadow:0 8px 20px -10px rgba(0,0,0,.4);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8%;padding:10%;transform:rotate(-3deg)}
+.m-card .c2{position:absolute;width:62%;aspect-ratio:7/5;background:#E8DED8;right:4%;bottom:8%;transform:rotate(5deg);box-shadow:0 8px 20px -10px rgba(0,0,0,.35)}
+.mock-wrap.card-bg .mock{background:#E4E0DC}
+.m-num .serif{font-size:5em;line-height:1}
+.m-qr .qr{width:52%;display:grid;grid-template-columns:repeat(13,1fr);gap:1px;background:#fff;padding:5px}
+.m-qr .qr i{aspect-ratio:1;background:#fff}
+.m-qr .qr i.on{background:#23263A}
+.m-time{justify-content:flex-start;gap:5%}
+.m-time ul{list-style:none;padding:0;margin:0;width:100%;display:grid;gap:7px;text-align:left}
+.m-time li{display:flex;gap:10px;font-size:.62em;border-bottom:1px dotted #9a98a3;padding-bottom:4px}
+.m-time li b{font-family:var(--f-mono);font-weight:500;min-width:3.4em}
+.mock .bar-wave{display:flex;gap:2px;align-items:center;height:22%;width:90%}
+.mock .bar-wave i{flex:1;background:#23263A;border-radius:2px}
+
+/* Market analysis */
+.analysis{background:var(--surface);border-block:1px solid var(--line)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:40px}
+.kpi{padding:22px;display:grid;gap:6px;border-right:1px solid var(--line);min-width:0}
+.kpi:last-child{border-right:0}
+.kpi .v{font-family:var(--f-display);font-size:2.2rem;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:.9rem}
+.kpi .s{font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
+@media (max-width:820px){.kpis{grid-template-columns:1fr 1fr}.kpi:nth-child(2){border-right:0}.kpi:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:40px}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.panel{display:grid;gap:16px;align-content:start;min-width:0}
+.panel h3{font-size:1.35rem}
+.bars{display:grid;gap:10px}
+.bar{display:grid;grid-template-columns:minmax(0,11.5rem) 1fr 2.4rem;gap:12px;align-items:center;font-size:.9rem}
+.bar .track{height:12px;background:var(--bg);border-radius:6px;overflow:hidden}
+.bar .fill{height:100%;background:var(--ink);border-radius:6px}
+.bar.hl .fill{background:var(--accent)}
+.bar .n{font-family:var(--f-mono);font-size:.8rem;text-align:right;font-variant-numeric:tabular-nums}
+.src{font-size:.78rem;color:var(--muted)}
+.gantt-wrap{overflow-x:auto}
+.gantt{min-width:520px;display:grid;gap:7px;font-size:.85rem}
+.g-row{display:grid;grid-template-columns:9.5rem 1fr;gap:12px;align-items:center}
+.g-track{position:relative;height:18px;background:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px calc(100%/15))}
+.g-bar{position:absolute;top:3px;height:12px;border-radius:6px;background:var(--sage)}
+.g-bar.a{background:var(--accent)}
+.g-axis{display:grid;grid-template-columns:9.5rem 1fr;gap:12px;font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
+.g-axis .ticks{display:flex;justify-content:space-between}
+.insights{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:48px}
+.insight{border-top:2px solid var(--ink);padding-top:14px;display:grid;gap:8px;align-content:start}
+.insight .tag{font-family:var(--f-mono);font-size:.7rem;color:var(--accent);letter-spacing:.08em;text-transform:uppercase}
+.insight p{color:var(--muted);font-size:.95rem}
+@media (max-width:900px){.insights{grid-template-columns:1fr}}
+.tbl-wrap{overflow-x:auto;margin-top:48px;border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.9rem}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--f-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;background:var(--bg)}
+tr:last-child td{border-bottom:0}
+tr.us td{background:var(--accent-soft)}
+.segs{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:48px}
+.seg{background:var(--bg);border-radius:var(--r);padding:18px;display:grid;gap:8px;align-content:start}
+.seg .pct{font-family:var(--f-mono);font-size:.78rem;color:var(--sage);font-weight:500}
+.seg p{font-size:.9rem;color:var(--muted)}
+@media (max-width:900px){.segs{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.segs{grid-template-columns:1fr}}
+
+/* Shop */
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px}
+.chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:7px 14px;font-size:.88rem;font-weight:500}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:28px 22px}
+@media (max-width:1000px){.grid{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:720px){.grid{grid-template-columns:repeat(2,1fr);gap:22px 14px}}
+.prod{display:grid;gap:10px;align-content:start;min-width:0}
+.prod .mock-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12%;position:relative;font-size:clamp(9px,1.25vw,14px)}
+@media (max-width:720px){.prod .mock-wrap{font-size:2.3vw}}
+.badge{position:absolute;top:10px;left:10px;font-family:var(--f-mono);font-size:.62rem;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:var(--bg);padding:3px 7px;border-radius:4px;z-index:2}
+.badge.gap{background:var(--accent);color:#fff}
+.badge.eco{background:var(--sage);color:#fff}
+.prod h4{margin:0;font-size:1rem;font-weight:600;line-height:1.3}
+.prod .desc{font-size:.85rem;color:var(--muted)}
+.prod .buy{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.price{font-variant-numeric:tabular-nums;font-weight:600}
+.price small{font-weight:400;color:var(--muted);font-size:.78rem}
+.add{border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:999px;padding:6px 13px;font-size:.82rem;font-weight:600}
+.add:hover{background:var(--ink);color:var(--bg)}
+.add.done{background:var(--sage);border-color:var(--sage);color:#fff}
+.spec{font-family:var(--f-mono);font-size:.7rem;color:var(--muted)}
+select.opt{font:inherit;font-size:.82rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:5px 7px;width:100%}
+
+/* Zeitung calculator */
+.paper-sec{background:var(--night);color:#F1ECE6}
+.paper-sec .lede{color:#BDB8C6}
+.paper-sec .eyebrow{color:#E9A3B4}
+.calc{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+@media (max-width:900px){.calc{grid-template-columns:1fr}}
+.calc-form{display:grid;gap:18px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:var(--r);padding:22px}
+.calc-form .field label{color:#BDB8C6}
+.calc-form .field input,.calc-form .field select{background:#151a2d;border-color:#3a4060;color:#F1ECE6}
+.seg-ctl{display:flex;flex-wrap:wrap;gap:6px}
+.seg-ctl button{border:1px solid #3a4060;background:transparent;color:#F1ECE6;border-radius:999px;padding:6px 12px;font-size:.85rem}
+.seg-ctl button[aria-pressed="true"]{background:#F1ECE6;color:#1C2238}
+input[type=range]{width:100%;accent-color:#E9A3B4}
+.total{display:flex;justify-content:space-between;align-items:end;border-top:1px solid rgba(255,255,255,.2);padding-top:14px;gap:12px;flex-wrap:wrap}
+.total .big{font-family:var(--f-display);font-size:2.4rem;line-height:1;font-variant-numeric:tabular-nums}
+.breakdown{font-family:var(--f-mono);font-size:.75rem;color:#BDB8C6;display:grid;gap:3px}
+.cta{background:#E9A3B4;color:#1C2238;border:0;border-radius:999px;padding:12px 20px;font-weight:700}
+.chapters{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-size:.92rem;margin-top:18px}
+.chapters li{color:#D7D2DC}
+.chapters li::marker{color:#E9A3B4}
+
+/* Bundles */
+.bundles{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+@media (max-width:900px){.bundles{grid-template-columns:1fr}}
+.bundle{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:24px;display:grid;gap:14px;align-content:start}
+.bundle.feat{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.bundle ul{margin:0;padding-left:18px;color:var(--muted);font-size:.92rem;display:grid;gap:4px}
+.bundle .pr{display:flex;align-items:baseline;gap:10px}
+.bundle .pr b{font-family:var(--f-display);font-weight:400;font-size:2rem}
+.bundle .pr s{color:var(--muted);font-size:.9rem}
+.bundle .who{font-family:var(--f-mono);font-size:.72rem;color:var(--sage);text-transform:uppercase;letter-spacing:.08em}
+
+/* Steps */
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;counter-reset:s}
+@media (max-width:900px){.steps{grid-template-columns:1fr 1fr}}
+@media (max-width:520px){.steps{grid-template-columns:1fr}}
+.step{display:grid;gap:8px;align-content:start}
+.step::before{counter-increment:s;content:counter(s);font-family:var(--f-display);font-size:2.4rem;color:var(--accent);line-height:1}
+.step p{color:var(--muted);font-size:.93rem}
+
+/* FAQ / footer */
+details{border-bottom:1px solid var(--line);padding-block:16px}
+summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
+summary::after{content:"+";font-family:var(--f-mono);color:var(--accent)}
+details[open] summary::after{content:"–"}
+details p{color:var(--muted);margin-top:10px;max-width:70ch}
+footer{border-top:1px solid var(--line);padding-block:40px;font-size:.88rem;color:var(--muted)}
+footer .wrap{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:28px}
+footer h5{margin:0 0 8px;font-size:.78rem;font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.08em;color:var(--ink);font-weight:500}
+footer ul{list-style:none;padding:0;margin:0;display:grid;gap:4px}
+@media (max-width:720px){footer .wrap{grid-template-columns:1fr 1fr}}
+
+/* Cart drawer */
+.scrim{position:fixed;inset:0;background:rgba(10,10,20,.45);z-index:40}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--surface);z-index:50;display:flex;flex-direction:column;padding:calc(18px + env(safe-area-inset-top,0px)) 20px calc(18px + env(safe-area-inset-bottom,0px));box-shadow:-20px 0 50px -20px rgba(0,0,0,.4)}
+.drawer header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.drawer .x{border:0;background:transparent;color:var(--ink);font-size:1.5rem;line-height:1}
+.lines-list{flex:1;overflow:auto;display:grid;gap:12px;align-content:start}
+.ci{display:grid;grid-template-columns:1fr auto;gap:4px 12px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.ci .o{font-size:.8rem;color:var(--muted)}
+.qty{display:flex;align-items:center;gap:6px}
+.qty button{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.sum{border-top:1px solid var(--line);padding-top:14px;display:grid;gap:6px;font-variant-numeric:tabular-nums}
+.sum div{display:flex;justify-content:space-between}
+.sum .t{font-weight:700;font-size:1.1rem}
+.ship-bar{height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
+.ship-bar i{display:block;height:100%;background:var(--sage)}
+.checkout{margin-top:8px;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:13px;font-weight:700}
+.note{background:var(--accent-soft);border-radius:8px;padding:10px 12px;font-size:.85rem}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:.9rem;z-index:60}
+@media (prefers-reduced-motion:no-preference){.fill,.g-bar{transition:width .6s ease}.add,.chip{transition:background .15s,color .15s}}
+
+/* ===== Mein weddify (Konto, Countdown, Zeitplan) ===== */
+.acct-btn{border:0;background:transparent;color:var(--ink);font-weight:600;font-size:.9rem;padding:8px 4px;display:flex;align-items:center;gap:6px}
+.acct-btn svg{width:18px;height:18px}
+@media (max-width:820px){.acct-btn{margin-left:auto}.cart-btn{margin-left:0}.cart-btn .lbl{display:none}}
+</style>
+<style>body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+
+
+<div class="ribbon">Kostenloser Korrekturabzug innerhalb von 24 Stunden · Gratis-Versand ab 79 € · FSC®-Papier aus Deutschland</div>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="#start">weddify<span>.</span></a>
+    <nav class="nav" aria-label="Hauptnavigation">
+      <a href="#shop">Shop</a>
+      <a href="#zeitung">Hochzeitszeitung</a>
+      <a href="#sets">Sets</a>
+      <a href="#markt">Marktanalyse</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <button class="acct-btn" id="acctBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>Mein Plan</button>
+    <button class="cart-btn" id="openCart" aria-label="Warenkorb öffnen"><span class="lbl">Warenkorb</span> <b id="cartCount">0</b></button>
+  </div>
+</header>
+
+<main id="start">
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="eyebrow">Papeterie · Poster · Hochzeitszeitung · Deko</span>
+      <h1>Alles für euren Tag, <em>in einem Design.</em></h1>
+      <p class="lede">Von der Save-the-Date-Karte bis zum Sitzplan: Gebt eure Namen ein und seht jedes Produkt sofort personalisiert. Wir prüfen jede Datei von Hand und schicken euch vor dem Druck einen Korrekturabzug.</p>
+      <form class="personal" id="personal" autocomplete="off">
+        <div class="row">
+          <div class="field"><label for="n1">Name 1</label><input id="n1" value="Lena" maxlength="18"></div>
+          <div class="field"><label for="n2">Name 2</label><input id="n2" value="Jonas" maxlength="18"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="dt">Hochzeitsdatum</label><input id="dt" type="date" value="2027-06-12"></div>
+          <div class="field"><label for="pl">Ort</label><input id="pl" value="Gut Sonnenhof, Lüneburg" maxlength="32"></div>
+        </div>
+        <p class="hint">Die Vorschau aktualisiert sich live im ganzen Shop. Eure Angaben bleiben in eurem Browser.</p>
+      </form>
+    </div>
+    <div class="hero-stage" aria-hidden="true">
+      <div class="frame"><div class="mock-wrap" style="font-size:clamp(10px,1.6vw,16px)" data-mock="map"></div></div>
+      <div class="stack">
+        <div class="frame white"><div class="mock-wrap" style="font-size:clamp(7px,1vw,10px)" data-mock="news"></div></div>
+        <div class="frame white"><div class="mock-wrap" style="font-size:clamp(7px,1vw,10px)" data-mock="sign"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MARKET -->
+<section class="analysis" id="markt">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Marktanalyse · Stand Oktober 2026</span>
+      <h2>Was Brautpaare wirklich kaufen</h2>
+      <p class="lede">Bevor wir das Sortiment gebaut haben, haben wir uns den deutschen Hochzeitsmarkt angesehen: wie viele Paare heiraten, was sie ausgeben, wann sie bestellen und wo die bestehenden Anbieter Lücken lassen.</p>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><span class="v">≈ 350.000</span><span class="l">Eheschließungen pro Jahr in Deutschland</span><span class="s">Destatis, 2023–2024, leicht rückläufig</span></div>
+      <div class="kpi"><span class="v">15–20 T€</span><span class="l">Durchschnittliches Hochzeitsbudget</span><span class="s">Branchenumfragen 2024/25</span></div>
+      <div class="kpi"><span class="v">5–8 %</span><span class="l">davon für Papeterie, Deko &amp; Erinnerung</span><span class="s">≈ 750–1.500 € pro Paar</span></div>
+      <div class="kpi"><span class="v">~ 350 Mio. €</span><span class="l">adressierbarer Markt pro Jahr</span><span class="s">Hochrechnung: 350.000 × ~1.000 €</span></div>
+    </div>
+
+    <div class="two">
+      <div class="panel">
+        <h3>Nachfrage nach Produktkategorie</h3>
+        <div class="bars" id="demandBars"></div>
+        <p class="src">Index 0–100, weddify-Einschätzung aus Suchvolumen-Trends, Marktplatz-Bestsellern und Gesprächen mit Hochzeitsplaner:innen. Rot markiert: Kategorien mit hoher Nachfrage und schwachem Angebot.</p>
+      </div>
+      <div class="panel">
+        <h3>Wann bestellt wird</h3>
+        <div class="gantt-wrap"><div class="gantt" id="gantt"></div></div>
+        <p class="src">Monate vor (–) und nach (+) der Hochzeit. Rot: Käufer:innen sind meist Trauzeug:innen oder Freund:innen, nicht das Brautpaar.</p>
+      </div>
+    </div>
+
+    <div class="insights">
+      <div class="insight"><span class="tag">Erkenntnis 1</span><h3>Personalisierung ja, Zeit nein</h3><p>Paare wollen individuelle Stücke, aber keine wochenlange Abstimmung per Nachricht. Deshalb: Live-Vorschau in Sekunden und ein Korrekturabzug innerhalb von 24 Stunden.</p></div>
+      <div class="insight"><span class="tag">Erkenntnis 2</span><h3>Die Hochzeitszeitung kauft nicht das Paar</h3><p>In Deutschland ist sie Tradition, wird aber von Trauzeug:innen organisiert, oft unter Zeitdruck. Dieser zweite Käuferkreis wird kaum direkt angesprochen. Wir bieten Vorlagen, Seitenpakete und einen Layout-Service.</p></div>
+      <div class="insight"><span class="tag">Erkenntnis 3</span><h3>Ein Look für alles</h3><p>Einladung, Willkommensschild, Sitzplan und Menükarte stammen bei anderen Anbietern oft aus verschiedenen Shops. Wir bauen jede Kollektion durchgängig, damit Paare nur einmal entscheiden müssen.</p></div>
+      <div class="insight"><span class="tag">Erkenntnis 4</span><h3>Gäste suchen Geschenke</h3><p>Stadtplan-, Sternenhimmel- und Song-Poster werden häufig von Familie und Gästen als persönliches Geschenk gekauft, auch Monate nach der Feier zum Jahrestag.</p></div>
+      <div class="insight"><span class="tag">Erkenntnis 5</span><h3>Nachhaltig und wiederverwendbar</h3><p>Viele Paare achten auf Papierherkunft und Müll. FSC®-Papier, Drucke ohne Plastikfolie und wiederverwendbare Acrylschilder sind ein echtes Kaufargument.</p></div>
+      <div class="insight"><span class="tag">Erkenntnis 6</span><h3>Print trifft Digital</h3><p>QR-Codes für Zusagen und Foto-Uploads der Gäste sind inzwischen Standard. Wir integrieren sie direkt in Karten und Aufsteller.</p></div>
+    </div>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Anbieter-Typ</th><th>Stärke</th><th>Schwäche</th><th>Preisniveau</th></tr></thead>
+        <tbody>
+          <tr><td>Marktplatz-Shops (Kleinanbieter)</td><td>Riesige Auswahl, viele Stile</td><td>Uneinheitliche Qualität, Abstimmung per Nachricht, kein durchgängiges Set</td><td>€–€€</td></tr>
+          <tr><td>DIY-Designtools</td><td>Günstig, volle Kontrolle</td><td>Viel Zeit, Druck und Zuschnitt selbst organisieren</td><td>€</td></tr>
+          <tr><td>Online-Druckereien</td><td>Gute Druckqualität, schnell</td><td>Wenig Hochzeitsfokus, keine Beratung, kaum Deko</td><td>€–€€</td></tr>
+          <tr><td>Lokale Papeterie-Studios</td><td>Premium, persönliche Beratung</td><td>Teuer, lange Vorlaufzeit</td><td>€€€</td></tr>
+          <tr class="us"><td><b>weddify</b></td><td>Kuratierte Sets, Live-Vorschau, Korrekturabzug, Trauzeugen-Service</td><td>Junge Marke, Bewertungen müssen erst wachsen</td><td>€€</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="segs">
+      <div class="seg"><span class="pct">Kernzielgruppe</span><h3>Brautpaare</h3><p>25–38 Jahre, planen 9–14 Monate im Voraus, recherchieren mobil auf sozialen Netzwerken und Pinterest.</p></div>
+      <div class="seg"><span class="pct">Zweite Zielgruppe</span><h3>Trauzeug:innen</h3><p>Hochzeitszeitung, Spiele, Quiz, Gästebuch. Kaufen 1–4 Monate vorher, oft im Team.</p></div>
+      <div class="seg"><span class="pct">Geschenkkauf</span><h3>Gäste &amp; Familie</h3><p>Poster mit Ort, Datum oder Song als persönliches Geschenk, auch zum Jahrestag.</p></div>
+      <div class="seg"><span class="pct">B2B</span><h3>Planer &amp; Locations</h3><p>Wiederkehrende Bestellungen für Schilder, Tischnummern und Sitzpläne, mit Mengenrabatt.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- SHOP -->
+<section id="shop">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Sortiment</span>
+      <h2>Der Shop</h2>
+      <p class="lede">Jedes Produkt zeigt euch die Vorschau mit euren Namen. Preise inklusive Mehrwertsteuer, Druck in Deutschland.</p>
+    </div>
+    <div class="filters" id="filters" role="group" aria-label="Kategorie filtern"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+</section>
+
+<!-- ZEITUNG -->
+<section class="paper-sec" id="zeitung">
+  <div class="wrap calc">
+    <div class="panel">
+      <span class="eyebrow">Für Trauzeug:innen</span>
+      <h2>Die Hochzeitszeitung, ohne Nachtschicht</h2>
+      <p class="lede">Ihr sammelt Geschichten, Fotos und Steckbriefe. Wir liefern die Vorlage oder setzen alles für euch. Berechnet hier direkt den Preis für eure Auflage.</p>
+      <ul class="chapters">
+        <li>Titelseite mit Schlagzeile</li><li>Steckbriefe der beiden</li>
+        <li>Wie alles begann</li><li>Interviews mit Familie</li>
+        <li>Kreuzworträtsel &amp; Quiz</li><li>Horoskop für die Ehe</li>
+        <li>Fotostrecke von früher</li><li>Kleinanzeigen der Gäste</li>
+        <li>Tipps für die Ehe</li><li>Programm des Abends</li>
+      </ul>
+    </div>
+    <form class="calc-form" id="calc">
+      <div class="field"><label>Leistung</label>
+        <div class="seg-ctl" data-name="mode">
+          <button type="button" data-v="self" aria-pressed="true">Selbst gestalten im Editor</button>
+          <button type="button" data-v="service" aria-pressed="false">Layout-Service +149 €</button>
+        </div>
+      </div>
+      <div class="field"><label>Format</label>
+        <div class="seg-ctl" data-name="fmt">
+          <button type="button" data-v="A4" aria-pressed="true">DIN A4</button>
+          <button type="button" data-v="A5" aria-pressed="false">DIN A5</button>
+        </div>
+      </div>
+      <div class="field"><label for="pages">Seitenzahl</label>
+        <select id="pages"><option>12</option><option selected>16</option><option>20</option><option>24</option><option>32</option></select>
+      </div>
+      <div class="field"><label for="copies">Auflage: <span id="copiesOut" class="mono">60</span> Exemplare</label>
+        <input id="copies" type="range" min="20" max="200" step="10" value="60">
+      </div>
+      <div class="total">
+        <div class="breakdown" id="breakdown"></div>
+        <div><div class="big" id="calcTotal">0 €</div></div>
+      </div>
+      <button type="button" class="cta" id="calcAdd">In den Warenkorb</button>
+    </form>
+  </div>
+</section>
+
+<!-- BUNDLES -->
+<section id="sets">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">Sets</span>
+      <h2>Einmal entscheiden, alles passt zusammen</h2>
+    </div>
+    <div class="bundles" id="bundles"></div>
+  </div>
+</section>
+
+<!-- STEPS -->
+<section class="analysis">
+  <div class="wrap">
+    <div class="sec-head"><span class="eyebrow">So läuft eine Bestellung</span><h2>Vom Entwurf bis zur Feier</h2></div>
+    <div class="steps">
+      <div class="step"><h3>Design wählen</h3><p>Eine Kollektion aussuchen oder einzelne Produkte kombinieren.</p></div>
+      <div class="step"><h3>Personalisieren</h3><p>Namen, Datum, Texte und Fotos eintragen. Die Vorschau zeigt sofort das Ergebnis.</p></div>
+      <div class="step"><h3>Korrekturabzug prüfen</h3><p>Innerhalb von 24 Stunden bekommt ihr ein PDF. Bis zur Freigabe sind Änderungen kostenlos.</p></div>
+      <div class="step"><h3>Druck &amp; Versand</h3><p>Druck auf FSC®-Papier in Deutschland, Versand in 3–5 Werktagen, Expressdruck möglich.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section id="faq">
+  <div class="wrap" style="max-width:820px">
+    <div class="sec-head"><span class="eyebrow">Fragen</span><h2>Häufige Fragen</h2></div>
+    <details><summary>Wie früh sollten wir bestellen?</summary><p>Save-the-Date-Karten 8–12 Monate vorher, Einladungen 5–8 Monate vorher. Schilder, Sitzplan und Tischkarten 3–6 Wochen vor der Feier, sobald die Gästeliste steht.</p></details>
+    <details><summary>Bekommen wir vor dem Druck eine Vorschau?</summary><p>Ja. Jede Bestellung wird von uns geprüft, ihr erhaltet innerhalb von 24 Stunden einen Korrekturabzug als PDF. Gedruckt wird erst nach eurer Freigabe.</p></details>
+    <details><summary>Können wir ein Muster bestellen?</summary><p>Ja, das Musterset mit Papiersorten und einer Beispielkarte jeder Kollektion kostet 4,90 € und wird bei der Bestellung angerechnet.</p></details>
+    <details><summary>Was ist, wenn sich die Gästeliste kurz vorher ändert?</summary><p>Sitzpläne und Tischkarten könnt ihr bis zur Freigabe beliebig oft anpassen. Mit Expressdruck verschicken wir innerhalb von 48 Stunden.</p></details>
+    <details><summary>Gibt es Mengenrabatte für Hochzeitsplaner und Locations?</summary><p>Ja, ab 10 Bestellungen pro Jahr gibt es ein Partnerkonto mit festen Konditionen und Sammelrechnung.</p></details>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div><div class="logo">weddify<span>.</span></div><p style="margin-top:8px;max-width:40ch">Personalisierte Hochzeitspapeterie, Poster, Hochzeitszeitungen und Deko. Gestaltet und gedruckt in Deutschland.</p></div>
+    <div><h5>Shop</h5><ul><li>Poster</li><li>Hochzeitszeitung</li><li>Papeterie</li><li>Deko &amp; Schilder</li></ul></div>
+    <div><h5>Service</h5><ul><li>Musterset</li><li>Korrekturabzug</li><li>Expressdruck</li><li>Partnerprogramm</li></ul></div>
+    <div><h5>Rechtliches</h5><ul><li>Impressum</li><li>Datenschutz</li><li>AGB</li><li>Widerruf</li></ul></div>
+  </div>
+</footer>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Warenkorb">
+  <header><h3>Warenkorb</h3><button class="x" id="closeCart" aria-label="Warenkorb schließen">×</button></header>
+  <div class="lines-list" id="cartLines"></div>
+  <div class="sum" id="cartSum"></div>
+</aside>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const eur=n=>n.toLocaleString('de-DE',{style:'currency',currency:'EUR'});
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+
+/* ---------- personalization ---------- */
+const P=Object.assign({n1:'Lena',n2:'Jonas',dt:'2027-06-12',pl:'Gut Sonnenhof, Lüneburg'},store.get('wfy-p',{}));
+['n1','n2','dt','pl'].forEach(k=>{const el=$('#'+k);el.value=P[k];el.addEventListener('input',()=>{P[k]=el.value;store.set('wfy-p',P);renderMocks()})});
+$('#personal').addEventListener('submit',e=>e.preventDefault());
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function dateStr(){const d=new Date(P.dt+'T12:00:00');return isNaN(d)?'Datum folgt':d.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})}
+function dateLong(){const d=new Date(P.dt+'T12:00:00');return isNaN(d)?'':d.toLocaleDateString('de-DE',{day:'numeric',month:'long',year:'numeric'})}
+const A=()=>esc(P.n1||'Name'),B=()=>esc(P.n2||'Name');
+function rng(seed){let s=seed;return()=>(s=(s*16807)%2147483647)/2147483647}
+
+function mapSvg(){const r=rng(7);let p='';
+  for(let i=0;i<14;i++){const y=r()*200,x=r()*200;p+=`<path d="M${-10} ${y} Q ${x} ${r()*200} 210 ${r()*200}" stroke="#9c97a0" stroke-width="${(r()*2+.6).toFixed(1)}" fill="none"/>`}
+  for(let i=0;i<10;i++){const x=r()*200;p+=`<path d="M${x} -10 L ${x+(r()-.5)*90} 210" stroke="#bdb7bf" stroke-width="${(r()+.4).toFixed(1)}" fill="none"/>`}
+  p+=`<path d="M-10 150 C 60 120 120 190 210 140" stroke="#9fb6c4" stroke-width="9" fill="none"/>`;
+  return `<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#EFEBE6"/>${p}<path d="M100 92 c-6-9-18-4-14 5 c3 6 14 13 14 13 s11-7 14-13 c4-9-8-14-14-5z" fill="#9E3D55"/></svg>`}
+function starsSvg(){const r=rng(3);let p='';for(let i=0;i<120;i++){p+=`<circle cx="${(r()*200).toFixed(1)}" cy="${(r()*200).toFixed(1)}" r="${(r()*1.3+.3).toFixed(2)}" fill="#F3EEE6" opacity="${(r()*.6+.4).toFixed(2)}"/>`}
+  p+=`<polyline points="40,60 70,52 92,70 120,64 150,90" stroke="#F3EEE6" stroke-width=".5" fill="none" opacity=".7"/>`;
+  return `<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="99" fill="#141a2e" stroke="#B08A4A" stroke-width="1"/>${p}</svg>`}
+function qrHtml(){const r=rng(11);let h='';for(let y=0;y<13;y++)for(let x=0;x<13;x++){const f=(x<4&&y<4)||(x>8&&y<4)||(x<4&&y>8);const fin=f&&((x%3===0||y%3===0)||(x===1||x===2)&&(y===1||y===2)||(x===10||x===11)&&(y===1||y===2));h+=`<i class="${(f?fin||((x===1||x===2||x===10||x===11)&&(y===10||y===11)):r()>.5)?'on':''}"></i>`}return h}
+function waves(){const r=rng(5);let h='';for(let i=0;i<34;i++)h+=`<i style="height:${(20+r()*80).toFixed(0)}%"></i>`;return h}
+
+const MOCKS={
+  map:()=>`<div class="mock m-map"><div class="mapbox">${mapSvg()}</div><div class="script">${A()} &amp; ${B()}</div><div class="cap">Hier hat alles begonnen · ${esc(P.pl)}</div></div>`,
+  stars:()=>`<div class="mock night" style="gap:6%">${starsSvg()}<div class="script">Unsere Nacht</div><div class="cap">${A()} &amp; ${B()} · ${dateStr()}</div></div>`,
+  song:()=>`<div class="mock" style="gap:8%"><div class="cap">Unser Song</div><div class="bar-wave">${waves()}</div><div class="script">${A()} &amp; ${B()}</div><div class="cap">Erster Tanz · ${dateStr()}</div></div>`,
+  news:()=>`<div class="mock m-news"><div class="mast">Der Hochzeits-Kurier</div><div class="meta"><span>Nr. 1</span><span>${dateStr()}</span><span>Sonderausgabe</span></div><div class="head">${A()} &amp; ${B()} sagen Ja!</div><div class="cols"><div class="ph"></div><div class="lines">${'<i></i>'.repeat(9)}</div></div><div class="lines">${'<i></i>'.repeat(4)}</div></div>`,
+  sign:()=>`<div class="mock m-sign"><div class="cap">Willkommen zur Hochzeit von</div><div class="script">${A()}<br>&amp; ${B()}</div><div class="cap">${dateLong()}</div></div>`,
+  seat:()=>`<div class="mock m-seat"><div class="serif" style="font-size:1.4em">Findet euren Platz</div><div class="tables">${['Tisch 1','Tisch 2','Tisch 3','Tisch 4','Tisch 5','Tisch 6'].map(t=>`<div class="t"><b>${t}</b><div class="lines">${'<i></i>'.repeat(4)}</div></div>`).join('')}</div><div class="cap">${A()} &amp; ${B()}</div></div>`,
+  card:()=>`<div class="mock m-card" style="background:#E4E0DC"><div class="c2"></div><div class="c" style="position:relative"><div class="cap">Save the Date</div><div class="script" style="font-size:1.7em">${A()} &amp; ${B()}</div><div class="cap">${dateStr()}</div></div></div>`,
+  invite:()=>`<div class="mock m-card" style="background:#E3EAE4"><div class="c" style="transform:rotate(2deg)"><div class="cap">Wir heiraten</div><div class="script" style="font-size:1.7em">${A()} &amp; ${B()}</div><div class="cap">${esc(P.pl)}</div></div></div>`,
+  menu:()=>`<div class="mock" style="gap:6%"><div class="serif" style="font-size:1.4em">Menü</div><div class="lines" style="width:70%;justify-items:center">${'<i style="width:100%"></i><i style="width:70%"></i>'.repeat(3)}</div><div class="script" style="font-size:1.4em">${A()} &amp; ${B()}</div></div>`,
+  place:()=>`<div class="mock m-card" style="background:#EDE6E1"><div class="c" style="aspect-ratio:7/4;width:90%;transform:rotate(-2deg)"><div class="script" style="font-size:1.6em">Oma Hilde</div><div class="cap">Tisch 3</div></div></div>`,
+  num:()=>`<div class="mock m-num" style="gap:4%"><div class="cap">Tisch</div><div class="serif">7</div><div class="cap">${A()} &amp; ${B()}</div></div>`,
+  time:()=>`<div class="mock m-time"><div class="serif" style="font-size:1.4em">Unser Tag</div><ul><li><b>14:00</b>Trauung</li><li><b>15:00</b>Sektempfang</li><li><b>16:30</b>Kaffee &amp; Torte</li><li><b>19:00</b>Abendessen</li><li><b>21:00</b>Eröffnungstanz</li></ul></div>`,
+  unplug:()=>`<div class="mock m-sign" style="gap:6%"><div class="serif" style="font-size:1.25em">Handy aus,<br>Herz an.</div><div class="cap">Unplugged Trauung · Unser Fotograf hält alles fest</div></div>`,
+  guest:()=>`<div class="mock" style="gap:5%"><svg viewBox="0 0 200 170"><path d="M100 170 V95 M100 120 L70 85 M100 110 L132 78 M100 98 L95 60" stroke="#6b5444" stroke-width="5" fill="none" stroke-linecap="round"/>${(()=>{const r=rng(9);let c='';for(let i=0;i<46;i++){const a=r()*Math.PI*2,d=Math.sqrt(r())*62;c+=`<circle cx="${(100+Math.cos(a)*d*1.2).toFixed(1)}" cy="${(62+Math.sin(a)*d*.75).toFixed(1)}" r="5" fill="${['#9E3D55','#4F6B5A','#B08A4A','#C9A1AC'][i%4]}" opacity=".75"/>`}return c})()}</svg><div class="script" style="font-size:1.6em">${A()} &amp; ${B()}</div></div>`,
+  qr:()=>`<div class="mock m-qr" style="gap:6%"><div class="serif" style="font-size:1.2em">Teilt eure Fotos</div><div class="qr">${qrHtml()}</div><div class="cap">Scannen &amp; hochladen</div></div>`,
+  quiz:()=>`<div class="mock" style="gap:6%;background:#F2E3E6"><div class="cap">Hochzeitsquiz</div><div class="serif" style="font-size:1.15em">Wer von beiden hat zuerst „Ich liebe dich“ gesagt?</div><div class="cap">○ ${A()} &nbsp; ○ ${B()}</div></div>`,
+  thanks:()=>`<div class="mock m-card" style="background:#E8E2DC"><div class="c"><div class="script" style="font-size:2em">Danke</div><div class="cap">${A()} &amp; ${B()}</div></div></div>`,
+  anni:()=>`<div class="mock night" style="gap:7%"><div class="serif" style="font-size:3em;color:#D3AE6C">1</div><div class="script">Ein Jahr wir</div><div class="cap">seit ${dateLong()}</div></div>`,
+  newsTpl:()=>MOCKS.news(),
+  puzzle:()=>`<div class="mock" style="gap:6%"><div class="serif" style="font-size:1.2em">Rätselseite</div><div style="display:grid;grid-template-columns:repeat(8,1fr);gap:1px;width:70%">${Array.from({length:48},(_,i)=>`<i style="aspect-ratio:1;background:${[3,9,14,20,27,33,40,45].includes(i)?'#23263A':'#fff'};outline:1px solid #b9b4ae"></i>`).join('')}</div><div class="cap">Kreuzworträtsel · Quiz · Bingo</div></div>`
+};
+function renderMocks(){document.querySelectorAll('[data-mock]').forEach(el=>{el.innerHTML=MOCKS[el.dataset.mock]()})}
+
+/* ---------- catalog ---------- */
+const CATS=[['all','Alle'],['poster','Poster'],['zeitung','Hochzeitszeitung'],['papeterie','Papeterie'],['deko','Deko & Schilder'],['gaeste','Gäste & Erinnerung']];
+const PRODUCTS=[
+ {id:'map',cat:'poster',name:'Stadtplan-Poster „Wo alles begann“',desc:'Karte des Ortes, an dem ihr euch kennengelernt habt.',price:39,opts:['30×40 cm','50×70 cm (+10 €)','Mit Holzrahmen (+35 €)'],adds:[0,10,35],badge:'Bestseller',spec:'Fine-Art-Papier 250 g/m²'},
+ {id:'stars',cat:'poster',name:'Sternenhimmel-Poster',desc:'Der Himmel über eurem Hochzeitsort, berechnet für Datum und Uhrzeit.',price:39,opts:['30×40 cm','50×70 cm (+10 €)','Mit Holzrahmen (+35 €)'],adds:[0,10,35],badge:'Geschenk-Tipp',spec:'Matt, 250 g/m²'},
+ {id:'song',cat:'poster',name:'Song-Poster „Erster Tanz“',desc:'Klangwelle eures Liedes mit Namen und Datum.',price:34,opts:['30×40 cm','50×70 cm (+10 €)'],adds:[0,10],spec:'Matt, 250 g/m²'},
+ {id:'anni',cat:'poster',name:'Jahrestag-Poster „Ein Jahr wir“',desc:'Zum ersten Hochzeitstag, die Papierhochzeit.',price:39,opts:['30×40 cm','50×70 cm (+10 €)'],adds:[0,10],badge:'Neu',spec:'Matt, 250 g/m²'},
+ {id:'news',cat:'zeitung',name:'Hochzeitszeitung Layout-Service',desc:'Ihr liefert Texte und Fotos, wir setzen die komplette Zeitung.',price:149,unit:'ab',badge:'Marktlücke',gap:true,spec:'Preis zzgl. Druck, siehe Rechner',link:'#zeitung'},
+ {id:'newsTpl',cat:'zeitung',name:'Hochzeitszeitung Vorlage',desc:'24 editierbare Seiten im Online-Editor, sofort startklar.',price:29,opts:['Digital','Digital + Druck 30 Stk. (+89 €)'],adds:[0,89],spec:'PDF-Export inklusive'},
+ {id:'puzzle',cat:'zeitung',name:'Seitenpaket Rätsel & Spiele',desc:'Kreuzworträtsel, Quiz und Bingo mit euren eigenen Fragen.',price:12,spec:'6 Seiten, digital'},
+ {id:'card',cat:'papeterie',name:'Save-the-Date-Karten',desc:'Mit QR-Code zu eurer Hochzeitswebseite.',price:1.4,unit:'pro Stück',opts:['50 Stück','80 Stück','120 Stück'],qtys:[50,80,120],badge:'Bestseller',spec:'A6, 350 g/m², Umschlag inkl.'},
+ {id:'invite',cat:'papeterie',name:'Einladungskarten',desc:'Klappkarte mit Antwortkarte oder Online-Zusage per QR.',price:2.2,unit:'pro Stück',opts:['50 Stück','80 Stück','120 Stück'],qtys:[50,80,120],spec:'Recyclingpapier, 400 g/m²'},
+ {id:'menu',cat:'papeterie',name:'Menükarten',desc:'Lang-Format für den Teller, passend zur Kollektion.',price:1.2,unit:'pro Stück',opts:['50 Stück','80 Stück','120 Stück'],qtys:[50,80,120],spec:'10×21 cm, 300 g/m²'},
+ {id:'place',cat:'papeterie',name:'Tisch- & Namenskarten',desc:'Namen direkt aus eurer Gästeliste importiert.',price:0.6,unit:'pro Stück',opts:['50 Stück','80 Stück','120 Stück'],qtys:[50,80,120],spec:'Zeltkarte, 300 g/m²'},
+ {id:'sign',cat:'deko',name:'Willkommensschild',desc:'Für den Empfang, auf Staffelei oder Stand.',price:69,opts:['Foamboard 50×70 cm','Acryl 50×70 cm (+60 €)','Staffelei dazu mieten (+15 €)'],adds:[0,60,15],badge:'Bestseller',spec:'Wiederverwendbar als Acryl'},
+ {id:'seat',cat:'deko',name:'Sitzplan-Poster',desc:'Bis 20 Tische, Änderungen bis zur Freigabe gratis.',price:59,opts:['50×70 cm','70×100 cm (+20 €)','Acryl 50×70 cm (+70 €)'],adds:[0,20,70],spec:'Express in 48 h möglich'},
+ {id:'time',cat:'deko',name:'Tagesablauf-Schild',desc:'Zeigt Gästen, was wann passiert.',price:45,opts:['A2 Foamboard','Acryl A2 (+45 €)'],adds:[0,45],spec:'42×59,4 cm'},
+ {id:'num',cat:'deko',name:'Tischnummern',desc:'Doppelseitig, mit Aufsteller aus Holz.',price:2.5,unit:'pro Stück',opts:['10 Stück','15 Stück','20 Stück'],qtys:[10,15,20],spec:'A6, Eichenfuß',badge:'Nachhaltig',eco:true},
+ {id:'unplug',cat:'deko',name:'„Unplugged“-Schild',desc:'Bittet Gäste freundlich, das Handy wegzulegen.',price:29,spec:'A3 Foamboard'},
+ {id:'guest',cat:'gaeste',name:'Fingerabdruck-Gästebuch',desc:'Gäste setzen ihren Fingerabdruck als Blatt an den Baum. Stempelkissen inklusive.',price:44,opts:['30×40 cm','50×70 cm (+10 €)'],adds:[0,10],badge:'Bestseller',spec:'Inkl. 4 Stempelfarben'},
+ {id:'qr',cat:'gaeste',name:'Foto-QR-Aufsteller',desc:'Gäste laden ihre Fotos in euer privates Album, ohne App.',price:19,opts:['3 Aufsteller','8 Aufsteller (+20 €)'],adds:[0,20],badge:'Marktlücke',gap:true,spec:'Album 12 Monate online'},
+ {id:'quiz',cat:'gaeste',name:'Hochzeitsquiz-Karten',desc:'Wie gut kennen die Gäste euch? 40 Karten mit euren Fragen.',price:14,spec:'40 Karten, A6'},
+ {id:'thanks',cat:'gaeste',name:'Danksagungskarten',desc:'Mit eurem Lieblingsfoto der Feier.',price:1.6,unit:'pro Stück',opts:['50 Stück','80 Stück','120 Stück'],qtys:[50,80,120],spec:'A6, Umschlag inklusive'}
+];
+
+let curCat='all';
+function renderFilters(){$('#filters').innerHTML=CATS.map(([k,l])=>`<button class="chip" data-c="${k}" aria-pressed="${k===curCat}">${l}</button>`).join('');
+  $('#filters').querySelectorAll('.chip').forEach(b=>b.onclick=()=>{curCat=b.dataset.c;renderFilters();renderGrid()})}
+function priceLabel(p){return p.unit==='pro Stück'?`${eur(p.price)} <small>pro Stück</small>`:p.unit==='ab'?`<small>ab</small> ${eur(p.price)}`:eur(p.price)}
+function renderGrid(){
+  const list=PRODUCTS.filter(p=>curCat==='all'||p.cat===curCat);
+  $('#grid').innerHTML=list.map(p=>`<article class="prod">
+    <div class="mock-wrap" data-mock="${p.id}">${p.badge?'':''}</div>
+    ${p.opts?`<select class="opt" id="opt-${p.id}" aria-label="Variante für ${esc(p.name)}">${p.opts.map((o,i)=>`<option value="${i}">${o}</option>`).join('')}</select>`:''}
+    <h4>${p.name}</h4><p class="desc">${p.desc}</p><span class="spec">${p.spec||''}</span>
+    <div class="buy"><span class="price">${priceLabel(p)}</span>${p.link?`<a class="add" href="${p.link}" style="text-decoration:none">Preis berechnen</a>`:`<button class="add" data-id="${p.id}">Hinzufügen</button>`}</div>
+  </article>`).join('');
+  $('#grid').querySelectorAll('.mock-wrap').forEach(w=>{const p=PRODUCTS.find(x=>x.id===w.dataset.mock);w.innerHTML=MOCKS[p.id]();if(p.badge){const b=document.createElement('span');b.className='badge'+(p.gap?' gap':'')+(p.eco?' eco':'');b.textContent=p.badge;w.prepend(b)}});
+  $('#grid').querySelectorAll('button.add').forEach(b=>b.onclick=()=>{addProduct(b.dataset.id);b.classList.add('done');b.textContent='Im Warenkorb';setTimeout(()=>{b.classList.remove('done');b.textContent='Hinzufügen'},1600)});
+}
+function addProduct(id){const p=PRODUCTS.find(x=>x.id===id);const sel=$('#opt-'+id);const i=sel?+sel.value:0;
+  let price=p.price,opt=p.opts?p.opts[i]:'';
+  if(p.qtys){price=Math.round(p.price*p.qtys[i]*100)/100}else if(p.adds){price+=p.adds[i]}
+  addLine({key:id+'-'+i,name:p.name,opt,price})}
+
+/* ---------- demand + gantt ---------- */
+const DEMAND=[['Einladungen & Save-the-Date',95],['Tisch- & Namenskarten',88],['Willkommensschild',82],['Sitzplan',80],['Gästebuch-Alternativen',70],['Foto-Sharing per QR',66,1],['Hochzeitszeitung',64,1],['Personalisierte Poster',58],['Danksagungskarten',55]];
+$('#demandBars').innerHTML=DEMAND.map(([l,v,h])=>`<div class="bar${h?' hl':''}"><span>${l}</span><div class="track"><div class="fill" style="width:${v}%"></div></div><span class="n">${v}</span></div>`).join('');
+const MIN=-12,MAX=3,SPAN=MAX-MIN;
+const GANTT=[['Save-the-Date',-12,-8],['Einladungen',-8,-5],['Hochzeitszeitung',-4,-0.3,1],['Deko & Schilder',-3,-0.5],['Sitzplan & Tischkarten',-1.5,-0.1],['Geschenk-Poster',-1,1,1],['Danksagung',0.5,2.5]];
+$('#gantt').innerHTML=GANTT.map(([l,a,b,h])=>`<div class="g-row"><span>${l}</span><div class="g-track"><div class="g-bar${h?' a':''}" style="left:${(a-MIN)/SPAN*100}%;width:${(b-a)/SPAN*100}%"></div></div></div>`).join('')
+ +`<div class="g-axis"><span></span><div class="ticks"><span>–12</span><span>–9</span><span>–6</span><span>–3</span><span>Tag</span><span>+3</span></div></div>`;
+
+/* ---------- Zeitung calculator ---------- */
+const C={mode:'self',fmt:'A4'};
+document.querySelectorAll('.seg-ctl').forEach(g=>g.querySelectorAll('button').forEach(b=>b.onclick=()=>{C[g.dataset.name]=b.dataset.v;g.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));calc()}));
+function calcPrice(){const pages=+$('#pages').value,copies=+$('#copies').value;
+  const per=(C.fmt==='A4'?0.16:0.11)*pages+0.8;const disc=copies>=100?0.15:copies>=50?0.08:0;
+  const print=per*copies*(1-disc);const fee=C.mode==='service'?149:0;
+  return {pages,copies,per,disc,print,fee,total:Math.round((print+fee)*100)/100}}
+function calc(){const r=calcPrice();$('#copiesOut').textContent=r.copies;$('#calcTotal').textContent=eur(r.total);
+  $('#breakdown').innerHTML=`<span>Druck: ${r.copies} × ${eur(r.per)}${r.disc?` – ${r.disc*100} % Mengenrabatt`:''}</span><span>= ${eur(r.print)}</span>${r.fee?`<span>Layout-Service: ${eur(r.fee)}</span>`:'<span>Online-Editor inklusive</span>'}<span>≈ ${eur(r.total/r.copies)} pro Gast</span>`}
+['#pages','#copies'].forEach(s=>$(s).addEventListener('input',calc));
+$('#calcAdd').onclick=()=>{const r=calcPrice();addLine({key:`zeitung-${C.mode}-${C.fmt}-${r.pages}-${r.copies}`,name:'Hochzeitszeitung',opt:`${C.fmt}, ${r.pages} Seiten, ${r.copies} Exemplare${r.fee?', Layout-Service':''}`,price:r.total})};
+$('#calc').addEventListener('submit',e=>e.preventDefault());
+
+/* ---------- bundles ---------- */
+const BUNDLES=[
+ {id:'b1',who:'Für Brautpaare',name:'Papeterie-Set',items:['80 Save-the-Date-Karten','80 Einladungskarten mit QR-Zusage','80 Menükarten','80 Tisch- & Namenskarten'],price:349,was:432},
+ {id:'b2',who:'Für den Empfang',name:'Empfang & Deko',items:['Willkommensschild 50×70','Sitzplan-Poster 50×70','Tagesablauf-Schild A2','10 Tischnummern mit Holzfuß'],price:159,was:198,feat:true},
+ {id:'b3',who:'Für Trauzeug:innen',name:'Trauzeugen-Paket',items:['Hochzeitszeitung Layout-Service','Seitenpaket Rätsel & Spiele','Hochzeitsquiz-Karten','Fingerabdruck-Gästebuch'],price:199,was:219}
+];
+$('#bundles').innerHTML=BUNDLES.map(b=>`<div class="bundle${b.feat?' feat':''}"><span class="who">${b.who}${b.feat?' · Beliebt':''}</span><h3>${b.name}</h3><ul>${b.items.map(i=>`<li>${i}</li>`).join('')}</ul><div class="pr"><b>${eur(b.price)}</b><s>${eur(b.was)}</s></div><button class="add" data-b="${b.id}">Set hinzufügen</button></div>`).join('');
+$('#bundles').querySelectorAll('button').forEach(btn=>btn.onclick=()=>{const b=BUNDLES.find(x=>x.id===btn.dataset.b);addLine({key:b.id,name:'Set: '+b.name,opt:b.items.length+' Produkte im gleichen Design',price:b.price})});
+
+/* ---------- cart ---------- */
+let cart=store.get('wfy-cart',[]);
+function addLine(l){const ex=cart.find(c=>c.key===l.key);if(ex)ex.qty++;else cart.push({...l,qty:1});saveCart();toast(l.name+' hinzugefügt')}
+function saveCart(){store.set('wfy-cart',cart);renderCart()}
+function renderCart(){const n=cart.reduce((s,c)=>s+c.qty,0);$('#cartCount').textContent=n;
+  const sub=cart.reduce((s,c)=>s+c.price*c.qty,0);const ship=sub===0||sub>=79?0:4.9;
+  $('#cartLines').innerHTML=cart.length?cart.map((c,i)=>`<div class="ci"><div><b>${esc(c.name)}</b><div class="o">${esc(c.opt||'')}</div></div><span class="price">${eur(c.price*c.qty)}</span><div class="qty"><button data-i="${i}" data-d="-1" aria-label="Weniger">−</button><span class="mono">${c.qty}</span><button data-i="${i}" data-d="1" aria-label="Mehr">+</button></div></div>`).join(''):'<p class="hint">Euer Warenkorb ist noch leer. Fügt Produkte aus dem Shop oder ein Set hinzu.</p>';
+  $('#cartLines').querySelectorAll('.qty button').forEach(b=>b.onclick=()=>{const c=cart[+b.dataset.i];c.qty+=+b.dataset.d;if(c.qty<1)cart.splice(+b.dataset.i,1);saveCart()});
+  const left=Math.max(0,79-sub);
+  $('#cartSum').innerHTML=cart.length?`<div class="ship-bar"><i style="width:${Math.min(100,sub/79*100)}%"></i></div><span class="hint">${left>0?`Noch ${eur(left)} bis zum Gratis-Versand`:'Gratis-Versand ist freigeschaltet'}</span><div><span>Zwischensumme</span><span>${eur(sub)}</span></div><div><span>Versand</span><span>${ship?eur(ship):'kostenlos'}</span></div><div class="t"><span>Gesamt</span><span>${eur(sub+ship)}</span></div><button class="checkout" id="checkout">Zur Kasse</button><div class="note" id="coNote" hidden>Das ist ein Shop-Prototyp. Die Kasse wird angebunden, sobald Zahlungsanbieter und Shopsystem stehen.</div>`:'';
+  const co=$('#checkout');if(co)co.onclick=()=>{$('#coNote').hidden=false}}
+function openCart(o){$('#drawer').hidden=!o;$('#scrim').hidden=!o}
+$('#openCart').onclick=()=>openCart(true);$('#closeCart').onclick=()=>openCart(false);$('#scrim').onclick=()=>openCart(false);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')openCart(false)});
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,1800)}
+
+$('#acctBtn').onclick=()=>{location.href='/app'};
+renderFilters();renderGrid();renderMocks();calc();renderCart();
+})();
+</script>
+
+</body>
+</html>
