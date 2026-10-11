@@ -278,6 +278,42 @@ try {
     assert.equal((await paar('GET', `/api/w/${w2}/guests`)).body.guests.length, 3);
   });
 
+  await step('Kostenrechner, Belege & Budget-Verknüpfung', async () => {
+    const r = await paar('POST', '/api/weddings', { name1: 'Lea', name2: 'Tom', date: '2027-09-11', profile: { traditions: ['standesamt', 'frei', 'polterabend'], guests: 100 } });
+    const w3 = r.body.id;
+    const m = (await paar('GET', `/api/w/${w3}/cost-model`)).body;
+    assert.ok(m.items.some(i => i.cat === 'trauredner') && m.items.some(i => i.cat === 'polterabend' && i.type === 'guest'));
+    assert.ok(!m.items.some(i => i.cat === 'davul'), 'keine fremden Traditionen');
+    const ap = (await paar('POST', `/api/w/${w3}/budget/apply`, { items: [{ cat: 'catering', label: 'Essen & Catering', planned: 7500 }, { cat: 'trauredner', label: 'Trauredner:in', planned: 1100 }], total: 25000 })).body;
+    assert.equal(ap.total, 25000); assert.equal(ap.items.find(i => i.cat === 'catering').planned, 7500);
+    // Beleg ohne Dienstleister erhöht Kosten und Bezahltes
+    const e1 = (await paar('POST', `/api/w/${w3}/expenses`, { amount: 130, date: '2027-05-12', merchant: 'Blumen Rosenhof', cat: 'florist', paid_by: 'Lea' })).body.id;
+    const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46]);
+    const up = await fetch(`${BASE}/api/expenses/${e1}/receipt`, { method: 'PUT', headers: { 'Content-Type': 'image/jpeg', Cookie: paar.cookie() }, body: jpg });
+    assert.equal(up.status, 200);
+    assert.equal((await fetch(`${BASE}/api/expenses/${e1}/receipt`, { method: 'PUT', headers: { 'Content-Type': 'text/html', Cookie: paar.cookie() }, body: '<b>' })).status, 415);
+    const get = await fetch(`${BASE}/api/expenses/${e1}/receipt`, { headers: { Cookie: paar.cookie() } });
+    assert.equal(get.status, 200); assert.match(get.headers.get('content-security-policy'), /sandbox/);
+    let b = (await paar('GET', `/api/w/${w3}/budget`)).body;
+    assert.equal(b.items.find(i => i.cat === 'florist').actual, 130); assert.equal(b.items.find(i => i.cat === 'florist').paid, 130);
+    // Beleg als Zahlung an gebuchten Dienstleister: kein doppeltes Zählen
+    const vs = (await paar('GET', `/api/w/${w3}/vendors`)).body.vendors; const loc = vs.find(v => v.cat === 'location');
+    await paar('PATCH', `/api/vendors/${loc.id}`, { status: 'gebucht', price: 5000 });
+    await paar('POST', `/api/w/${w3}/expenses`, { amount: 2000, merchant: 'Gut Sonnenhof', cat: 'location', vendor_id: loc.id });
+    b = (await paar('GET', `/api/w/${w3}/budget`)).body;
+    assert.equal(b.items.find(i => i.cat === 'location').actual, 5000, 'Preis bleibt 5000'); assert.equal(b.items.find(i => i.cat === 'location').paid, 2000);
+    assert.equal((await paar('POST', `/api/w/${w3}/expenses`, { amount: 0 })).status, 400);
+    assert.equal((await tz('GET', `/api/w/${w3}/expenses`)).status, 404, 'Fremde Hochzeit');
+    assert.equal((await paar('GET', `/api/w/${w3}/overview`)).body.expenses.n, 2);
+    assert.equal((await paar('DELETE', `/api/expenses/${e1}`)).status, 200);
+    // Beleg-Parser
+    const { parseReceipt } = await import('../public/receipt-parse.js');
+    const p1 = parseReceipt('Blumen Rosenhof GmbH\n12.05.2027\nBrautstrauß 89,00\nZwischensumme 137,00\nSUMME EUR 130,00\nMwSt 7% 8,50\nBar 150,00\nRückgeld 20,00', ['florist']);
+    assert.deepEqual([p1.amount, p1.date, p1.cat, p1.sure], [130, '2027-05-12', 'florist', true]);
+    const p2 = parseReceipt('METRO\nGesamtbetrag\n1.234,56\n03.06.27');
+    assert.deepEqual([p2.amount, p2.date], [1234.56, '2027-06-03']);
+  });
+
   await step('Weitere Kulturen: jüdisch, indisch, orthodox', async () => {
     const j = await paar('POST', '/api/weddings', { name1: 'Mira', name2: 'Ben', date: '2027-06-12', profile: { traditions: ['standesamt', 'juedisch'] } });
     assert.ok(j.body.warnings.some(x => /Schabbat/.test(x)), 'Samstag-Warnung');

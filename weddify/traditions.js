@@ -422,3 +422,58 @@ export function catalog() {
     langs: LANGS, vendors: VENDOR_CATS,
   };
 }
+
+// Kostenmodell für den Kostenrechner (Deutschland, grobe Richtwerte 2026, je Ausstattung einfach / mittel / gehoben).
+// type 'guest' = pro Gast, 'fix' = pauschal. Werte sind Orientierung, keine Angebote.
+export const COST_BASE = [
+  { cat: 'location', label: 'Location & Miete', type: 'fix', p: [1500, 3500, 7500] },
+  { cat: 'catering', label: 'Essen & Catering', type: 'guest', p: [45, 75, 120] },
+  { cat: 'getraenke', label: 'Getränke', type: 'guest', p: [18, 32, 55] },
+  { cat: 'fotograf', label: 'Fotografie', type: 'fix', p: [1200, 2200, 3800] },
+  { cat: 'video', label: 'Video (optional)', type: 'fix', p: [0, 1200, 2500] },
+  { cat: 'dj', label: 'Musik', type: 'fix', p: [700, 1200, 2200] },
+  { cat: 'florist', label: 'Blumen & Dekoration', type: 'fix', p: [800, 2000, 4500] },
+  { cat: 'brautmode', label: 'Brautkleid & Accessoires', type: 'fix', p: [1000, 2200, 4500] },
+  { cat: 'herrenmode', label: 'Anzug', type: 'fix', p: [300, 700, 1500] },
+  { cat: 'styling', label: 'Haare & Make-up', type: 'fix', p: [250, 450, 800] },
+  { cat: 'ringe', label: 'Eheringe', type: 'fix', p: [700, 1500, 3000] },
+  { cat: 'papeterie', label: 'Papeterie & Druck', type: 'guest', p: [4, 7, 12] },
+  { cat: 'torte', label: 'Hochzeitstorte & Süßes', type: 'guest', p: [4, 6, 10] },
+  { cat: 'transport', label: 'Transport', type: 'fix', p: [150, 400, 900] },
+  { cat: 'gastgeschenke', label: 'Gastgeschenke', type: 'guest', p: [1.5, 3, 6] },
+  { cat: 'kinder', label: 'Kinderbetreuung', type: 'fix', p: [0, 300, 600], cond: 'kids' },
+];
+export const COST_TRAD = {
+  standesamt: [{ cat: 'standesamt', label: 'Standesamt-Gebühren', type: 'fix', p: [100, 150, 250] }],
+  frei: [{ cat: 'trauredner', label: 'Trauredner:in', type: 'fix', p: [700, 1100, 1800] }],
+  evangelisch: [{ cat: 'kirche', label: 'Kirche, Musik & Kollekte', type: 'fix', p: [100, 250, 500] }],
+  katholisch: [{ cat: 'kirche', label: 'Kirche, Musik & Kollekte', type: 'fix', p: [100, 250, 500] }],
+  orthodox: [{ cat: 'priester', label: 'Kirche & Kronen', type: 'fix', p: [150, 300, 600] }],
+  polterabend: [{ cat: 'polterabend', label: 'Polterabend', type: 'guest', p: [5, 8, 12] }],
+  islamisch: [{ cat: 'imam', label: 'Imam / Nikah', type: 'fix', p: [150, 300, 500] }, { cat: 'henna', label: 'Henna-Abend', type: 'fix', p: [600, 1200, 2500] }],
+  arabisch: [{ cat: 'zaffa', label: 'Zaffa & Musik', type: 'fix', p: [600, 1200, 2500] }],
+  tuerkisch: [{ cat: 'davul', label: 'Davul, Zurna & Orkestra', type: 'fix', p: [800, 1500, 3000] }, { cat: 'kina', label: 'Kına-Abend', type: 'fix', p: [800, 1500, 3000] }, { cat: 'moderation', label: 'Moderation (Takı)', type: 'fix', p: [300, 600, 1000] }],
+  kurdisch: [{ cat: 'davul', label: 'Davul, Zurna & Musik', type: 'fix', p: [800, 1500, 3000] }],
+  persisch: [{ cat: 'sofreh', label: 'Sofreh Aghd', type: 'fix', p: [300, 700, 1500] }],
+  indisch: [{ cat: 'mandap', label: 'Mandap & Zeremonie', type: 'fix', p: [1500, 3000, 6000] }, { cat: 'mode_trad', label: 'Outfits für alle Feiern', type: 'fix', p: [1500, 3000, 6000] }, { cat: 'henna', label: 'Mehndi', type: 'fix', p: [300, 600, 1200] }, { cat: 'dhol', label: 'Dhol & Baraat', type: 'fix', p: [300, 600, 1000] }, { cat: 'vorfeiern', label: 'Vorfeiern (Mehndi, Sangeet, Haldi)', type: 'guest', p: [15, 25, 40] }],
+  sikh: [{ cat: 'granthi', label: 'Gurdwara & Langar', type: 'fix', p: [150, 300, 500] }],
+  juedisch: [{ cat: 'rabbiner', label: 'Rabbiner:in & Ketubba', type: 'fix', p: [500, 1000, 2000] }],
+  polnisch: [{ cat: 'poprawiny', label: 'Poprawiny (zweiter Tag)', type: 'guest', p: [15, 25, 40] }, { cat: 'band', label: 'Band', type: 'fix', p: [1500, 2500, 4000] }],
+  italienisch: [{ cat: 'gastgeschenke', label: 'Bomboniere', type: 'guest', p: [3, 5, 9] }],
+  russisch: [{ cat: 'moderation', label: 'Tamada / Moderation', type: 'fix', p: [400, 800, 1500] }],
+  westafrikanisch: [{ cat: 'mode_trad', label: 'Traditionelle Outfits', type: 'fix', p: [800, 1500, 3000] }, { cat: 'traditional', label: 'Traditional Wedding', type: 'guest', p: [15, 25, 40] }],
+  chinesisch: [{ cat: 'mode_trad', label: 'Qipao & Kleiderwechsel', type: 'fix', p: [400, 800, 1500] }, { cat: 'tee', label: 'Teezeremonie', type: 'fix', p: [100, 200, 400] }],
+};
+export const REGIONS = { land: { label: 'Ländlich', f: 0.9 }, stadt: { label: 'Stadt', f: 1 }, gross: { label: 'Großstadt', f: 1.15 } };
+
+// Kostenpositionen für ein Profil (zusammengefasst je Kategorie)
+export function costItems(profile) {
+  const o = profile.options || {};
+  const out = new Map();
+  const add = x => { if (x.cond && !o[x.cond]) return; const prev = out.get(x.cat); if (prev && prev.type === x.type) prev.p = prev.p.map((v, i) => v + x.p[i]); else if (!prev) out.set(x.cat, { ...x, p: [...x.p] }); else out.set(x.cat + '_' + x.type, { ...x, cat: x.cat, p: [...x.p] }); };
+  COST_BASE.forEach(add);
+  for (const t of profile.traditions || []) (COST_TRAD[t] || []).forEach(add);
+  const items = [...out.values()];
+  if (o.noAlcohol) { const g = items.find(i => i.cat === 'getraenke'); if (g) { g.p = g.p.map(v => Math.round(v * 0.55)); g.label = 'Getränke (alkoholfrei)'; } }
+  return items;
+}

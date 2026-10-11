@@ -3,7 +3,7 @@
 
 import { vSeating } from './seating.js';
 import { vPrint } from './print.js';
-import { renderWizard, vCockpit, vMore, vEvents, vGuestManager, vBudget, vVendors, vGifts, vGuestRsvp, renderPublicRsvp } from './planner.js';
+import { renderWizard, vCockpit, vMore, vEvents, vGuestManager, vBudget, vVendors, vGifts, vGuestRsvp, renderPublicRsvp, vCosts, vReceipts } from './planner.js';
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
@@ -58,7 +58,7 @@ const TABS = {
 };
 // Unterseiten ohne eigenen Reiter → welcher Reiter leuchtet
 const SUBPAGES = {
-  paar: { tischkarten: 'sitzplan', druck: 'mehr', budget: 'mehr', dienstleister: 'mehr', geschenke: 'mehr', feiern: 'mehr', einstellungen: 'mehr', traditionen: 'mehr', ablauf: 'mehr' },
+  paar: { tischkarten: 'sitzplan', druck: 'mehr', budget: 'mehr', kosten: 'mehr', belege: 'mehr', dienstleister: 'mehr', geschenke: 'mehr', feiern: 'mehr', einstellungen: 'mehr', traditionen: 'mehr', ablauf: 'mehr' },
   trauzeuge: { feiern: 'uebersicht', ablauf: 'uebersicht', druck: 'sitzplan', tischkarten: 'sitzplan' },
   gast: { feiern: 'ablauf' },
 };
@@ -159,7 +159,7 @@ async function renderWedding(wid, tab) {
   const c = ctx();
   const fn = {
     uebersicht: S.role === 'paar' ? () => vCockpit(c) : vOverview, zeitplan: vTimeline, gaeste: () => vGuestManager(c), sitzplan: () => vSeating(c),
-    mehr: () => vMore(c), feiern: () => vEvents(c), ablauf: () => vEvents(c), budget: () => vBudget(c), dienstleister: () => vVendors(c), geschenke: () => vGifts(c),
+    mehr: () => vMore(c), feiern: () => vEvents(c), ablauf: () => vEvents(c), budget: () => vBudget(c), kosten: () => vCosts(c), belege: () => vReceipts(c), dienstleister: () => vVendors(c), geschenke: () => vGifts(c),
     druck: () => vPrint(c), tischkarten: () => vPrint(c), traditionen: () => renderWizard(c, { edit: true }), einstellungen: vSettings,
     zusage: () => vGuestRsvp(c), beitrag: vContrib, beitraege: vContrib,
   }[tab];

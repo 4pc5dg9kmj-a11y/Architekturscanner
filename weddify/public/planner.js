@@ -1,7 +1,11 @@
+import { prepareImage, recognize } from './ocr.js';
+import { parseReceipt } from './receipt-parse.js';
+
 // Planer-Ansichten: Assistent, Cockpit, Feiern, Gästeliste, Budget, Dienstleister, Geschenke, Zusagen.
 // Alle Bereiche hängen über den Server zusammen (Feier ↔ Einladungen ↔ Zusagen ↔ Sitzplan ↔ Drucksachen,
 // Dienstleister ↔ Aufgaben ↔ Budget ↔ Kalender).
 
+const eur2 = n => (Number(n) || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
 const eur = n => (Number(n) || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 const SCOPES = { alle: 'Alle Gäste', familie: 'Familie', frauen: 'Nur Frauen', klein: 'Kleiner Kreis (von Hand)' };
 const GROUPS = ['Familie Braut', 'Familie Bräutigam', 'Freunde', 'Kollegen', 'Nachbarn', 'Verein', 'Sonstige'];
@@ -129,7 +133,7 @@ export async function vCockpit(ctx) {
       ${card('gaeste', 'Gäste & Zusagen', `<p class="small muted">${ov.guests.entries} Einträge · ${ov.guests.persons} Personen eingeladen</p>
         <div class="evstats">${gl.perEvent.map(p => `<div><b>${esc(p.title)}</b><span class="pill ok">${p.personen} kommen</span><span class="pill">${p.offen} offen</span>${p.absage ? `<span class="pill late">${p.absage} Absagen</span>` : ''}</div>`).join('')}</div>`)}
       ${card('budget', 'Budget', `<div class="bbar"><i class="spent" style="width:${Math.min(100, pct(ov.budget.actual, ov.budget.total))}%"></i><i class="paid" style="width:${Math.min(100, pct(ov.budget.paid, ov.budget.total))}%"></i></div>
-        <p class="small muted">${eur(ov.budget.actual)} voraussichtlich von ${eur(ov.budget.total)} · ${eur(ov.budget.paid)} bezahlt</p>
+        <p class="small muted">${eur(ov.budget.actual)} voraussichtlich von ${eur(ov.budget.total)} · ${eur(ov.budget.paid)} bezahlt${ov.expenses?.n ? ` · ${ov.expenses.n} Belege` : ''}</p>
         ${ov.budget.nextPayments.length ? `<p class="small">Nächste Zahlung: <b>${esc(ov.budget.nextPayments[0].title)}</b> ${eur(ov.budget.nextPayments[0].amount)} bis ${fmt(parseD(ov.budget.nextPayments[0].due))}</p>` : ''}`)}
       ${card('dienstleister', 'Dienstleister', `<div class="progress"><i style="width:${pct(ov.vendors.booked, ov.vendors.total)}%"></i></div><p class="small muted">${ov.vendors.booked} von ${ov.vendors.total} gebucht</p>`)}
       ${card('druck', 'Drucksachen', `<p class="small muted">${ov.guests.withAddress} von ${ov.guests.entries} Gästen mit Adresse (für Einladungen & Etiketten) · ${ov.seating.assigned} von ${ov.seating.seats} Plätzen vergeben (für Tischkarten)</p>`)}
@@ -141,7 +145,7 @@ export async function vCockpit(ctx) {
 /* ================= Mehr ================= */
 export function vMore(ctx) {
   const { S, view } = ctx;
-  const tiles = [['feiern', 'Feiern & Abläufe', 'Termine, Orte, Gästekreis und Programm jeder Feier', ICON.feiern], ['budget', 'Budget & Zahlungen', 'Geplant, gebucht, bezahlt und Fristen', ICON.budget], ['dienstleister', 'Dienstleister', 'Anfragen, Angebote, Buchungen, Kontakte', ICON.vendors], ['druck', 'Druckerei', 'Einladungen, Karten, Etiketten, Schilder', ICON.print], ['geschenke', 'Geschenke', 'Wer hat was geschenkt, Danksagungen', ICON.gift], ['einstellungen', 'Einstellungen & Einladen', 'Daten, Traditionen, Codes, Kalender', ICON.gear]];
+  const tiles = [['feiern', 'Feiern & Abläufe', 'Termine, Orte, Gästekreis und Programm jeder Feier', ICON.feiern], ['budget', 'Budget & Kosten', 'Kostenrechner, Belege scannen, Zahlungen und Fristen', ICON.budget], ['dienstleister', 'Dienstleister', 'Anfragen, Angebote, Buchungen, Kontakte', ICON.vendors], ['druck', 'Druckerei', 'Einladungen, Karten, Etiketten, Schilder', ICON.print], ['geschenke', 'Geschenke', 'Wer hat was geschenkt, Danksagungen', ICON.gift], ['einstellungen', 'Einstellungen & Einladen', 'Daten, Traditionen, Codes, Kalender', ICON.gear]];
   view.innerHTML = `<div><span class="eyebrow">Alles für eure Hochzeit</span><h1>Mehr</h1></div>
   <div class="tiles">${tiles.map(([k, t, d, ic]) => `<a class="tile" href="#/w/${S.w.id}/${k}">${ic}<b>${t}</b><span>${d}</span></a>`).join('')}</div>${ctx.accountFoot()}`;
 }
@@ -254,6 +258,7 @@ export async function vGuestManager(ctx) {
 }
 
 /* ================= Budget ================= */
+const budgetNav = (S, active) => `<nav class="seg subnav" aria-label="Budget">${[['budget', 'Übersicht'], ['kosten', 'Kostenrechner'], ['belege', 'Belege & Ausgaben']].map(([k, l]) => `<a href="#/w/${S.w.id}/${k}" class="${k === active ? 'on' : ''}" ${k === active ? 'aria-current="page"' : ''}>${l}</a>`).join('')}</nav>`;
 export async function vBudget(ctx) {
   const { api, S, esc, toast, view, fmt, parseD } = ctx;
   let B = await api(`/api/w/${S.w.id}/budget`);
@@ -261,15 +266,16 @@ export async function vBudget(ctx) {
   function draw() {
     const pct = v => B.total ? Math.min(100, v / B.total * 100) : 0;
     const over = B.actual > B.total;
-    view.innerHTML = `<div><span class="eyebrow">Budget & Zahlungen</span><h1>${eur(B.total)}</h1></div>
+    view.innerHTML = `${budgetNav(S, 'budget')}<div><span class="eyebrow">Budget & Zahlungen</span><h1>${eur(B.total)}</h1></div>
     <section class="card"><div class="bbar big"><i class="spent ${over ? 'over' : ''}" style="width:${pct(B.actual)}%"></i><i class="paid" style="width:${pct(B.paid)}%"></i></div>
       <div class="stats"><div class="stat"><b>${eur(B.planned)}</b><span>geplant</span></div><div class="stat ${over ? 'no' : ''}"><b>${eur(B.actual)}</b><span>voraussichtlich</span></div><div class="stat yes"><b>${eur(B.paid)}</b><span>bezahlt</span></div><div class="stat"><b>${eur(B.total - B.actual)}</b><span>${B.total - B.actual >= 0 ? 'Luft' : 'drüber'}</span></div></div>
       <form class="row" id="bTot"><label class="small" for="bt">Gesamtbudget</label><input id="bt" name="total" type="number" min="0" step="100" value="${B.total}" style="max-width:150px"><label class="row small"><input type="checkbox" name="rescale" checked> Posten anteilig anpassen</label><button class="btn sec small">Übernehmen</button></form>
-      <p class="small muted">„Voraussichtlich“ nimmt die Preise gebuchter Dienstleister, sonst den geplanten Betrag. Zahlungen von Dienstleistern zählen automatisch als bezahlt.</p></section>
+      <p class="small muted">„Voraussichtlich“ nimmt die Preise gebuchter Dienstleister und eure erfassten Belege, sonst den geplanten Betrag. Zahlungen an Dienstleister und Belege zählen automatisch als bezahlt.</p>
+      <div class="row"><a class="btn sec small" href="#/w/${S.w.id}/kosten">Kosten neu kalkulieren</a><a class="btn small" href="#/w/${S.w.id}/belege">Beleg scannen</a></div></section>
     ${B.payments.length ? `<section class="card"><h3>Zahlungen & Fristen</h3><ul class="paylist">${B.payments.map(p => `<li class="${p.paid ? 'done' : ''}"><label class="row"><input type="checkbox" data-pay="${p.vendor_id}:${p.kind}" ${p.paid ? 'checked' : ''}><span><b>${esc(p.title)}</b><br><span class="small muted">bis ${fmt(parseD(p.due))}</span></span></label><b class="mono">${eur(p.amount)}</b></li>`).join('')}</ul><p class="small muted">Offene Zahlungen stehen auch im Zeitplan und im Kalender-Abo.</p></section>` : ''}
     <section class="card"><h3>Posten</h3><div class="btable" role="table">
       <div class="brow bhead" role="row"><span>Posten</span><span>Geplant</span><span>Tatsächlich</span><span>Bezahlt</span></div>
-      ${B.items.map(i => `<div class="brow" role="row"><span>${esc(i.label)}${i.vendors ? ` <span class="pill ok">${i.vendors} gebucht</span>` : ''}${i.per_guest ? ' <span class="small muted">pro Gast</span>' : ''}</span>
+      ${B.items.map(i => `<div class="brow" role="row"><span>${esc(i.label)}${i.vendors ? ` <span class="pill ok">${i.vendors} gebucht</span>` : ''}${i.receipts ? ` <a class="pill" href="#/w/${S.w.id}/belege">${i.receipts} Beleg${i.receipts > 1 ? 'e' : ''}</a>` : ''}${i.per_guest ? ' <span class="small muted">pro Gast</span>' : ''}</span>
         ${i.id ? `<input type="number" min="0" step="10" value="${i.planned}" data-b="${i.id}:planned" aria-label="${esc(i.label)} geplant"><input type="number" min="0" step="10" value="${i.manual_actual ?? ''}" placeholder="${i.actual != null ? i.actual : ''}" data-b="${i.id}:actual" aria-label="${esc(i.label)} tatsächlich"><span class="mono small">${eur(i.paid)}</span>` : `<span class="mono">–</span><span class="mono">${eur(i.actual)}</span><span class="mono small">${eur(i.paid)}</span>`}</div>`).join('')}
     </div>
     <form class="row" id="bAdd"><input name="label" required maxlength="80" placeholder="Eigener Posten, z. B. Hochzeitsreise" style="flex:1;min-width:160px"><input name="planned" type="number" min="0" step="10" placeholder="Betrag" style="max-width:120px"><button class="btn sec small">Hinzufügen</button></form></section>`;
@@ -380,4 +386,134 @@ export async function renderPublicRsvp(ctx, token) {
     f.onsubmit = async e => { e.preventDefault(); const body = readRsvp(f, r.invites); if (body.answers.length < r.invites.length) { const er = view.querySelector('#rErr'); er.textContent = 'Bitte gebt für jede Feier eine Antwort.'; er.hidden = false; return; } try { await api(`/api/rsvp/${encodeURIComponent(token)}`, { method: 'PUT', body }); r = await api(`/api/rsvp/${encodeURIComponent(token)}`); toast('Danke!'); draw(true); window.scrollTo(0, 0); } catch (x) { toast(x.message); } };
   };
   draw(false);
+}
+
+/* ================= Kostenrechner ================= */
+export async function vCosts(ctx) {
+  const { api, S, esc, toast, view } = ctx;
+  const M = await api(`/api/w/${S.w.id}/cost-model`);
+  const st = S.calc || (S.calc = { level: 1, region: 'stadt', src: M.guests.confirmed ? 'confirmed' : M.guests.invited ? 'invited' : 'planned', over: {}, buffer: 8, confirm: false });
+  const levels = ['Einfach', 'Mittel', 'Gehoben'];
+  function calc() {
+    const guests = Math.max(1, M.guests[st.src] || M.guests.planned);
+    const f = M.regions[st.region].f;
+    const rows = M.items.map(it => {
+      const key = it.cat + ':' + it.type;
+      const unit = st.over[key] ?? Math.round(it.p[st.level] * f * (it.type === 'guest' ? 100 : 1)) / (it.type === 'guest' ? 100 : 1);
+      return { ...it, key, unit, total: Math.round(it.type === 'guest' ? unit * guests : unit), edited: st.over[key] != null };
+    });
+    const sub = rows.reduce((s, r) => s + r.total, 0);
+    const buffer = Math.round(sub * st.buffer / 100);
+    return { guests, rows, sub, buffer, total: sub + buffer };
+  }
+  function draw() {
+    const c = calc(); const diff = M.budget ? c.total - M.budget : 0;
+    view.innerHTML = `${budgetNav(S, 'kosten')}
+    <div><span class="eyebrow">Kostenrechner</span><h1>${eur(c.total)}</h1><p class="muted">${eur(c.total / c.guests)} pro Gast · ${c.guests} Gäste${M.budget ? ` · ${diff > 0 ? `${eur(diff)} über` : `${eur(-diff)} unter`} eurem Budget von ${eur(M.budget)}` : ''}</p></div>
+    <section class="card"><div class="calc-ctl">
+      <div class="field"><label>Ausstattung</label><div class="seg">${levels.map((l, i) => `<button type="button" data-lv="${i}" aria-pressed="${st.level === i}">${l}</button>`).join('')}</div></div>
+      <div class="field"><label>Region</label><div class="seg">${Object.entries(M.regions).map(([k, r]) => `<button type="button" data-rg="${k}" aria-pressed="${st.region === k}">${r.label}</button>`).join('')}</div></div>
+      <div class="field"><label for="kSrc">Gästezahl</label><select id="kSrc"><option value="planned" ${st.src === 'planned' ? 'selected' : ''}>Geplant: ${M.guests.planned}</option><option value="invited" ${st.src === 'invited' ? 'selected' : ''} ${M.guests.invited ? '' : 'disabled'}>Eingeladen: ${M.guests.invited}</option><option value="confirmed" ${st.src === 'confirmed' ? 'selected' : ''} ${M.guests.confirmed ? '' : 'disabled'}>Zugesagt: ${M.guests.confirmed}</option></select></div>
+    </div>
+    <p class="small muted">Richtwerte für Deutschland, abgestimmt auf eure Traditionen. Jeden Preis könnt ihr überschreiben, zum Beispiel mit einem echten Angebot.</p></section>
+    <section class="card"><div class="ktable">
+      <div class="krow khead"><span>Posten</span><span>Preis</span><span>Summe</span></div>
+      ${c.rows.map(r => `<div class="krow ${r.edited ? 'edited' : ''}"><span>${esc(r.label)}<small class="muted">${r.type === 'guest' ? ` × ${c.guests} Gäste` : ' pauschal'}</small></span>
+        <span class="kin"><input type="number" min="0" step="${r.type === 'guest' ? 0.5 : 50}" value="${r.unit}" data-k="${esc(r.key)}" aria-label="${esc(r.label)} Preis"><small class="muted">${r.type === 'guest' ? '€/Gast' : '€'}</small></span>
+        <b class="mono">${eur(r.total)}</b></div>`).join('')}
+      <div class="krow"><span>Puffer<small class="muted">für Unvorhergesehenes</small></span><span class="kin"><input type="number" min="0" max="30" value="${st.buffer}" id="kBuf" aria-label="Puffer in Prozent"><small class="muted">%</small></span><b class="mono">${eur(c.buffer)}</b></div>
+      <div class="krow ktotal"><span>Gesamt</span><span></span><b class="mono">${eur(c.total)}</b></div>
+    </div>
+    <div class="row">${st.confirm ? `<span class="small">Geplante Beträge im Budget werden durch diese Kalkulation ersetzt.</span><button class="btn" id="kYes">Ja, übernehmen</button><button class="btn sec" id="kNo">Abbrechen</button>` : `<button class="btn" id="kApply">Als Budget übernehmen</button>`}${Object.keys(st.over).length ? '<button class="btn ghost small" id="kReset">Eigene Preise zurücksetzen</button>' : ''}</div></section>`;
+    view.querySelectorAll('[data-lv]').forEach(b => b.onclick = () => { st.level = +b.dataset.lv; draw(); });
+    view.querySelectorAll('[data-rg]').forEach(b => b.onclick = () => { st.region = b.dataset.rg; draw(); });
+    view.querySelector('#kSrc').onchange = e => { st.src = e.target.value; draw(); };
+    view.querySelectorAll('[data-k]').forEach(i => i.onchange = () => { st.over[i.dataset.k] = Math.max(0, Number(i.value) || 0); draw(); });
+    view.querySelector('#kBuf').onchange = e => { st.buffer = Math.max(0, Math.min(30, Number(e.target.value) || 0)); draw(); };
+    const r = view.querySelector('#kReset'); if (r) r.onclick = () => { st.over = {}; draw(); };
+    const a = view.querySelector('#kApply'); if (a) a.onclick = () => { st.confirm = true; draw(); };
+    const n = view.querySelector('#kNo'); if (n) n.onclick = () => { st.confirm = false; draw(); };
+    const y = view.querySelector('#kYes'); if (y) y.onclick = async () => {
+      const cc = calc(); const byCat = new Map();
+      for (const row of cc.rows) { const prev = byCat.get(row.cat); if (prev) prev.planned += row.total; else byCat.set(row.cat, { cat: row.cat, label: row.label, planned: row.total }); }
+      byCat.set('puffer', { cat: 'puffer', label: 'Puffer für Unvorhergesehenes', planned: cc.buffer });
+      try { await api(`/api/w/${S.w.id}/budget/apply`, { method: 'POST', body: { items: [...byCat.values()], total: cc.total } }); S.w.profile.budget = cc.total; M.budget = cc.total; st.confirm = false; toast('Ins Budget übernommen'); ctx.go(`#/w/${S.w.id}/budget`); } catch (e) { toast(e.message); }
+    };
+  }
+  draw();
+}
+
+/* ================= Belege & Ausgaben ================= */
+export async function vReceipts(ctx) {
+  const { api, S, esc, toast, view, fmt, parseD } = ctx;
+  let D = await api(`/api/w/${S.w.id}/expenses`);
+  let draft = null, progress = null, confirmDel = null, filter = '';
+  const catLabel = c => D.cats.find(x => x.cat === c)?.label || (c ? c : 'Ohne Kategorie');
+  async function refresh() { D = await api(`/api/w/${S.w.id}/expenses`); draw(); }
+  function draw() {
+    const list = D.expenses.filter(e => !filter || e.cat === filter);
+    const sum = D.expenses.reduce((s, e) => s + e.amount, 0);
+    const byCat = {}; const byPayer = {};
+    for (const e of D.expenses) { byCat[e.cat] = (byCat[e.cat] || 0) + e.amount; if (e.paid_by) byPayer[e.paid_by] = (byPayer[e.paid_by] || 0) + e.amount; }
+    view.innerHTML = `${budgetNav(S, 'belege')}
+    <div><span class="eyebrow">${D.expenses.length} Belege</span><h1>${eur2(sum)} ausgegeben</h1></div>
+    <section class="card scan-card">
+      <div class="row"><label class="btn scan-btn" for="rcCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><path d="M8 9h8M8 12h8M8 15h5"/></svg> Foto aufnehmen</label>
+        <input type="file" id="rcCam" accept="image/*" capture="environment" hidden>
+        <label class="btn sec scan-btn" for="rcFile">Datei wählen</label><input type="file" id="rcFile" accept="image/*,application/pdf" hidden>
+        <button class="btn sec" id="rcManual" type="button">Ohne Beleg eintragen</button></div>
+      <p class="small muted">Fotografiert einen Kassenzettel oder ladet ein Foto bzw. eine PDF-Rechnung hoch. Betrag, Datum, Händler und Kategorie werden erkannt, ihr prüft sie nur noch. Die Texterkennung läuft auf eurem Gerät.</p>
+      ${progress != null ? `<div class="progress"><i style="width:${Math.round(progress * 100)}%"></i></div><p class="small muted">Text wird erkannt … ${Math.round(progress * 100)} %</p>` : ''}
+      ${draft ? `<form class="rc-form" id="rcForm">
+        ${draft.preview ? `<img class="rc-prev" src="${draft.preview}" alt="Vorschau des Belegs">` : draft.pdf ? '<div class="rc-prev pdf">PDF</div>' : ''}
+        <div class="stack">
+          ${draft.found ? `<p class="${draft.found.sure ? 'ok-note' : 'warn-note'}">${draft.found.amount ? `Erkannt: <b>${eur2(draft.found.amount)}</b>${draft.found.date ? ` vom ${fmt(parseD(draft.found.date))}` : ''}${draft.found.merchant ? ` bei ${esc(draft.found.merchant)}` : ''}. ${draft.found.sure ? 'Bitte kurz prüfen.' : 'Bitte Betrag prüfen, der Gesamtbetrag war nicht eindeutig.'}` : 'Kein Betrag erkannt. Bitte von Hand eintragen.'}</p>` : draft.pdf ? '<p class="small muted">PDF-Rechnungen werden gespeichert, den Betrag tragt ihr bitte selbst ein.</p>' : ''}
+          <div class="fields2"><div class="field"><label for="rc-a">Betrag (€)</label><input id="rc-a" name="amount" type="number" min="0" step="0.01" required value="${draft.amount ?? ''}" inputmode="decimal"></div><div class="field"><label for="rc-d">Datum</label><input id="rc-d" name="date" type="date" value="${esc(draft.date || '')}"></div></div>
+          <div class="field"><label for="rc-m">Händler</label><input id="rc-m" name="merchant" maxlength="120" value="${esc(draft.merchant || '')}"></div>
+          <div class="fields2"><div class="field"><label for="rc-c">Kategorie</label><select id="rc-c" name="cat"><option value="">Ohne Kategorie</option>${D.cats.map(c => `<option value="${esc(c.cat)}" ${draft.cat === c.cat ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></div>
+            <div class="field"><label for="rc-p">Bezahlt von</label><input id="rc-p" name="paid_by" maxlength="60" list="rcPayers" value="${esc(draft.paid_by || S.lastPayer || '')}" placeholder="z. B. ${esc(S.w.name1)}, Eltern"><datalist id="rcPayers">${[S.w.name1, S.w.name2, 'Eltern Braut', 'Eltern Bräutigam', ...Object.keys(byPayer)].filter((v, i, a) => v && a.indexOf(v) === i).map(v => `<option value="${esc(v)}">`).join('')}</datalist></div></div>
+          ${D.vendors.length ? `<div class="field"><label for="rc-v">Zahlung an gebuchten Dienstleister (optional)</label><select id="rc-v" name="vendor_id"><option value="">Nein, eigene Ausgabe</option>${D.vendors.map(v => `<option value="${v.id}">${esc(v.label)}</option>`).join('')}</select><span class="small muted">Dann zählt der Beleg als Zahlung auf den vereinbarten Preis und nicht zusätzlich.</span></div>` : ''}
+          <div class="field"><label for="rc-n">Notiz</label><input id="rc-n" name="note" maxlength="500" value="${esc(draft.note || '')}"></div>
+          ${draft.text ? `<details><summary class="small">Erkannter Text</summary><pre class="ocr-text">${esc(draft.text)}</pre></details>` : ''}
+          <div class="row"><button class="btn">Speichern</button><button type="button" class="btn sec" id="rcCancel">Verwerfen</button></div>
+        </div></form>` : ''}
+    </section>
+    ${Object.keys(byCat).length ? `<section class="card"><h3>Nach Kategorie</h3><div class="chips">${Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([c, v]) => `<button class="chip-t small ${filter === c ? 'on' : ''}" data-f="${esc(c)}">${esc(catLabel(c))} · ${eur(v)}</button>`).join('')}${filter ? '<button class="chip-t small" data-f="">Alle</button>' : ''}</div>
+      ${Object.keys(byPayer).length ? `<p class="small muted" style="margin-top:10px">Bezahlt von: ${Object.entries(byPayer).map(([p, v]) => `<b>${esc(p)}</b> ${eur(v)}`).join(' · ')}</p>` : ''}</section>` : ''}
+    <ul class="glist">${list.map(e => `<li class="gl-item rc-item"><div class="row between"><div><b>${esc(e.merchant || 'Ausgabe')}</b> <span class="small muted">${e.date ? fmt(parseD(e.date)) : ''} · ${esc(catLabel(e.cat))}${e.paid_by ? ' · ' + esc(e.paid_by) : ''}${e.vendor_id ? ' · Zahlung an Dienstleister' : ''}</span>${e.note ? `<br><span class="small">${esc(e.note)}</span>` : ''}</div><b class="mono">${eur2(e.amount)}</b></div>
+      <div class="row">${e.has_receipt ? `<a class="mini" target="_blank" rel="noopener" href="/api/expenses/${e.id}/receipt">Beleg ansehen</a>` : '<span class="small muted">ohne Beleg</span>'}${confirmDel === e.id ? `<button class="btn danger small" data-rdel="${e.id}">Wirklich löschen</button>` : `<button class="mini" data-rdq="${e.id}">Löschen</button>`}</div></li>`).join('') || '<li class="empty">Noch keine Ausgaben erfasst. Scannt euren ersten Beleg.</li>'}</ul>`;
+    bind();
+  }
+  function bind() {
+    const onFile = async f => {
+      const file = f.files[0]; if (!file) return;
+      if (file.type === 'application/pdf') { draft = { file, pdf: true }; return draw(); }
+      try {
+        const img = await prepareImage(file);
+        draft = { blob: img.blob, preview: img.preview }; progress = 0; draw();
+        const text = await recognize(img.ocrCanvas, m => { if (m.status === 'recognizing text') { progress = m.progress; const bar = view.querySelector('.scan-card .progress i'); if (bar) { bar.style.width = Math.round(m.progress * 100) + '%'; bar.parentElement.nextElementSibling.textContent = `Text wird erkannt … ${Math.round(m.progress * 100)} %`; } } });
+        const found = parseReceipt(text, D.cats.map(c => c.cat));
+        Object.assign(draft, { text, found, amount: found.amount, date: found.date, merchant: found.merchant, cat: found.cat });
+      } catch (e) { toast(e.message); draft = draft || {}; }
+      progress = null; draw(); view.querySelector('#rc-a')?.focus();
+    };
+    for (const id of ['#rcCam', '#rcFile']) { const f = view.querySelector(id); f.onchange = () => onFile(f); }
+    view.querySelector('#rcManual').onclick = () => { draft = { date: new Date().toISOString().slice(0, 10) }; draw(); view.querySelector('#rc-a').focus(); };
+    const c = view.querySelector('#rcCancel'); if (c) c.onclick = () => { draft = null; draw(); };
+    const form = view.querySelector('#rcForm');
+    if (form) form.onsubmit = async e => {
+      e.preventDefault(); const d = Object.fromEntries(new FormData(form)); d.amount = Number(d.amount) || 0; d.vendor_id = d.vendor_id ? Number(d.vendor_id) : null; if (draft.text) d.ocr_text = draft.text.slice(0, 8000);
+      const btn = form.querySelector('button.btn'); btn.disabled = true;
+      try {
+        const { id } = await api(`/api/w/${S.w.id}/expenses`, { method: 'POST', body: d });
+        const file = draft.blob || draft.file;
+        if (file) { const r = await fetch(`/api/expenses/${id}/receipt`, { method: 'PUT', headers: { 'Content-Type': draft.pdf ? 'application/pdf' : 'image/jpeg' }, body: file, credentials: 'same-origin' }); if (!r.ok) toast((await r.json().catch(() => ({}))).error || 'Beleg konnte nicht gespeichert werden.'); }
+        S.lastPayer = d.paid_by; draft = null; toast('Ausgabe gespeichert'); refresh();
+      } catch (x) { toast(x.message); btn.disabled = false; }
+    };
+    view.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { filter = b.dataset.f; draw(); });
+    view.querySelectorAll('[data-rdq]').forEach(b => b.onclick = () => { confirmDel = +b.dataset.rdq; draw(); });
+    view.querySelectorAll('[data-rdel]').forEach(b => b.onclick = async () => { await api(`/api/expenses/${b.dataset.rdel}`, { method: 'DELETE' }); confirmDel = null; toast('Gelöscht'); refresh(); });
+  }
+  draw();
 }

@@ -215,6 +215,25 @@ CREATE TABLE IF NOT EXISTS gifts (
 );
 `);
 
+db.exec(`
+-- Ausgaben & Belege (Kassenzettel, Rechnungen). vendor_id gesetzt = Zahlung an einen gebuchten Dienstleister
+CREATE TABLE IF NOT EXISTS expenses (
+  id          INTEGER PRIMARY KEY,
+  wedding_id  TEXT NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
+  date        TEXT NOT NULL DEFAULT '',
+  merchant    TEXT NOT NULL DEFAULT '',
+  amount      REAL NOT NULL DEFAULT 0,
+  cat         TEXT NOT NULL DEFAULT '',
+  vendor_id   INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
+  paid_by     TEXT NOT NULL DEFAULT '',
+  note        TEXT NOT NULL DEFAULT '',
+  receipt_mime TEXT NOT NULL DEFAULT '',
+  ocr_text    TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS expenses_w ON expenses(wedding_id);
+`);
+
 // Spalten nachrüsten (bestehende Datenbanken)
 function addColumn(table, col, def) {
   if (!db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);

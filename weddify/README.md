@@ -16,6 +16,8 @@ Läuft auf einem eigenen Server und braucht nur Node.js 22. Es gibt keine extern
 | **Gästeliste** | Einladungen je Feier nach Gästekreis (alle, Familie, nur Frauen) und persönliche Zusage-Links ohne Konto |
 | **Sitzplan** | Grundriss, automatische Tischplanung, Namen pro Stuhl, auf Wunsch getrennte Damen- und Herrenbereiche |
 | **Druckerei** | Save-the-Date, persönliche Einladungen mit QR-Code, Programm bzw. Kirchenheft, Menükarten, Platzkarten, Tischnummern, Sitzplan-Aushang, Willkommensschild, Gastgeschenk-Anhänger, Adressetiketten, Danksagungen. Bis zu 3 Sprachen, auch Arabisch und Persisch von rechts nach links, optional mit Bismillah. 4 Designs. |
+| **Kostenrechner** | Kosten je Posten aus Gästezahl (geplant, eingeladen oder zugesagt), Ausstattung (einfach, mittel, gehoben), Region und Traditionen. Jeder Preis ist überschreibbar, mit Puffer, per Klick ins Budget übernehmbar. |
+| **Belege & Ausgaben** | Kassenzettel fotografieren oder Foto bzw. PDF hochladen. Die Texterkennung liest Gesamtbetrag, Datum, Händler und Kategorie, ihr prüft nur noch. Ausgaben fließen ins Budget, eine Zahlung an einen gebuchten Dienstleister wird nicht doppelt gezählt. Dazu eine Übersicht „Wer hat was bezahlt“. |
 | **Geschenke** | Wer hat was geschenkt (auch Gold/Takı und Geld), daraus entstehen die Danksagungskarten |
 
 ### Traditionen (Wissensbasis in `traditions.js`)
@@ -52,6 +54,13 @@ Die Inhalte sind Planungshilfen. Religiöse und rechtliche Details unterscheiden
   - Gäste sehen ihren Tisch auf der Zusage-Seite.
 - **Geschenke** ergeben die Danksagungskarten. Abgehakte Danksagungen werden nicht erneut gedruckt.
 - **Traditionen nachträglich ändern:** Fehlende Feiern, Aufgaben, Posten und Dienstleister werden ergänzt, Eingetragenes bleibt erhalten.
+
+### Texterkennung (Belege)
+- Läuft im Browser mit Tesseract.js (`public/vendor/ocr`, Apache-2.0), mit deutschen und englischen Sprachdaten (MIT). Belegfotos werden dafür an keinen fremden Dienst geschickt.
+- Der Beleg selbst wird auf eurem Server gespeichert (`DATA_DIR/receipts`).
+- Erkannt wird der Gesamtbetrag über Stichworte wie „Summe“, „Gesamt“, „zu zahlen“ oder „Rechnungsbetrag“. Zwischensumme, MwSt, Rabatt und Rückgeld werden ignoriert.
+- Bei PDF-Rechnungen wird die Datei gespeichert, den Betrag tragt ihr selbst ein.
+- Die Kostenrichtwerte stehen in `traditions.js` (`COST_BASE`, `COST_TRAD`) und lassen sich dort anpassen.
 
 ### Rollen
 | Rolle | Sieht |
@@ -148,6 +157,8 @@ public/
   seating.js    Sitzplan-Generator
   print.js      Druckerei (alle Drucksachen, mehrsprachig, QR-Codes)
   vendor/qrcode.js  QR-Code-Bibliothek (MIT, Kazuhiko Arase)
+  vendor/ocr/   Tesseract.js für die Belegerkennung (Apache-2.0) mit Sprachdaten deu/eng
+  ocr.js, receipt-parse.js  Belegscan und Auswertung
 test/smoke.mjs  Ende-zu-Ende-Test aller Rollen
 ```
 

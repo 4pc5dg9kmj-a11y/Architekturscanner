@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { db, tx, DATA_DIR } from './db.js';
 import { buildPlan, normalizeProfile, estimateBudget } from './generator.js';
-import { catalog, dateWarnings, VENDOR_CATS } from './traditions.js';
+import { catalog, dateWarnings, VENDOR_CATS, costItems, REGIONS } from './traditions.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
@@ -610,17 +610,106 @@ function paymentsOf(wid) {
 }
 function budgetOf(wid) {
   const vendors = db.prepare('SELECT * FROM vendors WHERE wedding_id = ?').all(wid);
+  const exps = db.prepare('SELECT * FROM expenses WHERE wedding_id = ?').all(wid);
+  // Ausgaben ohne Dienstleister erhöhen die Kosten; Ausgaben an einen gebuchten Dienstleister sind Zahlungen auf dessen Preis
+  const expFree = cat => exps.filter(e => e.cat === cat && !e.vendor_id).reduce((s, e) => s + e.amount, 0);
+  const expVendor = cat => exps.filter(e => e.vendor_id && vendors.find(v => v.id === e.vendor_id)?.cat === cat).reduce((s, e) => s + e.amount, 0);
   const items = db.prepare('SELECT * FROM budget WHERE wedding_id = ? ORDER BY sort, id').all(wid).map(b => {
     const vs = vendors.filter(v => v.cat === b.cat && v.status === 'gebucht');
     const vActual = vs.reduce((s, v) => s + v.price, 0), vPaid = vs.reduce((s, v) => s + (v.deposit_paid ? v.deposit : 0) + (v.rest_paid ? Math.max(0, v.price - v.deposit) : 0), 0);
-    return { id: b.id, cat: b.cat, label: b.label, planned: b.planned, actual: b.actual ?? (vs.length ? vActual : null), manual_actual: b.actual, paid: b.paid + vPaid, per_guest: !!b.per_guest, vendors: vs.length };
+    const ef = expFree(b.cat), ev = expVendor(b.cat), n = exps.filter(e => e.cat === b.cat).length;
+    const auto = vs.length || ef ? vActual + ef : null;
+    return { id: b.id, cat: b.cat, label: b.label, planned: b.planned, actual: b.actual ?? auto, manual_actual: b.actual, paid: b.paid + Math.min(vPaid + ev, vActual || Infinity) + ef, per_guest: !!b.per_guest, vendors: vs.length, receipts: n };
   });
   // Gebuchte Dienstleister ohne passenden Budgetposten trotzdem zählen
   const known = new Set(items.map(i => i.cat));
+  const loose = exps.filter(e => !known.has(e.cat) && !e.vendor_id);
+  if (loose.length) items.push({ id: null, cat: '', label: 'Ausgaben ohne Kategorie', planned: 0, actual: loose.reduce((s, e) => s + e.amount, 0), paid: loose.reduce((s, e) => s + e.amount, 0), receipts: loose.length });
   for (const v of vendors.filter(v => v.status === 'gebucht' && !known.has(v.cat))) items.push({ id: null, cat: v.cat, label: VENDOR_CATS[v.cat] || v.cat, planned: 0, actual: v.price, paid: (v.deposit_paid ? v.deposit : 0) + (v.rest_paid ? Math.max(0, v.price - v.deposit) : 0), vendors: 1 });
   const sum = k => items.reduce((s, i) => s + (i[k] || 0), 0);
   return { total: profileOf(weddingRow(wid)).budget, planned: sum('planned'), actual: items.reduce((s, i) => s + (i.actual ?? i.planned), 0), paid: sum('paid'), items, payments: paymentsOf(wid) };
 }
+// Kostenrechner: Positionen nach Profil; übernehmen schreibt geplante Beträge ins Budget
+route('GET', '/api/w/:wid/cost-model', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  const pr = profileOf(weddingRow(p.wid));
+  const confirmed = db.prepare("SELECT SUM(i.persons) n FROM invites i JOIN events e ON e.id = i.event_id WHERE e.wedding_id = ? AND e.key = 'feier' AND i.status = 'zusage'").get(p.wid).n || 0;
+  const invited = db.prepare('SELECT SUM(adults + kids) n FROM guests WHERE wedding_id = ?').get(p.wid).n || 0;
+  send(res, 200, { items: costItems(pr), regions: REGIONS, guests: { planned: pr.guests, invited, confirmed }, budget: pr.budget });
+});
+route('POST', '/api/w/:wid/budget/apply', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  if (!Array.isArray(body.items) || body.items.length > 80) fail(400, 'Ungültige Positionen.');
+  tx(() => {
+    const max = db.prepare('SELECT COALESCE(MAX(sort), 0) m FROM budget WHERE wedding_id = ?').get(p.wid).m;
+    body.items.forEach((it, i) => {
+      const cat = str(it.cat, 40, 'Kategorie', { required: true }); const label = str(it.label, 80, 'Posten') || cat; const planned = money(it.planned || 0);
+      const row = db.prepare('SELECT id FROM budget WHERE wedding_id = ? AND cat = ?').get(p.wid, cat);
+      if (row) db.prepare('UPDATE budget SET planned = ?, label = ? WHERE id = ?').run(planned, label, row.id);
+      else db.prepare('INSERT INTO budget (wedding_id, cat, label, planned, sort) VALUES (?,?,?,?,?)').run(p.wid, cat, label, planned, max + i + 1);
+    });
+    if (body.total) { const w = weddingRow(p.wid); db.prepare('UPDATE weddings SET profile = ? WHERE id = ?').run(JSON.stringify({ ...profileOf(w), budget: money(body.total) }), p.wid); }
+  });
+  send(res, 200, budgetOf(p.wid));
+});
+
+// Ausgaben & Belege
+const RECEIPT_DIR = path.join(DATA_DIR, 'receipts');
+const RECEIPT_TYPES = { 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/jpeg': [0xff, 0xd8, 0xff], 'image/webp': [0x52, 0x49, 0x46, 0x46], 'application/pdf': [0x25, 0x50, 0x44, 0x46] };
+const receiptFile = e => path.join(RECEIPT_DIR, String(e.wedding_id).replace(/[^\w-]/g, ''), String(e.id));
+const expenseOut = e => ({ id: e.id, date: e.date, merchant: e.merchant, amount: e.amount, cat: e.cat, vendor_id: e.vendor_id, paid_by: e.paid_by, note: e.note, has_receipt: !!e.receipt_mime, receipt_mime: e.receipt_mime, ocr_text: e.ocr_text, created_at: e.created_at });
+function expenseData(body, wid) {
+  const d = {};
+  if (body.date !== undefined) { if (body.date !== '' && !isDate(body.date)) fail(400, 'Ungültiges Datum.'); d.date = body.date; }
+  for (const [k, max] of [['merchant', 120], ['cat', 40], ['paid_by', 60], ['note', 500], ['ocr_text', 8000]]) { const v = str(body[k], max, k); if (v !== undefined) d[k] = v; }
+  if (body.amount !== undefined) d.amount = money(body.amount || 0);
+  if (body.vendor_id !== undefined) { const vid = body.vendor_id ? Number(body.vendor_id) : null; if (vid && !db.prepare('SELECT 1 FROM vendors WHERE id = ? AND wedding_id = ?').get(vid, wid)) fail(400, 'Dienstleister nicht gefunden.'); d.vendor_id = vid; }
+  return d;
+}
+route('GET', '/api/w/:wid/expenses', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  send(res, 200, { expenses: db.prepare('SELECT * FROM expenses WHERE wedding_id = ? ORDER BY date DESC, id DESC').all(p.wid).map(expenseOut), cats: db.prepare('SELECT cat, label FROM budget WHERE wedding_id = ? ORDER BY sort, id').all(p.wid), vendors: db.prepare("SELECT id, cat, name FROM vendors WHERE wedding_id = ? AND status = 'gebucht'").all(p.wid).map(v => ({ ...v, label: v.name || VENDOR_CATS[v.cat] || v.cat })) });
+});
+route('POST', '/api/w/:wid/expenses', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  const d = expenseData(body, p.wid); if (!(d.amount > 0)) fail(400, 'Bitte einen Betrag eingeben.');
+  if (!d.date) d.date = new Date().toISOString().slice(0, 10);
+  const keys = Object.keys(d);
+  const r = db.prepare(`INSERT INTO expenses (wedding_id, ${keys.join(', ')}) VALUES (?, ${keys.map(() => '?').join(', ')})`).run(p.wid, ...keys.map(k => d[k]));
+  send(res, 201, { id: Number(r.lastInsertRowid) });
+});
+route('PATCH', '/api/expenses/:id', async (req, res, body, p) => {
+  const e = ownRow(req, 'expenses', p.id); const d = expenseData(body, e.wedding_id); const keys = Object.keys(d);
+  if (keys.length) db.prepare(`UPDATE expenses SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => d[k]), e.id);
+  send(res, 200, { ok: true });
+});
+route('DELETE', '/api/expenses/:id', async (req, res, _b, p) => {
+  const e = ownRow(req, 'expenses', p.id);
+  await unlink(receiptFile(e)).catch(() => {});
+  db.prepare('DELETE FROM expenses WHERE id = ?').run(e.id);
+  send(res, 200, { ok: true });
+});
+route('PUT', '/api/expenses/:id/receipt', async (req, res, _b, p) => {
+  const e = ownRow(req, 'expenses', p.id);
+  const type = (req.headers['content-type'] || '').split(';')[0].trim();
+  if (!RECEIPT_TYPES[type]) fail(415, 'Bitte ein Foto (JPG, PNG, WebP) oder eine PDF-Rechnung hochladen.');
+  let size = 0; const chunks = [];
+  for await (const c of req) { size += c.length; if (size > 10_000_000) fail(413, 'Die Datei ist zu groß (max. 10 MB).'); chunks.push(c); }
+  const buf = Buffer.concat(chunks);
+  if (!RECEIPT_TYPES[type].every((b, i) => buf[i] === b)) fail(415, 'Die Datei passt nicht zum angegebenen Format.');
+  await mkdir(path.dirname(receiptFile(e)), { recursive: true });
+  await writeFile(receiptFile(e), buf);
+  db.prepare('UPDATE expenses SET receipt_mime = ? WHERE id = ?').run(type, e.id);
+  send(res, 200, { ok: true });
+}, { raw: true });
+route('GET', '/api/expenses/:id/receipt', async (req, res, _b, p) => {
+  const e = ownRow(req, 'expenses', p.id);
+  if (!e.receipt_mime) fail(404, 'Kein Beleg gespeichert.');
+  const buf = await readFile(receiptFile(e)).catch(() => fail(404, 'Kein Beleg gespeichert.'));
+  res.writeHead(200, { 'Content-Type': e.receipt_mime, 'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff', 'Content-Disposition': `inline; filename="beleg-${e.id}${e.receipt_mime === 'application/pdf' ? '.pdf' : ''}"`, 'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox" });
+  res.end(buf);
+});
+
 route('GET', '/api/w/:wid/budget', async (req, res, _b, p) => { const user = needUser(req); membership(user, p.wid, ['paar']); send(res, 200, budgetOf(p.wid)); });
 route('POST', '/api/w/:wid/budget', async (req, res, body, p) => {
   const user = needUser(req); membership(user, p.wid, ['paar']);
@@ -726,6 +815,7 @@ route('GET', '/api/w/:wid/overview', async (req, res, _b, p) => {
     budget: { total: b.total, planned: b.planned, actual: b.actual, paid: b.paid, nextPayments: b.payments.filter(x => !x.paid).slice(0, 3) },
     seating: { tables: seats.length, seats: seats.reduce((s, t) => s + (t.seats || 0), 0), assigned: seats.reduce((s, t) => s + (t.guests || []).filter(Boolean).length, 0) },
     gifts: { total: gifts.length, thanked: gifts.filter(g => g.thanked).length },
+    expenses: db.prepare('SELECT COUNT(*) n, COALESCE(SUM(amount), 0) s FROM expenses WHERE wedding_id = ?').get(p.wid),
   });
 });
 
@@ -900,8 +990,8 @@ async function calendar(req, res, token) {
 
 /* ---------------- Statische Dateien ---------------- */
 
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' };
-const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.wasm': 'application/wasm', '.gz': 'application/gzip', '.txt': 'text/plain; charset=utf-8' };
+const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 async function serveStatic(req, res, pathname) {
   const file = pathname === '/' ? '/index.html' : pathname === '/app' || pathname === '/app/' ? '/app.html' : pathname;

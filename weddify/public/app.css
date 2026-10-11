@@ -425,5 +425,27 @@ a.pill.vlink{text-decoration:none;color:var(--sage);background:var(--sage-soft);
   .pc6,.dl,.a4,.tag,.lbl37,.pc,.tn{outline-color:#e3ded8}
   .lbl37{outline:none}
 }
+/* ===== Kostenrechner & Belege ===== */
+.subnav{display:flex;gap:6px;flex-wrap:wrap}
+.subnav a{border:1px solid var(--line);background:var(--surface);color:var(--ink);text-decoration:none;border-radius:999px;padding:8px 14px;font-size:.9rem;min-height:40px;display:inline-flex;align-items:center}
+.subnav a.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.calc-ctl{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
+.ktable{display:grid}
+.krow{display:grid;grid-template-columns:minmax(0,1fr) 128px 96px;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+.krow small{display:block;font-size:.75rem}
+.krow.edited>span:first-child{color:var(--accent)}
+.kin{display:flex;align-items:center;gap:4px}
+.kin input{min-height:36px;padding:5px 8px;text-align:right;font-family:var(--f-mono);font-size:.88rem}
+.krow b{text-align:right}
+.khead{font-family:var(--f-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ktotal{border-bottom:0;font-size:1.1rem}
+@media (max-width:420px){.krow{grid-template-columns:minmax(0,1fr) 108px 82px;gap:6px}}
+.scan-btn{cursor:pointer}
+.scan-btn svg{flex:0 0 auto}
+.rc-form{display:grid;grid-template-columns:minmax(0,180px) minmax(0,1fr);gap:16px;align-items:start;border-top:1px dashed var(--line);padding-top:14px}
+@media (max-width:600px){.rc-form{grid-template-columns:1fr}}
+.rc-prev{width:100%;max-height:340px;object-fit:contain;border-radius:10px;border:1px solid var(--line);background:#fff}
+.rc-prev.pdf{display:grid;place-items:center;height:120px;font-family:var(--f-mono);color:var(--muted)}
+.ocr-text{white-space:pre-wrap;font-family:var(--f-mono);font-size:.75rem;background:var(--bg);border-radius:8px;padding:10px;max-height:240px;overflow:auto}
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
