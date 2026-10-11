@@ -2,6 +2,7 @@
 // Bereiche: Paar, Trauzeug:innen, Gäste. Daten kommen vom eigenen Server (/api).
 
 import { vSeating } from './seating.js';
+import { vCards } from './cards.js';
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
@@ -155,10 +156,13 @@ async function renderWedding(wid, tab) {
     store.set('wfy-last', wid);
   }
   const tabs = TABS[S.role];
-  if (!tabs.some(t => t[0] === tab)) tab = 'uebersicht';
+  // Unterseiten ohne eigenen Reiter
+  const SUB = { tischkarten: 'sitzplan' };
+  const active = SUB[tab] && tabs.some(t => t[0] === SUB[tab]) ? SUB[tab] : tab;
+  if (!tabs.some(t => t[0] === active)) tab = 'uebersicht';
   S.tab = tab;
-  setChrome({ tabs, active: tab });
-  const fn = { uebersicht: vOverview, zeitplan: vTimeline, gaeste: vGuests, ablauf: vSchedule, einstellungen: vSettings, sitzplan: () => vSeating({ api, S, esc, toast, view }), zusage: vRsvp, beitrag: vContrib, beitraege: vContrib }[tab];
+  setChrome({ tabs, active: SUB[tab] ? active : tab });
+  const fn = { uebersicht: vOverview, zeitplan: vTimeline, gaeste: vGuests, ablauf: vSchedule, einstellungen: vSettings, sitzplan: () => vSeating({ api, S, esc, toast, view }), tischkarten: () => vCards({ api, S, esc, toast, view }), zusage: vRsvp, beitrag: vContrib, beitraege: vContrib }[tab];
   await fn();
   tick();
 }

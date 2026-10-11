@@ -32,6 +32,21 @@ Beim Anlegen einer Hochzeit entstehen drei Codes, jeweils auch als Link (`/app#/
 6. **Bestuhlung:** Alle Zusagen erscheinen mit Begleitung, dazu das Paar und die Trauzeug:innen. Gäste ohne App lassen sich ergänzen. Plätze werden einzeln vergeben oder automatisch verteilt, dabei sitzen Begleitungen zusammen und das Paar am Brauttisch. Jeder Gast sieht in der App den eigenen Tisch und Platz.
 7. **Übersicht „Wer sitzt wo“:** zum Drucken oder als Vorlage für das Sitzplan-Poster.
 
+### Automatische Tischplanung
+- **Tischform:** Automatisch, rund, rechteckig oder lange Tafeln. **Größe:** automatisch passend oder fest gewählt, zum Beispiel Ø 150/180/200 cm, 160×80 bis 240×90 cm, Tafeln 4–8 m oder so lang, wie es der Raum zulässt.
+- „Automatisch“ nimmt zuerst runde Tische mit Ø 180 cm, den Standard auf Hochzeiten. Wird es eng, folgen Ø 150, Rechtecktische und lange Tafeln.
+- Brauttisch und Tanzfläche werden auf Wunsch mitgeplant. Die Tanzfläche wächst mit der Gästezahl. Bar, DJ, Buffet und Säulen bleiben als Hindernisse stehen.
+- Die Tische werden im Raster mit mindestens 1,5 m Abstand verteilt, von der Tanzfläche nach außen. Reicht der Platz nicht, sagt die App, wie viele Plätze fehlen.
+- Danach lässt sich jeder Tisch frei verschieben, drehen und in der Größe ändern.
+
+### Namen pro Stuhl und Tischkarten
+- Jeder Stuhl hat ein Eingabefeld. Ihr tippt einen Namen ein oder wählt jemanden aus der Gästeliste. Neue Namen werden als Gast angelegt. Platzhalter wie „Begleitung 1“ sind markiert und werden durch den eingetippten Namen ersetzt.
+- **Tischkarten** (Unterseite „Tischkarten erstellen“ im Sitzplan) entstehen automatisch aus dem Plan:
+  - Platzkarten: Faltkarten 90 × 90 mm, 6 pro A4-Seite, wahlweise mit Tisch und Menüwahl für den Service
+  - Tischnummern: 95 × 135 mm, 4 pro A4-Seite
+  - Sitzplan-Aushang: alphabetisch für den Eingang
+- **Designs:** Klassisch, Botanisch, Modern, Gold & Nacht. Gedruckt wird über den Browser, auch „Als PDF speichern“ ist möglich.
+
 ### Erinnerungen
 Jede Person hat einen eigenen Kalender-Abo-Link (`/cal/<token>.ics`). Apple Kalender, Google Kalender und Outlook laden ihn regelmäßig neu. Änderungen im Zeitplan erscheinen deshalb automatisch, mit einer Erinnerung am Vortag. Einzelne Schritte lassen sich zusätzlich direkt zu Google Kalender hinzufügen.
 

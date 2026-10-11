@@ -171,6 +171,34 @@ try {
     assert.ok(seatsOf({ kind: 'table', shape: 'rect', w: 240, h: 80, seats: 4, sides: 'one' }).every(([, y]) => y < 0), 'Brauttisch nur einseitig');
   });
 
+  await step('Automatische Tischverteilung', async () => {
+    const { autoLayout, checkPlan } = await import('../public/seating.js');
+    const room = { pts: [[0, 0], [1800, 0], [1800, 1200], [0, 1200]] };
+    const base = { shape: 'auto', size: 'auto', head: true, dance: true, reserve: 2, headSeats: 4 };
+    const r = autoLayout({ room, items: [], nextId: 1 }, { ...base, persons: 80 });
+    assert.equal(r.missing, 0, r.info);
+    assert.ok(r.seats >= 80);
+    assert.ok(r.items.some(i => i.type === 'braut') && r.items.some(i => i.type === 'tanz'));
+    const warn = checkPlan({ room, items: r.items });
+    assert.equal([...warn.values()].filter(w => w.level === 2).length, 0, 'keine roten Warnungen: ' + JSON.stringify([...warn.values()].map(w => w.msgs)));
+    assert.equal([...warn.values()].filter(w => w.level === 1).length, 0, 'keine gelben Warnungen');
+    const r60 = autoLayout({ room, items: [], nextId: 1 }, { ...base, persons: 60 });
+    assert.ok(r60.items.filter(i => i.kind === 'table' && i.type !== 'braut').every(t => t.d === 180), 'Standard: Ø 180, wenn genug Platz');
+    assert.ok(r.items.filter(i => i.kind === 'table' && i.type !== 'braut').every(t => t.d === 150), 'Wird es eng, kleinere runde Tische');
+    // Zu voll: meldet fehlende Plätze
+    const full = autoLayout({ room, items: [], nextId: 1 }, { ...base, persons: 250 });
+    assert.ok(full.missing > 0); assert.match(full.info, /fehlen/);
+    // Lange Tafeln, ohne Tanzfläche: passt mehr Menschen in denselben Raum
+    const taf = autoLayout({ room, items: [], nextId: 1 }, { ...base, shape: 'tafel', dance: false, persons: 140 });
+    assert.equal(taf.missing, 0, taf.info);
+    assert.equal([...checkPlan({ room, items: taf.items }).values()].filter(w => w.level === 2).length, 0);
+    // Feste Größe wird respektiert, vorhandene Bar bleibt stehen
+    const bar = { id: 'b', type: 'bar', kind: 'zone', shape: 'rect', w: 250, h: 80, x: 200, y: 1100, rot: 0, name: 'Bar', guests: [] };
+    const fix = autoLayout({ room, items: [bar], nextId: 1 }, { ...base, shape: 'rund', size: '0', persons: 50 });
+    assert.ok(fix.items.some(i => i.id === 'b'));
+    assert.ok(fix.items.filter(i => i.kind === 'table' && i.type !== 'braut').every(t => t.d === 150));
+  });
+
   await step('Viele Gäste im selben WLAN können sich registrieren', async () => {
     for (let i = 0; i < 25; i++) { const c = client(); const r = await c('POST', '/api/register', { name: 'G' + i, email: `wlan${i}@test.de`, password: 'geheim123' }); assert.equal(r.status, 201); assert.equal((await c('POST', '/api/join', { code: codes.guest_code })).status, 201); }
   });

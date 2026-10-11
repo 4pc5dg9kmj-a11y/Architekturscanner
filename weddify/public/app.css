@@ -163,7 +163,7 @@ textarea{min-height:110px;resize:vertical}
 .tabbar svg{width:22px;height:22px}
 .tabbar a.on{color:var(--accent)}
 @media (min-width:900px){
-  .tabbar{position:sticky;top:57px;bottom:auto;max-width:1080px;margin:0 auto;border:0;background:transparent;backdrop-filter:none;display:flex;gap:6px;padding:14px 16px 0}
+  .tabbar{position:sticky;top:57px;bottom:auto;max-width:none;margin:0;border:0;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);display:flex;justify-content:center;gap:6px;padding:12px 16px}
   .tabbar a{display:flex;gap:6px;align-items:center;font-size:.9rem;padding:8px 14px;min-height:0;border-radius:999px;border:1px solid var(--line);background:var(--surface)}
   .tabbar a.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
   .tabbar svg{width:18px;height:18px}
@@ -211,6 +211,71 @@ textarea{min-height:110px;resize:vertical}
   .top,.tabbar,.seat-tools,.seat-palette,#stHint,#stSetup,#stGuests,#stPanel,#stStats,#stPrint,.seat-print .btn,.toast{display:none!important}
   body{background:#fff}.view{padding:0;max-width:none}.card{border:0;padding:0}
   #stSvg{max-height:none}.seat-layout{grid-template-columns:1fr}
+}
+.seatlist input.needs-name{border-color:var(--gold);background:var(--gold-soft)}
+/* Tischkarten */
+.designs{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.design-pick{display:grid;gap:4px;text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:14px;padding:10px;cursor:pointer;color:var(--ink)}
+.design-pick[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.design-pick small{color:var(--muted);font-size:.75rem}
+.swatch{height:44px;border-radius:8px;display:grid;place-items:center;background:#fff;color:#23263A;border:1px solid #e5e0da}
+.d-klassisch .swatch span{font-family:var(--f-script);font-size:1.6rem}
+.d-botanisch .swatch{color:#4F6B5A}.d-botanisch .swatch span{font-family:var(--f-display);font-size:1.3rem}
+.d-modern .swatch span{font-weight:700;letter-spacing:.15em;font-size:.9rem}
+.d-nacht .swatch{background:#1C2238;color:#D3AE6C;border-color:#1C2238}.d-nacht .swatch span{font-family:var(--f-script);font-size:1.6rem}
+.sheets{display:grid;gap:22px;justify-content:center;overflow-x:auto}
+.sheet{display:grid;gap:10px;justify-content:center}
+.sheet-platz{grid-template-columns:repeat(auto-fill,90mm);grid-auto-rows:90mm;width:min(100%,190mm)}
+.sheet-nummer{grid-template-columns:repeat(auto-fill,95mm);grid-auto-rows:135mm;width:min(100%,200mm)}
+.pc,.tn,.ah{background:#fff;color:#23263A;-webkit-print-color-adjust:exact;print-color-adjust:exact;position:relative;overflow:hidden}
+.pc{width:90mm;height:90mm;display:grid;grid-template-rows:1fr 1fr;outline:1px dashed #cfc8c0;outline-offset:-0.5px}
+.pc::after{content:"";position:absolute;left:4mm;right:4mm;top:50%;border-top:1px dotted #d8d2cb}
+.pc-back{transform:rotate(180deg);display:grid;place-items:center;font-family:var(--f-script);font-size:18pt;color:#a49a90}
+.pc-front{display:grid;align-content:center;justify-items:center;text-align:center;gap:2mm;padding:3mm 6mm}
+.pc-name{font-family:var(--f-script);font-size:25pt;line-height:1.05;overflow-wrap:anywhere}
+.pc-meta{font-family:var(--f-mono);font-size:7.5pt;letter-spacing:.14em;text-transform:uppercase;color:#6b6d7c}
+.pc.missing .pc-name{font-family:var(--f-body);font-size:12pt;color:#B5452F}
+.sprig{width:28mm;height:auto;color:#4F6B5A}
+.tn{width:95mm;height:135mm;display:grid;align-content:center;justify-items:center;text-align:center;gap:3mm;outline:1px dashed #cfc8c0}
+.tn-lbl{font-family:var(--f-script);font-size:30pt}
+.tn-no{font-family:var(--f-display);font-size:96pt;line-height:.9}
+.tn-name{font-family:var(--f-script);font-size:34pt;padding:0 8mm}
+.tn-foot{position:absolute;bottom:9mm;left:0;right:0;font-family:var(--f-mono);font-size:7pt;letter-spacing:.12em;text-transform:uppercase;color:#6b6d7c}
+.ah{width:min(100%,190mm);min-height:270mm;padding:14mm 12mm;display:grid;align-content:start;gap:3mm;text-align:center}
+.ah-title{font-family:var(--f-script);font-size:40pt;line-height:1}
+.ah-sub{font-family:var(--f-mono);font-size:8pt;letter-spacing:.14em;text-transform:uppercase;color:#6b6d7c;margin-bottom:6mm}
+.ah-cols{columns:3 50mm;column-gap:8mm;text-align:left}
+.ah-group{break-inside:avoid;margin-bottom:4mm}
+.ah-letter{font-family:var(--f-display);font-size:16pt;border-bottom:1px solid currentColor;margin-bottom:1.5mm}
+.ah-row{display:flex;gap:2mm;font-size:9.5pt;line-height:1.5}
+.ah-row span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ah-row span::after{content:" ……………………………………………………";color:#c9c3bc}
+.ah-row b{font-weight:600;white-space:nowrap}
+/* Designs */
+.design-klassisch .pc-front,.design-klassisch .tn,.design-klassisch .ah{box-shadow:inset 0 0 0 4mm #fff,inset 0 0 0 4.3mm #23263A,inset 0 0 0 5mm #fff,inset 0 0 0 5.2mm #23263A}
+.design-klassisch .pc-front{box-shadow:inset 0 0 0 3mm #fff,inset 0 0 0 3.25mm #23263A,inset 0 0 0 3.8mm #fff,inset 0 0 0 3.95mm #23263A}
+.design-botanisch .pc-name,.design-botanisch .tn-lbl,.design-botanisch .tn-name,.design-botanisch .ah-title{color:#3D5547}
+.design-botanisch .tn-no,.design-botanisch .ah-letter{color:#4F6B5A}
+.design-botanisch .pc-back{color:#8FA597}
+.design-modern .pc-name{font-family:var(--f-body);font-weight:700;font-size:15pt;letter-spacing:.14em;text-transform:uppercase}
+.design-modern .pc-front::before,.design-modern .tn::before{content:"";width:14mm;height:1.4mm;background:#9E3D55}
+.design-modern .tn-lbl,.design-modern .tn-name,.design-modern .ah-title{font-family:var(--f-body);font-weight:700;letter-spacing:.2em;text-transform:uppercase;font-size:14pt}
+.design-modern .tn-no{font-family:var(--f-body);font-weight:700}
+.design-modern .pc-back{font-family:var(--f-body);font-weight:700;letter-spacing:.2em;font-size:10pt}
+.design-nacht .pc,.design-nacht .tn,.design-nacht .ah{background:#1C2238;color:#E0BE7E}
+.design-nacht .pc-meta,.design-nacht .tn-foot,.design-nacht .ah-sub{color:#B9A57E}
+.design-nacht .pc-back{color:#8C7A57}
+.design-nacht .pc::after{border-top-color:#3a4366}
+.design-nacht .pc-front,.design-nacht .tn{box-shadow:inset 0 0 0 3mm #1C2238,inset 0 0 0 3.3mm #D3AE6C}
+.design-nacht .ah-row span::after{color:#4a5378}
+@media print{
+  .no-print,#cardSheets ~ *{display:none!important}
+  @page{size:A4;margin:8mm}
+  #cardSheets{display:block;overflow:visible}
+  #cardSheets .sheet{gap:0;width:auto;justify-content:start;break-after:page;page-break-after:always}
+  #cardSheets .sheet:last-child{break-after:auto;page-break-after:auto}
+  .sheet-platz{grid-template-columns:90mm 90mm;grid-auto-rows:90mm}
+  .sheet-nummer{grid-template-columns:95mm 95mm;grid-auto-rows:135mm}
 }
 [hidden]{display:none!important}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

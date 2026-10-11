@@ -6,6 +6,7 @@ const SVGNS = 'http://www.w3.org/2000/svg';
 export const TYPES = {
   rund150: { label: 'Rund Ø 150', kind: 'table', shape: 'round', d: 150, seats: 8 },
   rund180: { label: 'Rund Ø 180', kind: 'table', shape: 'round', d: 180, seats: 10 },
+  rund200: { label: 'Rund Ø 200', kind: 'table', shape: 'round', d: 200, seats: 12 },
   rechteck: { label: 'Rechteck 200×80', kind: 'table', shape: 'rect', w: 200, h: 80, seats: 8, ends: true, sides: 'both' },
   tafel: { label: 'Tafel 400×80', kind: 'table', shape: 'rect', w: 400, h: 80, seats: 14, ends: true, sides: 'both' },
   quadrat: { label: 'Quadrat 90×90', kind: 'table', shape: 'rect', w: 90, h: 90, seats: 4, ends: true, sides: 'both' },
@@ -115,6 +116,138 @@ export function detectRoom(imgData, w, h) {
   return any && x1 - x0 > w * 0.2 && y1 - y0 > h * 0.2 ? { x0, y0, x1, y1, found: true } : { x0: w * 0.05, y0: h * 0.05, x1: w * 0.95, y1: h * 0.95, found: false };
 }
 
+/* ---------------- Personen ---------------- */
+// people: Schlüssel → Anzeige in der Liste, names: Schlüssel → Name für Tischkarten ('' = noch unbekannt)
+export function buildPeople(w, guestsRes, P) {
+  const people = new Map(), names = new Map();
+  const add = (k, l, n) => { people.set(k, l); names.set(k, n); };
+  add('p1', `${w.name1} (Paar)`, w.name1); add('p2', `${w.name2} (Paar)`, w.name2);
+  for (const t of guestsRes.team) if (t.role === 'trauzeuge') add(`u${t.id}`, `${t.name} (Trauzeug:in)`, t.name);
+  for (const g of guestsRes.guests) if (g.status === 'zusage') { add(`u${g.id}`, g.name, g.name); for (let k = 2; k <= g.persons; k++) add(`u${g.id}#${k}`, `${g.name} · Begleitung ${k - 1}`, ''); }
+  for (const x of P.extra || []) add(x.id, x.name, x.name);
+  return { people, names };
+}
+
+/* ---------------- Automatische Tischverteilung ---------------- */
+export const SIZE_OPTIONS = {
+  rund: [{ shape: 'round', d: 150, seats: 8, label: 'Ø 150 cm · 8 Plätze' }, { shape: 'round', d: 180, seats: 10, label: 'Ø 180 cm · 10 Plätze' }, { shape: 'round', d: 200, seats: 12, label: 'Ø 200 cm · 12 Plätze' }],
+  eckig: [{ shape: 'rect', w: 160, h: 80, seats: 6, ends: true, label: '160 × 80 cm · 6 Plätze' }, { shape: 'rect', w: 200, h: 80, seats: 8, ends: true, label: '200 × 80 cm · 8 Plätze' }, { shape: 'rect', w: 240, h: 90, seats: 10, ends: true, label: '240 × 90 cm · 10 Plätze' }],
+  tafel: [{ shape: 'rect', w: 0, h: 80, seats: 0, ends: false, tafel: true, fitLength: true, label: 'Länge passend zum Raum' }, ...[400, 600, 800].map(w => ({ shape: 'rect', w, h: 80, seats: 2 * Math.floor(w / 60), ends: false, tafel: true, label: `${String(w / 100).replace('.', ',')} m × 80 cm · ${2 * Math.floor(w / 60)} Plätze` }))],
+};
+const EXT = CHAIR_GAP + CHAIR_R; // Platz, den Stühle über die Tischkante hinaus brauchen
+
+function edgeDist(p, room) { let d = Infinity; for (let i = 0; i < room.length; i++) d = Math.min(d, segDist(p, room[i], room[(i + 1) % room.length])); return d; }
+function fitsRoom(it, room) {
+  const pts = [...outline(it), ...seatsOf(it).map(p => toWorld(it, p))];
+  return pts.every(p => pointInPoly(p, room)) && seatsOf(it).every(p => edgeDist(toWorld(it, p), room) >= CHAIR_R + 25) && outline(it).every(p => edgeDist(p, room) >= (it.kind === 'table' && !seatsOf(it).length ? 60 : 30));
+}
+
+// Liefert neue Elementliste: Brauttisch, Tanzfläche, Tische im Raster mit Gängen. Bestehende Zonen (Bar, DJ, Säulen …) bleiben Hindernisse.
+export function autoLayout(P, o) {
+  const room = P.room.pts; const xs = room.map(p => p[0]), ys = room.map(p => p[1]);
+  const bb = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+  const cx = (bb.x0 + bb.x1) / 2;
+  let nid = P.nextId || 1; const id = () => 'i' + nid++;
+  const keep = P.items.filter(i => i.kind === 'zone' && !i.auto && i.type !== 'tanz');
+  const fixed = [...keep];
+  let head = null, dance = null;
+  const scanDown = (make) => { for (let y = bb.y0 + 40; y < bb.y1; y += 20) { const it = make(y); if (fitsRoom(it, room) && fixed.every(f => polyDist(outline(it), outline(f)) >= 100)) return it; } return null; };
+  if (o.head) {
+    const n = o.headSeats || 4, w = Math.max(160, n * 60 + 40);
+    head = scanDown(y => ({ id: '', type: 'braut', kind: 'table', shape: 'rect', w, h: 80, seats: n, ends: false, sides: 'one', x: cx, y, rot: 0, name: 'Brauttisch', auto: true }));
+    if (head) { head.id = id(); fixed.push(head); }
+  }
+  if (o.dance) {
+    const s = Math.max(300, Math.min(800, Math.round(Math.sqrt(o.persons * 0.25) * 2) * 50));
+    const top = head ? head.y + head.h / 2 + 140 : bb.y0 + 200;
+    for (let y = top + s / 2; y < bb.y1 - s / 2; y += 25) {
+      const it = { id: '', type: 'tanz', kind: 'zone', shape: 'rect', w: s, h: s, x: cx, y, rot: 0, name: 'Tanzfläche', auto: true };
+      if (fitsRoom(it, room) && fixed.every(f => polyDist(outline(it), outline(f)) >= (f === head ? 120 : 60))) { it.id = id(); dance = it; fixed.push(it); break; }
+    }
+  }
+  const focus = dance ? [dance.x, dance.y] : head ? [head.x, head.y] : [cx, (bb.y0 + bb.y1) / 2];
+  const needSeats = Math.max(0, o.persons + (o.reserve || 0) - (head ? head.seats : 0));
+
+  let cands;
+  if (o.shape === 'auto') cands = [SIZE_OPTIONS.rund[1], SIZE_OPTIONS.rund[0]];
+  else { const list = SIZE_OPTIONS[o.shape] || SIZE_OPTIONS.rund; cands = o.size === 'auto' || o.size === undefined ? list : [list[+o.size] || list[0]]; }
+  // Nimmt Tische vom Mittelpunkt (Tanzfläche/Brauttisch) nach außen, bis alle Plätze gedeckt sind
+  const rank = (c, rot, pos) => {
+    const ok = [];
+    for (const it of pos.sort((a, b) => Math.hypot(a.x - focus[0], a.y - focus[1]) - Math.hypot(b.x - focus[0], b.y - focus[1]))) if (ok.every(q => polyDist(outline(it), outline(q)) >= 150)) ok.push(it);
+    let sum = 0, need = 0; while (need < ok.length && sum < needSeats) sum += ok[need++].seats;
+    const cap = ok.reduce((a, t) => a + t.seats, 0);
+    return { c, rot, pos: ok, need, cap, fits: cap >= needSeats };
+  };
+  const better = (r, b) => !b || (r.fits && !b.fits) || (r.fits === b.fits && (r.fits ? r.need < b.need || (r.need === b.need && r.cap > b.cap) : r.cap > b.cap));
+  const evaluate = c => {
+    let best = null;
+    for (const rot of c.shape === 'round' ? [0] : [0, 90]) {
+      const R = rot * Math.PI / 180;
+      const ex = c.shape === 'round' ? c.d / 2 + EXT : (c.w / 2 + (c.ends ? EXT : 0));
+      const ey = c.shape === 'round' ? c.d / 2 + EXT : c.h / 2 + EXT;
+      const [hx, hy] = rot ? [ey, ex] : [ex, ey];
+      const gapX = c.tafel ? (rot ? 90 : 160) : 70, gapY = c.tafel ? (rot ? 160 : 90) : 70;
+      const pitchX = 2 * hx + gapX, pitchY = (c.shape === 'round' ? 0.88 : 1) * (2 * hy + gapY);
+      if (c.fitLength) {
+        // Tafelreihen: jede Reihe so lang, wie Raum und Hindernisse es an dieser Stelle zulassen
+        const pos = [];
+        const along = rot ? [bb.y0, bb.y1] : [bb.x0, bb.x1], across = rot ? [bb.x0, bb.x1] : [bb.y0, bb.y1];
+        const hyR = c.h / 2 + EXT, pitch = 2 * hyR + 90;
+        for (let v = across[0] + hyR + 30; v <= across[1] - hyR; v += pitch) {
+          const okAt = u => { const pts = [[u, v - hyR], [u, v + hyR], [u, v]].map(([a, b]) => rot ? [b, a] : [a, b]); return pts.every(q => pointInPoly(q, room) && edgeDist(q, room) >= 30) && fixed.every(f => { const o2 = outline(f); return pts.every(q => !pointInPoly(q, o2) && o2.every((_, i) => segDist(q, o2[i], o2[(i + 1) % o2.length]) >= 60)); }); };
+          let run = null; const runs = [];
+          for (let u = along[0]; u <= along[1]; u += 10) { if (okAt(u)) { if (!run) run = [u, u]; run[1] = u; } else if (run) { runs.push(run); run = null; } }
+          if (run) runs.push(run);
+          for (const [a, b] of runs) {
+            for (let w = Math.floor((b - a - 60) / 60) * 60; w >= 240; w -= 60) {
+              const mid = (a + b) / 2; const [x, y] = rot ? [v, mid] : [mid, v];
+              const it = { kind: 'table', shape: 'rect', w, h: c.h, seats: 2 * Math.floor(w / 60), ends: false, sides: 'both', x: Math.round(x), y: Math.round(y), rot };
+              if (fitsRoom(it, room) && fixed.every(f => polyDist(outline(it), outline(f)) >= (f.kind === 'table' ? 150 : EXT + 50))) { pos.push(it); break; }
+            }
+          }
+        }
+        const r = rank(c, rot, pos);
+        if (better(r, best)) best = r;
+        continue;
+      }
+      for (const off of [0, 0.25, 0.5, 0.75]) {
+        const pos = [];
+        for (let row = 0, y = bb.y0 + hy + 30; y <= bb.y1 - hy; row++, y += pitchY) {
+          const shift = (c.shape === 'round' && row % 2 ? 0.5 : 0) + off;
+          const kmin = Math.floor((bb.x0 - cx) / pitchX) - 1, kmax = Math.ceil((bb.x1 - cx) / pitchX) + 1;
+          for (let k = kmin; k <= kmax; k++) {
+            const it = { kind: 'table', shape: c.shape, d: c.d, w: c.w, h: c.h, seats: c.seats, ends: c.ends, sides: 'both', x: Math.round(cx + (k + shift) * pitchX), y: Math.round(y), rot };
+            if (!fitsRoom(it, room)) continue;
+            if (!fixed.every(f => polyDist(outline(it), outline(f)) >= (f.kind === 'table' ? 150 : f === dance ? EXT + 70 : EXT + 50))) continue;
+            pos.push(it);
+          }
+        }
+        // Raster mit Lücken bei Diagonalen nachprüfen (versetzte Reihen)
+        const r = rank(c, rot, pos);
+        if (better(r, best)) best = r;
+      }
+    }
+    return best;
+  };
+  let results = cands.map(evaluate);
+  if (o.shape === 'auto' && !results.some(r => r.fits)) results = results.concat([SIZE_OPTIONS.eckig[1], ...SIZE_OPTIONS.tafel].map(evaluate));
+  const fitting = results.filter(r => r.fits);
+  // Automatisch: erste passende Variante in der Reihenfolge Ø 180 → Ø 150 → Rechteck → Tafeln.
+  // Bei fester Form: die passende Größe mit den wenigsten Tischen.
+  const pick = fitting.length ? (o.shape === 'auto' ? fitting[0] : fitting.sort((a, b) => a.need - b.need)[0]) : results.sort((a, b) => b.cap - a.cap)[0];
+  const take = pick ? pick.pos.slice(0, pick.fits ? pick.need : pick.pos.length) : [];
+  const tables = take.map((it, i) => ({ ...it, id: id(), type: it.shape === 'round' ? (it.d <= 150 ? 'rund150' : it.d >= 200 ? 'rund200' : 'rund180') : pick.c.tafel ? 'tafel' : 'rechteck', name: `Tisch ${i + 1}`, guests: new Array(it.seats).fill(null) }));
+  const items = [...keep, ...(head ? [{ ...head, guests: new Array(head.seats).fill(null) }] : []), ...(dance ? [{ ...dance, guests: [] }] : []), ...tables];
+  P.nextId = nid;
+  const seats = tables.reduce((s, t) => s + t.seats, 0) + (head ? head.seats : 0);
+  const missing = Math.max(0, o.persons - seats);
+  const info = !pick || !tables.length ? 'Im Raum ist kein Platz für Tische. Bitte Raum oder Maßstab prüfen.'
+    : `${tables.length} ${pick.c.tafel ? 'Tafeln' : 'Tische'} (${pick.c.fitLength ? `${[...new Set(tables.map(t => String(t.w / 100).replace('.', ',') + ' m'))].join(' / ')} lang` : pick.c.label})${head ? ' plus Brauttisch' : ''}${dance ? ` und Tanzfläche ${String(dance.w / 100).replace('.', ',')} × ${String(dance.h / 100).replace('.', ',')} m` : ''}: ${seats} Plätze für ${o.persons} Personen.`
+      + (missing ? ` Es fehlen ${missing} Plätze. Probiert kleinere Tische, lange Tafeln oder verzichtet auf die Tanzfläche.` : ' Alle Tische lassen sich jetzt noch verschieben.');
+  return { items, info, missing, tables: tables.length, seats };
+}
+
 /* ---------------- Editor ---------------- */
 export async function vSeating(ctx) {
   const { api, S, esc, toast, view } = ctx;
@@ -123,19 +256,18 @@ export async function vSeating(ctx) {
   const P = normalize(data);
   if (!has_floorplan) P.img = null;
   let sel = null, mode = 'tische', calib = [], saveT = null, saving = false;
+  const S2 = { confirmAuto: false, autoInfo: '' };
 
   // Personen, die einen Platz brauchen
-  const people = new Map();
-  people.set('p1', `${S.w.name1} (Paar)`); people.set('p2', `${S.w.name2} (Paar)`);
-  for (const t of guestsRes.team) if (t.role === 'trauzeuge') people.set(`u${t.id}`, `${t.name} (Trauzeug:in)`);
-  for (const g of guestsRes.guests) if (g.status === 'zusage') { people.set(`u${g.id}`, g.name); for (let k = 2; k <= g.persons; k++) people.set(`u${g.id}#${k}`, `${g.name} · Begleitung ${k - 1}`); }
-  for (const x of P.extra) people.set(x.id, x.name);
-  const label = key => people.get(key) || 'Unbekannt';
+  const { people, names } = buildPeople(S.w, guestsRes, P);
+  const label = key => P.names[key] || people.get(key) || 'Unbekannt';
   const party = key => key.split('#')[0];
 
   function normalize(d) {
     const p = d && typeof d === 'object' ? structuredClone(d) : {};
     p.v = 1; p.items = Array.isArray(p.items) ? p.items : []; p.extra = Array.isArray(p.extra) ? p.extra : [];
+    p.names = p.names && typeof p.names === 'object' ? p.names : {}; p.design = p.design || 'klassisch';
+    p.auto = p.auto || { shape: 'auto', size: 'auto', head: true, dance: true, reserve: 2, assign: true };
     if (!p.room || !Array.isArray(p.room.pts) || p.room.pts.length < 3) p.room = { pts: [[0, 0], [1400, 0], [1400, 2000], [0, 2000]] };
     p.nextId = p.nextId || p.items.length + 1;
     p.items.forEach(it => { it.guests = Array.isArray(it.guests) ? it.guests : []; it.guests.length = it.kind === 'table' ? it.seats : 0; });
@@ -258,7 +390,36 @@ export async function vSeating(ctx) {
       return;
     }
     if (!it) {
-      el.innerHTML = `<span class="eyebrow">Tisch</span><h3>${editable ? 'Tisch auswählen oder hinzufügen' : 'Tisch auswählen'}</h3><p class="small muted">${editable ? 'Wählt unten eine Tischform. Danach könnt ihr den Tisch verschieben, drehen und Gäste auf die Plätze setzen.' : 'Tippt auf einen Tisch, um die Belegung zu sehen.'}</p>`;
+      if (!editable) { el.innerHTML = `<span class="eyebrow">Tisch</span><h3>Tisch auswählen</h3><p class="small muted">Tippt auf einen Tisch, um die Belegung zu sehen.</p>`; return; }
+      const A = P.auto; const hasTables = P.items.some(i => i.kind === 'table');
+      const sizes = SIZE_OPTIONS[A.shape] || [];
+      el.innerHTML = `<span class="eyebrow">Automatisch planen</span><h3>Tische optimal verteilen</h3>
+        <p class="small muted">Wählt Form und Größe der Tische oder lasst beides automatisch bestimmen. Die Tische werden dann mit genug Abstand im Raum verteilt. Danach könnt ihr jeden Tisch verschieben.</p>
+        <div class="field"><label>Tischform</label><div class="seg" id="auShape">${[['auto', 'Automatisch'], ['rund', 'Rund'], ['eckig', 'Rechteckig'], ['tafel', 'Lange Tafeln']].map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${A.shape === k}">${l}</button>`).join('')}</div></div>
+        ${A.shape !== 'auto' ? `<div class="field"><label for="auSize">Größe</label><select id="auSize"><option value="auto">Automatisch passend</option>${sizes.map((o, i) => `<option value="${i}" ${String(A.size) === String(i) ? 'selected' : ''}>${o.label}</option>`).join('')}</select></div>` : ''}
+        <div class="fields2"><div class="field"><label for="auRes">Reserveplätze</label><input id="auRes" type="number" min="0" max="40" value="${A.reserve}"></div><div class="field"><label>Personen</label><input value="${people.size}" disabled></div></div>
+        <div class="stack small"><label class="row"><input type="checkbox" id="auHead" ${A.head ? 'checked' : ''}> Brauttisch für Paar &amp; Trauzeug:innen</label>
+          <label class="row"><input type="checkbox" id="auDance" ${A.dance ? 'checked' : ''}> Tanzfläche vor dem Brauttisch</label>
+          <label class="row"><input type="checkbox" id="auAssign" ${A.assign ? 'checked' : ''}> Gäste gleich auf die Plätze verteilen</label></div>
+        ${S2.confirmAuto ? `<p class="err">Die vorhandenen Tische und ihre Belegung werden ersetzt. Bar, DJ, Buffet und Säulen bleiben stehen.</p><div class="row"><button class="btn" id="auGoYes">Ja, neu verteilen</button><button class="btn sec" id="auNo">Abbrechen</button></div>`
+          : `<button class="btn" id="auGo">${hasTables ? 'Tische neu verteilen' : 'Tische automatisch verteilen'}</button>`}
+        ${S2.autoInfo ? `<p class="ok-note">${S2.autoInfo}</p>` : ''}
+        <p class="small muted">Einzelne Tische fügt ihr über die Leiste unter dem Plan hinzu.</p>`;
+      el.querySelectorAll('#auShape button').forEach(b => b.onclick = () => { A.shape = b.dataset.v; A.size = 'auto'; changed(false); drawPanel(); });
+      const sz = el.querySelector('#auSize'); if (sz) sz.onchange = () => { A.size = sz.value; changed(false); };
+      el.querySelector('#auRes').onchange = e => { A.reserve = Math.max(0, Math.min(40, parseInt(e.target.value) || 0)); changed(false); };
+      for (const [id, k] of [['#auHead', 'head'], ['#auDance', 'dance'], ['#auAssign', 'assign']]) el.querySelector(id).onchange = e => { A[k] = e.target.checked; changed(false); };
+      const run = () => {
+        const tz = [...people.keys()].filter(k => people.get(k).endsWith('(Trauzeug:in)'));
+        const res = autoLayout(P, { ...A, persons: people.size, headSeats: Math.min(6, 2 + tz.length) });
+        P.items = res.items; S2.confirmAuto = false;
+        S2.autoInfo = res.info;
+        if (A.assign) autoAssign();
+        fit(); changed(); drawPanel(); drawGuests();
+      };
+      const go = el.querySelector('#auGo'); if (go) go.onclick = () => { if (hasTables) { S2.confirmAuto = true; drawPanel(); } else run(); };
+      const yes = el.querySelector('#auGoYes'); if (yes) yes.onclick = run;
+      const no = el.querySelector('#auNo'); if (no) no.onclick = () => { S2.confirmAuto = false; drawPanel(); };
       return;
     }
     const warn = checkPlan(P).get(it.id);
@@ -274,7 +435,8 @@ export async function vSeating(ctx) {
       </div>
       ${it.kind === 'table' && it.shape === 'rect' ? `<div class="row small"><label class="row"><input type="checkbox" id="stOne" ${it.sides === 'one' ? 'checked' : ''}> Nur eine Seite (Brauttisch)</label><label class="row"><input type="checkbox" id="stEnds" ${it.ends ? 'checked' : ''} ${it.sides === 'one' ? 'disabled' : ''}> Stirnseiten besetzen</label></div>` : ''}
       <div class="row"><button class="mini" data-r="-15">↺ 15°</button><button class="mini" data-r="15">↻ 15°</button><button class="mini" data-r="90">90°</button><button class="mini" id="stDup">Duplizieren</button><button class="mini acc" id="stDel">Entfernen</button></div>` : ''}
-      ${it.kind === 'table' ? `<div class="lbl">Plätze</div><ol class="seatlist">${it.guests.map((g, i) => `<li><span class="mono small">${i + 1}</span>${editable ? `<select data-seat="${i}" aria-label="Platz ${i + 1}"><option value="">— frei —</option>${g ? `<option value="${esc(g)}" selected>${esc(label(g))}</option>` : ''}${free.map(k => `<option value="${esc(k)}">${esc(label(k))}</option>`).join('')}</select>` : `<span>${g ? esc(label(g)) : '<span class="muted">frei</span>'}</span>`}</li>`).join('')}</ol>` : ''}`;
+      ${it.kind === 'table' ? `<div class="lbl">Plätze</div><ol class="seatlist">${it.guests.map((g, i) => `<li><span class="mono small">${i + 1}</span>${editable ? `<input data-seat="${i}" list="stDl" value="${g ? esc(label(g)) : ''}" placeholder="frei – Namen eintippen oder wählen" aria-label="Platz ${i + 1}" autocomplete="off" class="${g && !names.get(g) && !P.names[g] ? 'needs-name' : ''}">` : `<span>${g ? esc(label(g)) : '<span class="muted">frei</span>'}</span>`}</li>`).join('')}</ol><datalist id="stDl">${free.map(k => `<option value="${esc(label(k))}">`).join('')}</datalist>
+      <p class="small muted">Tippt einen Namen ein oder wählt jemanden aus der Gästeliste. Neue Namen werden als Gast angelegt. Bei Begleitungen ersetzt ein eingetippter Name den Platzhalter, auch auf der Tischkarte.</p>` : ''}`;
     if (!editable) return;
     const num = (id, fn) => { const x = el.querySelector(id); if (x) x.onchange = () => { const v = parseFloat(x.value); if (v > 0) { fn(v); changed(); drawPanel(); } }; };
     el.querySelector('#stName').oninput = e => { it.name = e.target.value.slice(0, 40); changed(false); };
@@ -285,7 +447,16 @@ export async function vSeating(ctx) {
     el.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { it.rot = ((it.rot || 0) + +b.dataset.r + 360) % 360; changed(); drawPanel(); });
     el.querySelector('#stDup').onclick = () => { const c = structuredClone(it); c.id = 'i' + P.nextId++; c.x += 60; c.y += 60; c.name = nextName(it.kind, it.type); c.guests = new Array(c.guests.length).fill(null); P.items.push(c); sel = c.id; changed(); drawPanel(); };
     el.querySelector('#stDel').onclick = () => { P.items = P.items.filter(x => x !== it); sel = null; changed(); drawPanel(); drawGuests(); };
-    el.querySelectorAll('[data-seat]').forEach(s => s.onchange = () => { it.guests[+s.dataset.seat] = s.value || null; changed(); drawPanel(); drawGuests(); });
+    el.querySelectorAll('[data-seat]').forEach(inp => inp.onchange = () => {
+      const i = +inp.dataset.seat, v = inp.value.trim().slice(0, 60), cur = it.guests[i];
+      const freeKey = [...people.keys()].find(k => label(k) === v && !P.items.some(t => t.guests.includes(k)));
+      if (!v) it.guests[i] = null;
+      else if (freeKey) it.guests[i] = freeKey;
+      else if (cur && v !== label(cur)) P.names[cur] = v;              // Platzhalter oder Name umbenennen
+      else if (!cur) { const id = 'x' + P.nextId++; P.extra.push({ id, name: v }); people.set(id, v); names.set(id, v); it.guests[i] = id; }
+      changed(); drawPanel(); drawGuests();
+      el.querySelector(`[data-seat="${Math.min(i + 1, it.guests.length - 1)}"]`)?.focus();
+    });
   }
 
   function setSeats(it, n) { const g = it.guests.slice(0, n); while (g.length < n) g.push(null); it.guests = g; it.seats = n; drawGuests(); }
@@ -306,7 +477,7 @@ export async function vSeating(ctx) {
       ${P.extra.length ? `<div class="meta">${P.extra.map(x => `<button class="mini" data-xdel="${esc(x.id)}" title="Entfernen">${esc(x.name)} ×</button>`).join('')}</div>` : ''}` : ''}`;
     if (!editable) return;
     const a = el.querySelector('#stAuto'); if (a) a.onclick = () => { autoAssign(); changed(); drawPanel(); drawGuests(); toast('Gäste verteilt'); };
-    el.querySelector('#stExtra').onsubmit = e => { e.preventDefault(); const n = e.target.n.value.trim(); if (!n) return; const id = 'x' + P.nextId++; P.extra.push({ id, name: n.slice(0, 60) }); people.set(id, n.slice(0, 60)); changed(); drawGuests(); drawPanel(); };
+    el.querySelector('#stExtra').onsubmit = e => { e.preventDefault(); const n = e.target.n.value.trim(); if (!n) return; const id = 'x' + P.nextId++; P.extra.push({ id, name: n.slice(0, 60) }); people.set(id, n.slice(0, 60)); names.set(id, n.slice(0, 60)); changed(); drawGuests(); drawPanel(); };
     el.querySelectorAll('[data-xdel]').forEach(b => b.onclick = () => { const id = b.dataset.xdel; P.extra = P.extra.filter(x => x.id !== id); people.delete(id); P.items.forEach(t => t.guests = t.guests.map(g => g === id ? null : g)); changed(); drawGuests(); drawPanel(); });
   }
 
@@ -329,7 +500,7 @@ export async function vSeating(ctx) {
   function drawList() {
     const tables = P.items.filter(i => i.kind === 'table').sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
     view.querySelector('#stList').innerHTML = `<div class="row between"><div><span class="eyebrow">Übersicht</span><h3>Wer sitzt wo</h3></div>
-      <div class="row"><button class="btn sec small" id="stPrint">Drucken</button><a class="btn small" href="/#shop">Sitzplan-Poster bestellen</a></div></div>
+      <div class="row"><button class="btn sec small" id="stPrint">Drucken</button><a class="btn small" href="#/w/${wid}/tischkarten">Tischkarten erstellen</a></div></div>
       ${tables.length ? `<div class="tablelist">${tables.map(t => `<div><b>${esc(t.name)}</b><ul>${t.guests.filter(Boolean).map(g => `<li>${esc(label(g))}</li>`).join('') || '<li class="muted">noch leer</li>'}</ul></div>`).join('')}</div>` : '<p class="empty">Noch keine Tische im Plan.</p>'}`;
     view.querySelector('#stPrint').onclick = () => window.print();
   }
