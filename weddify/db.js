@@ -112,6 +112,120 @@ CREATE TABLE IF NOT EXISTS contributions (
 );
 `);
 
+db.exec(`
+-- Feiern: Standesamt, Henna-Abend, Nikah, Kirche, Hauptfeier … (offset relativ zur Hauptfeier, custom_date = von Hand verschoben)
+CREATE TABLE IF NOT EXISTS events (
+  id          INTEGER PRIMARY KEY,
+  wedding_id  TEXT NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
+  key         TEXT NOT NULL DEFAULT '',
+  title       TEXT NOT NULL,
+  date        TEXT NOT NULL,
+  time        TEXT NOT NULL DEFAULT '14:00',
+  location    TEXT NOT NULL DEFAULT '',
+  address     TEXT NOT NULL DEFAULT '',
+  offset_days INTEGER,
+  custom_date INTEGER NOT NULL DEFAULT 0,
+  scope       TEXT NOT NULL DEFAULT 'alle',
+  kind        TEXT NOT NULL DEFAULT 'party',
+  note        TEXT NOT NULL DEFAULT '',
+  sort        INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS events_w ON events(wedding_id, date);
+
+-- Gästeliste des Paares (auch ohne App-Konto). token = persönlicher Zusage-Link
+CREATE TABLE IF NOT EXISTS guests (
+  id          INTEGER PRIMARY KEY,
+  wedding_id  TEXT NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  salutation  TEXT NOT NULL DEFAULT '',
+  grp         TEXT NOT NULL DEFAULT '',
+  side        TEXT NOT NULL DEFAULT '',
+  gender      TEXT NOT NULL DEFAULT '',
+  adults      INTEGER NOT NULL DEFAULT 1,
+  kids        INTEGER NOT NULL DEFAULT 0,
+  email       TEXT NOT NULL DEFAULT '',
+  phone       TEXT NOT NULL DEFAULT '',
+  address     TEXT NOT NULL DEFAULT '',
+  lang        TEXT NOT NULL DEFAULT '',
+  notes       TEXT NOT NULL DEFAULT '',
+  user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  token       TEXT NOT NULL UNIQUE,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS guests_w ON guests(wedding_id);
+CREATE UNIQUE INDEX IF NOT EXISTS guests_user ON guests(wedding_id, user_id) WHERE user_id IS NOT NULL;
+
+-- Einladung je Gast und Feier, inklusive Antwort
+CREATE TABLE IF NOT EXISTS invites (
+  guest_id    INTEGER NOT NULL REFERENCES guests(id) ON DELETE CASCADE,
+  event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  status      TEXT NOT NULL DEFAULT 'offen' CHECK (status IN ('offen','zusage','absage')),
+  persons     INTEGER NOT NULL DEFAULT 1,
+  menu        TEXT NOT NULL DEFAULT '',
+  allergies   TEXT NOT NULL DEFAULT '',
+  song        TEXT NOT NULL DEFAULT '',
+  message     TEXT NOT NULL DEFAULT '',
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (guest_id, event_id)
+);
+
+CREATE TABLE IF NOT EXISTS budget (
+  id          INTEGER PRIMARY KEY,
+  wedding_id  TEXT NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
+  cat         TEXT NOT NULL DEFAULT '',
+  label       TEXT NOT NULL,
+  planned     REAL NOT NULL DEFAULT 0,
+  actual      REAL,
+  paid        REAL NOT NULL DEFAULT 0,
+  per_guest   INTEGER NOT NULL DEFAULT 0,
+  sort        INTEGER NOT NULL DEFAULT 0
+);
+
+-- Dienstleister: Status „gebucht“ hakt verknüpfte Aufgaben ab, Zahlungsfristen erscheinen im Zeitplan und Kalender
+CREATE TABLE IF NOT EXISTS vendors (
+  id           INTEGER PRIMARY KEY,
+  wedding_id   TEXT NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
+  cat          TEXT NOT NULL,
+  name         TEXT NOT NULL DEFAULT '',
+  contact      TEXT NOT NULL DEFAULT '',
+  phone        TEXT NOT NULL DEFAULT '',
+  email        TEXT NOT NULL DEFAULT '',
+  website      TEXT NOT NULL DEFAULT '',
+  status       TEXT NOT NULL DEFAULT 'offen' CHECK (status IN ('offen','angefragt','angebot','gebucht','abgesagt')),
+  price        REAL NOT NULL DEFAULT 0,
+  deposit      REAL NOT NULL DEFAULT 0,
+  deposit_due  TEXT NOT NULL DEFAULT '',
+  deposit_paid INTEGER NOT NULL DEFAULT 0,
+  rest_due     TEXT NOT NULL DEFAULT '',
+  rest_paid    INTEGER NOT NULL DEFAULT 0,
+  event_id     INTEGER REFERENCES events(id) ON DELETE SET NULL,
+  notes        TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS gifts (
+  id          INTEGER PRIMARY KEY,
+  wedding_id  TEXT NOT NULL REFERENCES weddings(id) ON DELETE CASCADE,
+  guest_id    INTEGER REFERENCES guests(id) ON DELETE SET NULL,
+  from_name   TEXT NOT NULL DEFAULT '',
+  kind        TEXT NOT NULL DEFAULT 'sache',
+  description TEXT NOT NULL DEFAULT '',
+  amount      REAL NOT NULL DEFAULT 0,
+  thanked     INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
+// Spalten nachrüsten (bestehende Datenbanken)
+function addColumn(table, col, def) {
+  if (!db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+addColumn('weddings', 'profile', "TEXT NOT NULL DEFAULT '{}'");
+addColumn('tasks', 'event_id', 'INTEGER REFERENCES events(id) ON DELETE SET NULL');
+addColumn('tasks', 'tkey', "TEXT NOT NULL DEFAULT ''");
+addColumn('tasks', 'vendor_cat', "TEXT NOT NULL DEFAULT ''");
+addColumn('tasks', 'book', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('schedule', 'event_id', 'INTEGER REFERENCES events(id) ON DELETE CASCADE');
+
 export function tx(fn) {
   db.exec('BEGIN');
   try { const r = fn(); db.exec('COMMIT'); return r; }

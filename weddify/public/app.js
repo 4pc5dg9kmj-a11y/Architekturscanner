@@ -2,7 +2,8 @@
 // Bereiche: Paar, Trauzeug:innen, Gäste. Daten kommen vom eigenen Server (/api).
 
 import { vSeating } from './seating.js';
-import { vCards } from './cards.js';
+import { vPrint } from './print.js';
+import { renderWizard, vCockpit, vMore, vEvents, vGuestManager, vBudget, vVendors, vGifts, vGuestRsvp, renderPublicRsvp } from './planner.js';
 
 const $ = s => document.querySelector(s);
 const view = $('#view');
@@ -47,12 +48,19 @@ const I = {
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg>',
   heart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 6-8 11-8 11z"/></svg>',
   seat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="3.5" r="1.6"/><circle cx="12" cy="20.5" r="1.6"/><circle cx="3.5" cy="12" r="1.6"/><circle cx="20.5" cy="12" r="1.6"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
   spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>',
 };
 const TABS = {
-  paar: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['sitzplan', 'Sitzplan', I.seat], ['ablauf', 'Ablauf', I.clock], ['einstellungen', 'Mehr', I.gear]],
+  paar: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['sitzplan', 'Sitzplan', I.seat], ['mehr', 'Mehr', I.more]],
   trauzeuge: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['sitzplan', 'Sitzplan', I.seat], ['beitraege', 'Zeitung', I.pen]],
-  gast: [['uebersicht', 'Übersicht', I.home], ['zusage', 'Zusage', I.mail], ['ablauf', 'Ablauf', I.clock], ['beitrag', 'Zeitung', I.pen]],
+  gast: [['uebersicht', 'Übersicht', I.home], ['zusage', 'Zusage', I.mail], ['ablauf', 'Programm', I.clock], ['beitrag', 'Zeitung', I.pen]],
+};
+// Unterseiten ohne eigenen Reiter → welcher Reiter leuchtet
+const SUBPAGES = {
+  paar: { tischkarten: 'sitzplan', druck: 'mehr', budget: 'mehr', dienstleister: 'mehr', geschenke: 'mehr', feiern: 'mehr', einstellungen: 'mehr', traditionen: 'mehr', ablauf: 'mehr' },
+  trauzeuge: { feiern: 'uebersicht', ablauf: 'uebersicht', druck: 'sitzplan', tischkarten: 'sitzplan' },
+  gast: { feiern: 'ablauf' },
 };
 const ROLE_LABEL = { paar: 'Brautpaar', trauzeuge: 'Trauzeug:in', gast: 'Gast' };
 const PRODUCT = { card: 'Save-the-Date-Karten', invite: 'Einladungskarten', time: 'Tagesablauf-Schild', sign: 'Willkommensschild', menu: 'Menükarten', seat: 'Sitzplan-Poster', place: 'Tischkarten', thanks: 'Danksagungskarten', anni: 'Jahrestag-Poster', news: 'Hochzeitszeitung', quiz: 'Hochzeitsquiz' };
@@ -62,8 +70,9 @@ const KIND_LABEL = { geschichte: 'Geschichte', gruss: 'Gruß & Wunsch', 'foto-id
 /* ---------------- Router ---------------- */
 window.addEventListener('hashchange', render);
 async function render() {
-  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+  const parts = location.hash.split('?')[0].replace(/^#\/?/, '').split('/').filter(Boolean);
   const [page, a, b] = parts;
+  if (page === 'r' && a) { S.w = null; setChrome(); return renderPublicRsvp(ctx(), a).catch(e => { view.innerHTML = `<p class="err">${esc(e.message)}</p>`; }); }
   if (page === 'join' && a) sessionStorage.setItem('wfy-join', a);
   try {
     if (!S.me) S.me = await api('/api/me').catch(e => { if (e.status === 401) return null; throw e; });
@@ -116,26 +125,11 @@ function renderAuth(mode) {
     </form></section>`;
 }
 
-/* ---------------- Start: Hochzeit anlegen oder beitreten ---------------- */
-function renderStart() {
+/* ---------------- Start: Assistent oder beitreten ---------------- */
+async function renderStart() {
   S.w = null; setChrome();
-  const next = iso(addD(new Date(), 300));
-  view.innerHTML = `
-  <div><span class="eyebrow">Hallo ${esc(S.me.user.name)}</span><h1>Wie seid ihr dabei?</h1></div>
+  view.innerHTML = `<div id="wizHost" class="stack"></div>
   <div class="grid2">
-    <form class="card" data-form="create">
-      <h2>Wir heiraten</h2>
-      <p class="muted small">Gebt euer Datum ein. Euer Zeitstrahl mit allen Schritten wird automatisch erstellt, und ihr könnt jeden Schritt danach anpassen.</p>
-      <div class="fields2">
-        <div class="field"><label for="c-n1">Name 1</label><input id="c-n1" name="name1" required maxlength="40" value="${esc(S.me.user.name.split(' ')[0])}"></div>
-        <div class="field"><label for="c-n2">Name 2</label><input id="c-n2" name="name2" required maxlength="40"></div>
-        <div class="field"><label for="c-d">Hochzeitsdatum</label><input id="c-d" name="date" type="date" required value="${next}"></div>
-        <div class="field"><label for="c-t">Uhrzeit Trauung</label><input id="c-t" name="time" type="time" value="14:00"></div>
-      </div>
-      <div class="field"><label for="c-l">Location</label><input id="c-l" name="location" maxlength="120" placeholder="z. B. Gut Sonnenhof, Lüneburg"></div>
-      <p class="err" data-err hidden></p>
-      <button class="btn" type="submit">Zeitplan erstellen</button>
-    </form>
     <form class="card" data-form="join">
       <h2>Wir sind eingeladen</h2>
       <p class="muted small">Ihr habt vom Brautpaar einen Code bekommen? Der Code bestimmt, ob ihr als Gast, Trauzeug:in oder als zweite Hälfte des Paares beitretet.</p>
@@ -143,32 +137,43 @@ function renderStart() {
       <p class="err" data-err hidden></p>
       <button class="btn sec" type="submit">Beitreten</button>
     </form>
+    ${S.me.weddings.length ? `<div class="card"><h3>Eure Hochzeiten</h3><ul class="list">${S.me.weddings.map(w => `<li><a href="#/w/${esc(w.id)}/uebersicht"><b>${esc(w.name1)} & ${esc(w.name2)}</b></a><span class="small muted">${fmt(parseD(w.date))} · ${ROLE_LABEL[w.role]}</span></li>`).join('')}</ul></div>` : ''}
   </div>
-  ${S.me.weddings.length ? `<div class="card"><h3>Eure Hochzeiten</h3><ul class="list">${S.me.weddings.map(w => `<li><a href="#/w/${esc(w.id)}/uebersicht"><b>${esc(w.name1)} & ${esc(w.name2)}</b></a><span class="small muted">${fmt(parseD(w.date))} · ${ROLE_LABEL[w.role]}</span></li>`).join('')}</ul></div>` : ''}
   <div class="row"><button class="btn ghost small" data-act="logout">Abmelden</button></div>`;
+  await renderWizard({ ...ctx(), view: view.querySelector('#wizHost') });
 }
 
 /* ---------------- Hochzeit ---------------- */
 async function renderWedding(wid, tab) {
   if (!S.w || S.w.id !== wid) {
     const d = await api(`/api/w/${wid}`);
-    S.w = d.wedding; S.role = d.role; S.cal = d.calendar_url; S.base = d.public_url; S.counts = d.counts; S.data = {}; S.editing = null;
+    S.w = d.wedding; S.role = d.role; S.cal = d.calendar_url; S.base = d.public_url; S.counts = d.counts; S.events = d.events; S.warnings = d.warnings; S.data = {}; S.editing = null; S.gl = null;
     store.set('wfy-last', wid);
   }
   const tabs = TABS[S.role];
-  // Unterseiten ohne eigenen Reiter
-  const SUB = { tischkarten: 'sitzplan' };
-  const active = SUB[tab] && tabs.some(t => t[0] === SUB[tab]) ? SUB[tab] : tab;
-  if (!tabs.some(t => t[0] === active)) tab = 'uebersicht';
+  const sub = SUBPAGES[S.role] || {};
+  if (!tabs.some(t => t[0] === tab) && !sub[tab]) tab = 'uebersicht';
   S.tab = tab;
-  setChrome({ tabs, active: SUB[tab] ? active : tab });
-  const fn = { uebersicht: vOverview, zeitplan: vTimeline, gaeste: vGuests, ablauf: vSchedule, einstellungen: vSettings, sitzplan: () => vSeating({ api, S, esc, toast, view }), tischkarten: () => vCards({ api, S, esc, toast, view }), zusage: vRsvp, beitrag: vContrib, beitraege: vContrib }[tab];
+  setChrome({ tabs, active: sub[tab] || tab });
+  if (tab === 'tischkarten') S.printOpt = { ...(S.printOpt || {}), type: 'place' };
+  const c = ctx();
+  const fn = {
+    uebersicht: S.role === 'paar' ? () => vCockpit(c) : vOverview, zeitplan: vTimeline, gaeste: () => vGuestManager(c), sitzplan: () => vSeating(c),
+    mehr: () => vMore(c), feiern: () => vEvents(c), ablauf: () => vEvents(c), budget: () => vBudget(c), dienstleister: () => vVendors(c), geschenke: () => vGifts(c),
+    druck: () => vPrint(c), tischkarten: () => vPrint(c), traditionen: () => renderWizard(c, { edit: true }), einstellungen: vSettings,
+    zusage: () => vGuestRsvp(c), beitrag: vContrib, beitraege: vContrib,
+  }[tab];
   await fn();
   tick();
 }
 const couple = () => `${S.w.name1} & ${S.w.name2}`;
 const wedDay = () => parseD(S.w.date);
 const wedMoment = () => { const d = wedDay(); const [h, m] = (S.w.time || '14:00').split(':').map(Number); d.setHours(h, m, 0, 0); return d; };
+// Gemeinsamer Kontext für die Module
+function ctx() {
+  return { api, S, esc, toast, view, go, fmt, parseD, iso, addD, daysBetween, countdownCard, calendarCard, tick, accountFoot, wid: S.w?.id,
+    reload: () => render(), copy: async v => { try { await navigator.clipboard.writeText(v); toast('Kopiert'); } catch { window.prompt('Zum Kopieren markieren:', v); } } };
+}
 async function load(key, url, force) { if (force || !S.data[key]) S.data[key] = await api(url); return S.data[key]; }
 
 function countdownCard() {
@@ -216,10 +221,9 @@ async function vOverview() {
       <div class="progress"><i style="width:${tasks.length ? done / tasks.length * 100 : 0}%"></i></div><p class="small muted">${done} von ${tasks.length} Schritten erledigt</p>
       ${open.length ? `<ul class="upnext">${open.map(t => { const d = parseD(t.due); const [c, l] = status(t); return `<li><div class="dbox"><b>${d.getDate()}</b><span>${fmt(d, { month: 'short' })}</span></div><div><div style="font-weight:600">${esc(t.title)}</div><span class="pill ${c}">${l}</span></div></li>`; }).join('')}</ul>` : '<p class="empty">Alles erledigt. Wunderbar!</p>'}</section>
       <section class="card"><div class="row between"><h3>Zusagen</h3><a class="mini" href="#/w/${S.w.id}/gaeste">Alle Gäste</a></div>${statsHtml(g.stats)}
-      ${!g.stats.eingeladen && S.role === 'paar' ? `<p class="small muted">Noch keine Gäste dabei. Unter „Mehr“ findet ihr den Gäste-Code zum Verschicken.</p>` : ''}</section>`;
+      </section><section class="card"><div class="row between"><h3>Feiern</h3><a class="mini" href="#/w/${S.w.id}/feiern">Programm</a></div><ul class="ev-mini">${S.events.map(e => `<li><span class="mono small">${parseD(e.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })} ${esc(e.time)}</span><b>${esc(e.title)}</b></li>`).join('')}</ul></section>`;
   } else {
     const { rsvp } = await load('rsvp', `/api/w/${S.w.id}/rsvp`);
-    const { items } = await load('schedule', `/api/w/${S.w.id}/schedule`);
     const seat = await api(`/api/w/${S.w.id}/my-seat`).catch(() => ({ table: null }));
     const st = { offen: ['Ihr habt noch nicht geantwortet.', 'Jetzt zu- oder absagen'], zusage: ['Ihr habt zugesagt. Wir freuen uns auf euch!', 'Zusage ändern'], absage: ['Ihr habt abgesagt. Schade, dass ihr nicht dabei sein könnt.', 'Antwort ändern'] }[rsvp.status];
     const addr = [S.w.location, S.w.address].filter(Boolean).join(', ');
@@ -231,7 +235,7 @@ async function vOverview() {
         ${S.w.info ? `<div><div class="lbl">Hinweise vom Paar</div><p style="white-space:pre-line">${esc(S.w.info)}</p></div>` : ''}
         ${!addr && !S.w.dresscode && !S.w.info ? '<p class="small muted">Das Paar ergänzt hier bald Anfahrt, Dresscode und weitere Infos.</p>' : ''}
       </section>
-      <section class="card"><div class="row between"><h3>Der Tag</h3><a class="mini" href="#/w/${S.w.id}/ablauf">Ganzer Ablauf</a></div>${schedList(items.slice(0, 3), false)}</section>`;
+      <section class="card"><div class="row between"><h3>Eure Einladungen</h3><a class="mini" href="#/w/${S.w.id}/ablauf">Programm</a></div><ul class="ev-mini">${S.events.map(e => `<li><span class="mono small">${parseD(e.date).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'short' })} ${esc(e.time)}</span><b>${esc(e.title)}</b><span class="small muted">${esc(e.location || '')}</span></li>`).join('')}</ul></section>`;
   }
   view.innerHTML = `<div class="grid2"><div class="stack">${countdownCard()}${calendarCard()}</div><div class="stack">${side}</div></div>${accountFoot()}`;
 }
@@ -268,10 +272,13 @@ function gcal(t) {
 }
 
 async function vTimeline() {
-  const { tasks } = await load('tasks', `/api/w/${S.w.id}/tasks`);
+  const { tasks, payments = [], events = [] } = await load('tasks', `/api/w/${S.w.id}/tasks`);
+  S.evById = new Map(events.map(e => [e.id, e]));
   const done = tasks.filter(t => t.done).length;
   const groups = new Map();
-  for (const t of tasks) { const [k, label] = phaseOf(t.due); if (!groups.has(k)) groups.set(k, { label, items: [] }); groups.get(k).items.push(t); }
+  // Zahlungsfristen gebuchter Dienstleister erscheinen als eigene Einträge im Zeitstrahl
+  const pays = payments.map(p => ({ pay: true, id: `${p.vendor_id}:${p.kind}`, title: p.title, amount: p.amount, due: p.due, done: p.paid }));
+  for (const t of [...tasks, ...pays].sort((a, b) => a.due.localeCompare(b.due))) { const [k, label] = phaseOf(t.due); if (!groups.has(k)) groups.set(k, { label, items: [] }); groups.get(k).items.push(t); }
   const keys = [...groups.keys()].sort((a, b) => a - b);
   const todayPhase = phaseOf(iso(new Date()))[0];
   let html = '', placed = false;
@@ -290,7 +297,7 @@ async function vTimeline() {
   const who = S.role === 'paar' ? 'euer Hochzeitsdatum' : `das Hochzeitsdatum von ${esc(couple())}`;
   view.innerHTML = `
   <div><span class="eyebrow">${S.role === 'paar' ? 'Euer Zeitstrahl' : 'Zeitstrahl für Trauzeug:innen'}</span><h1>Schritt für Schritt zum Ja</h1></div>
-  <div class="banner">${I.spark}<div>Automatisch erstellt für ${who} am <b>${fmt(wedDay())}</b>. Tippt auf „Bearbeiten“, um Titel, Datum oder Notiz eines Schritts anzupassen. ${S.role === 'trauzeuge' ? 'Das Paar sieht diesen Zeitplan nicht.' : 'Wenn ihr das Hochzeitsdatum ändert, wandern alle Schritte mit, außer denen, die ihr von Hand verschoben habt.'}</div></div>
+  <div class="banner">${I.spark}<div>Automatisch erstellt für ${who} am <b>${fmt(wedDay())}</b>. Tippt auf „Bearbeiten“, um Titel, Datum oder Notiz eines Schritts anzupassen. ${S.role === 'paar' && daysBetween(new Date(), wedDay()) < 365 ? 'Weil ihr später als ein Jahr vorher startet, haben wir Aufgaben, deren idealer Termin schon vorbei war, auf die nächsten Wochen verteilt.' : ''} ${S.role === 'trauzeuge' ? 'Das Paar sieht diesen Zeitplan nicht.' : 'Wenn ihr das Hochzeitsdatum ändert, wandern alle Schritte mit, außer denen, die ihr von Hand verschoben habt.'}</div></div>
   <div class="grid2">
     <section class="card" style="grid-column:1/-1">
       <div class="row between"><span class="small muted">${done} von ${tasks.length} Schritten erledigt</span>
@@ -310,11 +317,14 @@ async function vTimeline() {
 const todayMarker = () => `<li class="today"><span class="node"></span><span>Heute · ${fmt(new Date())}</span></li>`;
 function taskHtml(t) {
   const [c, l] = status(t);
+  if (t.pay) return `<div class="task pay ${t.done ? 'is-done' : ''}"><input type="checkbox" data-act="pay" data-id="${esc(t.id)}" ${t.done ? 'checked' : ''} aria-label="${esc(t.title)} bezahlt">
+    <div class="body"><span class="tt">${esc(t.title)}</span><div class="meta"><span class="pill ${c}">${l}</span><span class="pill money">${(t.amount || 0).toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}</span><a class="mini" href="#/w/${S.w.id}/budget">Budget</a></div></div></div>`;
+  const ev = t.event_id && S.evById?.get(t.event_id);
   const editing = S.editing === t.id;
   return `<div class="task ${t.done ? 'is-done' : ''}" id="task-${t.id}">
     <input type="checkbox" data-act="toggle" data-id="${t.id}" ${t.done ? 'checked' : ''} aria-label="${esc(t.title)} erledigt">
     <div class="body"><span class="tt">${esc(t.title)}</span>${t.note && (!t.done || editing) ? `<span class="tn">${esc(t.note)}</span>` : ''}
-      <div class="meta"><span class="pill ${c}">${l}</span>${t.custom_due && t.auto ? '<span class="pill moved">von euch verschoben</span>' : ''}${!t.auto ? '<span class="pill">eigener Schritt</span>' : ''}
+      <div class="meta"><span class="pill ${c}">${l}</span>${ev && ev.key !== 'feier' ? `<span class="pill evp">${esc(ev.title)}</span>` : ''}${t.vendor_cat && S.role === 'paar' ? `<a class="pill vlink" href="#/w/${S.w.id}/dienstleister">Dienstleister</a>` : ''}${t.custom_due && t.auto ? '<span class="pill moved">von euch verschoben</span>' : ''}${!t.auto ? '<span class="pill">eigener Schritt</span>' : ''}
         ${editing ? '' : `<button class="mini" data-act="edit" data-id="${t.id}">Bearbeiten</button>`}
         ${!t.done && !editing ? `<a class="mini" target="_blank" rel="noopener" href="${esc(gcal(t))}">+ Google</a>` : ''}
         ${t.product && !t.done && !editing ? `<a class="mini acc" href="/#shop">${esc(PRODUCT[t.product] || 'Im Shop')} ansehen</a>` : ''}</div></div>
@@ -330,69 +340,7 @@ function taskHtml(t) {
   </div>`;
 }
 
-/* ---------- Gäste ---------- */
-async function vGuests() {
-  const g = await load('guests', `/api/w/${S.w.id}/guests`, true);
-  const menus = Object.entries(g.stats.menus);
-  const allergies = g.guests.filter(x => x.status === 'zusage' && x.allergies);
-  const songs = g.guests.filter(x => x.song);
-  view.innerHTML = `<div><span class="eyebrow">Gäste</span><h1>Wer kommt?</h1></div>
-  <div class="grid2">
-    <section class="card">${statsHtml(g.stats)}
-      ${menus.length ? `<div><div class="lbl">Menüwünsche</div><div class="meta">${menus.map(([k, n]) => `<span class="pill">${MENU_LABEL[k]}: ${n}</span>`).join('')}</div></div>` : ''}
-      ${S.w.guest_code ? `<div class="code-box"><span class="lbl">Gäste einladen mit Code</span><span class="code">${esc(S.w.guest_code)}</span><div class="row"><button class="btn small" data-act="copy" data-v="${esc(inviteLink(S.w.guest_code))}">Einladungslink kopieren</button></div></div>` : ''}
-    </section>
-    <section class="card"><h3>Alle Antworten</h3>
-      ${g.guests.length ? `<ul class="list">${g.guests.map(x => `<li><div class="row between"><b>${esc(x.name)}</b><span class="pill ${x.status === 'zusage' ? 'ok' : x.status === 'absage' ? 'late' : ''}">${x.status === 'zusage' ? `kommt${x.persons > 1 ? ' zu ' + x.persons : ''}` : x.status === 'absage' ? 'sagt ab' : 'offen'}</span></div>
-        ${x.menu ? `<span class="small muted">${MENU_LABEL[x.menu]}</span>` : ''}${x.message ? `<span class="small" style="white-space:pre-line">„${esc(x.message)}“</span>` : ''}</li>`).join('')}</ul>` : '<p class="empty">Noch keine Gäste. Verschickt den Einladungslink, dann erscheinen die Antworten hier.</p>'}
-    </section>
-    ${allergies.length ? `<section class="card"><h3>Allergien & Unverträglichkeiten</h3><ul class="list">${allergies.map(x => `<li><b>${esc(x.name)}</b><span class="small">${esc(x.allergies)}</span></li>`).join('')}</ul></section>` : ''}
-    ${songs.length ? `<section class="card"><h3>Musikwünsche</h3><ul class="list">${songs.map(x => `<li><span>${esc(x.song)}</span><span class="small muted">${esc(x.name)}</span></li>`).join('')}</ul></section>` : ''}
-    ${g.team.length ? `<section class="card"><h3>Team</h3><ul class="list">${g.team.map(x => `<li class="row between"><span>${esc(x.name)}</span><span class="role-chip ${x.role}">${ROLE_LABEL[x.role]}</span></li>`).join('')}</ul></section>` : ''}
-  </div>`;
-}
 const inviteLink = c => `${S.base}/app#/join/${c}`;
-
-/* ---------- Ablauf ---------- */
-function schedList(items, editable) {
-  if (!items.length) return '<p class="empty">Der Ablauf folgt bald.</p>';
-  return `<ul class="sched">${items.map(s => S.editing === 's' + s.id ? `<li style="grid-template-columns:1fr"><form class="stack" data-form="editsched" data-id="${s.id}">
-      <div class="fields2"><div class="field"><label for="s-t-${s.id}">Uhrzeit</label><input id="s-t-${s.id}" name="time" type="time" required value="${esc(s.time)}"></div><div class="field"><label for="s-p-${s.id}">Ort</label><input id="s-p-${s.id}" name="place" maxlength="120" value="${esc(s.place)}"></div></div>
-      <div class="field"><label for="s-n-${s.id}">Programmpunkt</label><input id="s-n-${s.id}" name="title" required maxlength="100" value="${esc(s.title)}"></div>
-      <div class="row"><button class="btn small" type="submit">Speichern</button><button class="btn sec small" type="button" data-act="edit-cancel">Abbrechen</button><button class="btn ghost small" type="button" data-act="sched-del" data-id="${s.id}">Löschen</button></div></form></li>`
-    : `<li><b>${esc(s.time)}</b><div><div style="font-weight:600">${esc(s.title)}</div>${s.place ? `<span class="small muted">${esc(s.place)}</span>` : ''}</div>${editable ? `<button class="mini" data-act="sched-edit" data-id="${s.id}">Ändern</button>` : '<span></span>'}</li>`).join('')}</ul>`;
-}
-async function vSchedule() {
-  const { items } = await load('schedule', `/api/w/${S.w.id}/schedule`, true);
-  const editable = S.role === 'paar';
-  view.innerHTML = `<div><span class="eyebrow">${fmt(wedDay(), { weekday: 'long', day: 'numeric', month: 'long' })}</span><h1>Ablauf des Tages</h1></div>
-  <div class="grid2"><section class="card">${schedList(items, editable)}${editable ? '<p class="small muted">Diesen Ablauf sehen alle Gäste und Trauzeug:innen.</p>' : ''}</section>
-  ${editable ? `<form class="card" data-form="addsched"><h3>Programmpunkt hinzufügen</h3>
-    <div class="fields2"><div class="field"><label for="a-t">Uhrzeit</label><input id="a-t" name="time" type="time" required value="18:00"></div><div class="field"><label for="a-p">Ort</label><input id="a-p" name="place" maxlength="120"></div></div>
-    <div class="field"><label for="a-n">Programmpunkt</label><input id="a-n" name="title" required maxlength="100" placeholder="z. B. Gruppenfoto"></div>
-    <p class="err" data-err hidden></p><button class="btn" type="submit">Hinzufügen</button></form>` : ''}</div>`;
-}
-
-/* ---------- Zusage (Gäste) ---------- */
-async function vRsvp() {
-  const { rsvp } = await load('rsvp', `/api/w/${S.w.id}/rsvp`, true);
-  const yes = rsvp.status !== 'absage';
-  view.innerHTML = `<div><span class="eyebrow">Hochzeit ${esc(couple())}</span><h1>Seid ihr dabei?</h1>${S.w.rsvp_until ? `<p class="muted">Bitte antwortet bis ${fmt(parseD(S.w.rsvp_until))}.</p>` : ''}</div>
-  <form class="card" data-form="rsvp">
-    <div class="choice"><label><input type="radio" name="status" value="zusage" ${rsvp.status === 'zusage' ? 'checked' : ''} required><span>Wir kommen gern</span><small>Zusage</small></label>
-      <label><input type="radio" name="status" value="absage" ${rsvp.status === 'absage' ? 'checked' : ''}><span>Leider nicht</span><small>Absage</small></label></div>
-    <div class="stack" data-yes ${yes ? '' : 'hidden'}>
-      <div class="fields2"><div class="field"><label for="r-p">Personen</label><select id="r-p" name="persons">${[1, 2, 3, 4, 5, 6].map(n => `<option ${rsvp.persons === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-        <div class="field"><label for="r-m">Menü</label><select id="r-m" name="menu"><option value="">Egal</option>${Object.entries(MENU_LABEL).map(([k, l]) => `<option value="${k}" ${rsvp.menu === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
-      <div class="field"><label for="r-a">Allergien oder Unverträglichkeiten</label><input id="r-a" name="allergies" maxlength="300" value="${esc(rsvp.allergies)}"></div>
-      <div class="field"><label for="r-s">Euer Musikwunsch</label><input id="r-s" name="song" maxlength="150" value="${esc(rsvp.song)}" placeholder="Titel und Interpret"></div>
-    </div>
-    <div class="field"><label for="r-msg">Nachricht an das Paar</label><textarea id="r-msg" name="message" maxlength="1000">${esc(rsvp.message)}</textarea></div>
-    <p class="err" data-err hidden></p><button class="btn" type="submit">Antwort senden</button>
-    ${rsvp.status !== 'offen' ? `<p class="small muted">Zuletzt geändert: ${esc(new Date(rsvp.updated_at.replace(' ', 'T') + 'Z').toLocaleString('de-DE'))}</p>` : ''}
-  </form>`;
-  view.querySelectorAll('input[name=status]').forEach(r => r.onchange = () => { view.querySelector('[data-yes]').hidden = r.value !== 'zusage' || !r.checked; });
-}
 
 /* ---------- Hochzeitszeitung ---------- */
 async function vContrib() {
@@ -436,6 +384,9 @@ async function vSettings() {
       <section class="card"><span class="eyebrow">Einladen</span><h3>Codes für alle Bereiche</h3>
         ${codes.map(([l, c, d]) => `<div class="code-box"><span class="lbl">${l}</span><span class="code">${esc(c)}</span><span class="small muted">${d}</span><div class="row"><button class="btn small" data-act="copy" data-v="${esc(inviteLink(c))}">Link kopieren</button><button class="btn sec small" data-act="copy" data-v="${esc(c)}">Code kopieren</button></div></div>`).join('')}
       </section>
+      <section class="card"><span class="eyebrow">Traditionen & Optionen</span><h3>${(w.profile?.traditions || []).length} Traditionen</h3>
+        <p class="small muted">${(w.profile?.traditions || []).map(esc).join(', ')} · Sprachen: ${(w.profile?.langs || ['de']).map(l => l.toUpperCase()).join(', ')}</p>
+        <a class="btn sec small" href="#/w/${w.id}/traditionen">Traditionen, Optionen & Sprachen ändern</a></section>
       ${calendarCard()}
       ${accountFoot()}
     </div>
@@ -458,15 +409,13 @@ document.addEventListener('click', async e => {
       }
       case 'filter': S.filter = el.dataset.v; store.set('wfy-filter', S.filter); return vTimeline();
       case 'edit': S.editing = id; S.confirm = null; await vTimeline(); document.getElementById('e-t')?.focus(); return;
-      case 'edit-cancel': S.editing = null; S.confirm = null; return S.tab === 'ablauf' ? vSchedule() : vTimeline();
+      case 'edit-cancel': S.editing = null; S.confirm = null; return vTimeline();
       case 'del': S.confirm = 'del-' + id; return vTimeline();
       case 'del-yes': await api(`/api/tasks/${id}`, { method: 'DELETE' }); S.data.tasks.tasks = S.data.tasks.tasks.filter(t => t.id !== id); S.editing = null; S.confirm = null; toast('Schritt gelöscht'); return vTimeline();
       case 'reset-due': return updateTask(id, { reset_due: true }, 'Datum wieder automatisch');
       case 'regen': S.confirm = 'regen'; return vTimeline();
       case 'confirm-no': S.confirm = null; return vTimeline();
       case 'regen-yes': await api(`/api/w/${S.w.id}/tasks/regenerate`, { method: 'POST' }); S.confirm = null; delete S.data.tasks; await load('tasks', `/api/w/${S.w.id}/tasks`); toast('Zeitplan neu erstellt'); return vTimeline();
-      case 'sched-edit': S.editing = 's' + id; return vSchedule();
-      case 'sched-del': await api(`/api/schedule/${id}`, { method: 'DELETE' }); S.editing = null; return vSchedule();
       case 'contrib-del': await api(`/api/contributions/${id}`, { method: 'DELETE' }); toast('Beitrag gelöscht'); return vContrib();
     }
   } catch (err) { toast(err.message); }
@@ -474,6 +423,11 @@ document.addEventListener('click', async e => {
 
 document.addEventListener('change', async e => {
   const el = e.target;
+  if (el.dataset.act === 'pay') {
+    const [vid, kind] = el.dataset.id.split(':');
+    try { await api(`/api/vendors/${vid}`, { method: 'PATCH', body: { [kind === 'deposit' ? 'deposit_paid' : 'rest_paid']: el.checked } }); toast(el.checked ? 'Als bezahlt markiert' : 'Wieder offen'); } catch (x) { toast(x.message); }
+    delete S.data.tasks; return vTimeline();
+  }
   if (el.dataset.act === 'toggle') {
     const t = S.data.tasks.tasks.find(x => x.id === Number(el.dataset.id));
     await updateTask(t.id, { done: el.checked }, el.checked ? 'Erledigt, weiter so!' : null);
@@ -501,10 +455,6 @@ document.addEventListener('submit', async e => {
     switch (kind) {
       case 'login': case 'register':
         await api(`/api/${kind}`, { method: 'POST', body: data }); S.me = null; return go('#/');
-      case 'create': {
-        const r = await api('/api/weddings', { method: 'POST', body: data });
-        S.me = await api('/api/me'); toast('Euer Zeitplan ist fertig!'); return go(`#/w/${r.id}/zeitplan`);
-      }
       case 'join': {
         const r = await api('/api/join', { method: 'POST', body: data });
         S.me = await api('/api/me'); toast(`Willkommen als ${ROLE_LABEL[r.role]}!`); return go(`#/w/${r.id}/uebersicht`);
@@ -521,17 +471,11 @@ document.addEventListener('submit', async e => {
         if (data.due !== t.due) patch.due = data.due;
         return updateTask(t.id, patch, 'Gespeichert');
       }
-      case 'addsched': await api(`/api/w/${S.w.id}/schedule`, { method: 'POST', body: data }); toast('Hinzugefügt'); return vSchedule();
-      case 'editsched': await api(`/api/schedule/${form.dataset.id}`, { method: 'PATCH', body: data }); S.editing = null; return vSchedule();
-      case 'rsvp': {
-        const body = { ...data, persons: Number(data.persons || 1) };
-        await api(`/api/w/${S.w.id}/rsvp`, { method: 'PUT', body });
-        delete S.data.rsvp; toast(data.status === 'zusage' ? 'Danke für eure Zusage!' : 'Danke für eure Antwort'); return go(`#/w/${S.w.id}/uebersicht`);
-      }
       case 'contrib': await api(`/api/w/${S.w.id}/contributions`, { method: 'POST', body: data }); toast('Danke für euren Beitrag!'); return vContrib();
       case 'wedding': {
         const r = await api(`/api/w/${S.w.id}`, { method: 'PATCH', body: data });
         S.w = r.wedding; S.data = {}; S.me = await api('/api/me');
+        const fresh = await api(`/api/w/${S.w.id}`); S.events = fresh.events; S.warnings = fresh.warnings;
         await vSettings();
         const ok = view.querySelector('[data-ok]'); ok.hidden = false;
         ok.textContent = r.moved ? `Gespeichert. ${r.moved} Schritte im Zeitplan sind mit dem neuen Datum mitgewandert.` : 'Gespeichert.';

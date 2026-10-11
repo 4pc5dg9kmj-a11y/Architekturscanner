@@ -24,6 +24,7 @@ function client() {
   return fn;
 }
 let passed = 0;
+const addDays = (d, n) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const step = (name, fn) => fn().then(() => { passed++; console.log('  ✓', name); });
 
 try {
@@ -53,8 +54,13 @@ try {
     codes = w.body.wedding; assert.ok(codes.guest_code && codes.witness_code && codes.partner_code);
     tasks = (await paar('GET', `/api/w/${wid}/tasks`)).body.tasks;
     assert.ok(tasks.length >= 25);
-    const standesamt = tasks.find(t => t.title.includes('Standesamt'));
-    assert.equal(standesamt.due, '2026-12-12', '182 Tage vor dem 12.06.2027');
+    const ev = w.body.events; assert.ok(ev.some(e => e.key === 'standesamt' && e.date === '2027-06-11'), 'Standesamt am Vortag');
+    assert.ok(ev.some(e => e.key === 'freie_trauung') && ev.some(e => e.key === 'feier'));
+    const anm = tasks.find(t => t.title === 'Eheschließung beim Standesamt anmelden');
+    assert.equal(anm.due, addDays('2027-06-11', -180), '180 Tage vor dem Standesamt');
+    const today = new Date().toISOString().slice(0, 10);
+    assert.ok(tasks.every(t => t.done || t.due >= today), 'keine Aufgabe startet überfällig');
+    assert.equal(w.body.wedding.time, w.body.events.find(e => e.key === 'feier').time, 'Uhrzeit folgt der Hauptfeier');
   });
 
   await step('Jeder Schritt lässt sich anpassen', async () => {
@@ -70,7 +76,7 @@ try {
     const r = await paar('PATCH', `/api/w/${wid}`, { date: '2027-07-10' });
     assert.ok(r.body.moved > 20);
     const now = (await paar('GET', `/api/w/${wid}/tasks`)).body.tasks;
-    assert.equal(now.find(t => t.title.includes('Standesamt')).due, '2027-01-09');
+    assert.equal(now.find(t => t.title === 'Eheschließung beim Standesamt anmelden').due, addDays('2027-07-09', -180));
     assert.equal(now.find(t => t.title.startsWith('Budget mit')).due, '2026-07-01', 'von Hand gesetztes Datum bleibt');
     assert.equal(now.find(t => t.title.startsWith('Brautstrauß')).due, '2027-05-20');
     const reset = await paar('PATCH', `/api/tasks/${tasks[0].id}`, { reset_due: true });
@@ -127,7 +133,7 @@ try {
   await step('Sitzplan: speichern, Rechte, Grundriss, eigener Platz', async () => {
     const g = (await paar('GET', `/api/w/${wid}/guests`)).body.guests[0];
     const plan = { v: 1, room: { pts: [[0, 0], [1200, 0], [1200, 1600], [0, 1600]] }, extra: [], nextId: 3,
-      items: [{ id: 'i1', type: 'rund180', kind: 'table', shape: 'round', d: 180, seats: 10, x: 300, y: 300, rot: 0, name: 'Tisch 3', guests: [null, `u${g.id}`, null, null, null, null, null, null, null, null] }] };
+      items: [{ id: 'i1', type: 'rund180', kind: 'table', shape: 'round', d: 180, seats: 10, x: 300, y: 300, rot: 0, name: 'Tisch 3', guests: [null, `g${g.id}`, null, null, null, null, null, null, null, null] }] };
     assert.equal((await paar('PUT', `/api/w/${wid}/seating`, { data: plan })).status, 200);
     assert.equal((await tz('PUT', `/api/w/${wid}/seating`, { data: plan })).status, 403);
     assert.equal((await gast('GET', `/api/w/${wid}/seating`)).status, 403, 'Gäste sehen nicht den ganzen Plan');
@@ -201,6 +207,87 @@ try {
 
   await step('Viele Gäste im selben WLAN können sich registrieren', async () => {
     for (let i = 0; i < 25; i++) { const c = client(); const r = await c('POST', '/api/register', { name: 'G' + i, email: `wlan${i}@test.de`, password: 'geheim123' }); assert.equal(r.status, 201); assert.equal((await c('POST', '/api/join', { code: codes.guest_code })).status, 201); }
+  });
+
+  await step('Deutsch-türkisch-islamische Hochzeit: Plan aus wenigen Angaben', async () => {
+    const r = await paar('POST', '/api/weddings', { name1: 'Ayşe', name2: 'Deniz', date: '2027-02-20', location: 'Festsaal Köln', profile: { traditions: ['standesamt', 'tuerkisch', 'islamisch'], guests: 250, options: { noAlcohol: true, separated: true, bismillah: true }, langs: ['de', 'tr'] } });
+    assert.equal(r.status, 201);
+    assert.ok(r.body.warnings.some(x => /Ramadan/.test(x)), 'Ramadan-Hinweis für Februar 2027');
+    const w2 = r.body.id;
+    const info = (await paar('GET', `/api/w/${w2}`)).body;
+    const keys = info.events.map(e => e.key);
+    for (const k of ['standesamt', 'nikah', 'henna', 'kina', 'feier']) assert.ok(keys.includes(k), 'Feier ' + k);
+    assert.equal(info.events.find(e => e.key === 'feier').title, 'Düğün');
+    assert.equal(info.events.find(e => e.key === 'henna').scope, 'frauen');
+    const t = (await paar('GET', `/api/w/${w2}/tasks`)).body.tasks;
+    for (const title of ['Mahr (Brautgabe) zwischen den Familien vereinbaren', 'Takı-Zeremonie vorbereiten', 'Halal-Catering prüfen', 'Alkoholfreies Getränkekonzept planen', 'Getrennte Bereiche für Damen und Herren planen']) assert.ok(t.some(x => x.title === title), title);
+    assert.equal(t.filter(x => x.vendor_cat === 'location' && /buchen/.test(x.title)).length, 1, 'Location nur einmal buchen');
+    // Budget aus Gästezahl geschätzt, inkl. traditioneller Posten
+    const b = (await paar('GET', `/api/w/${w2}/budget`)).body;
+    assert.equal(b.total, Math.round((250 * 170 + 3500) / 500) * 500);
+    assert.ok(b.items.some(i => i.cat === 'davul') && b.items.some(i => i.cat === 'henna'));
+    assert.ok(Math.abs(b.planned - b.total) < 200, 'Posten summieren sich zum Budget');
+    // Dienstleister buchen → Aufgabe erledigt, Zahlungen im Zeitplan und Kalender
+    const vs = (await paar('GET', `/api/w/${w2}/vendors`)).body.vendors;
+    const loc = vs.find(v => v.cat === 'location');
+    await paar('PATCH', `/api/vendors/${loc.id}`, { name: 'Festsaal Rhein', status: 'gebucht', price: 9000, deposit: 3000, deposit_due: '2026-11-01', rest_due: '2027-02-06' });
+    const t2 = (await paar('GET', `/api/w/${w2}/tasks`)).body;
+    assert.ok(t2.tasks.find(x => x.vendor_cat === 'location' && /buchen/.test(x.title)).done, 'Buchungsaufgabe automatisch erledigt');
+    assert.equal(t2.payments.length, 2); assert.equal(t2.payments[1].amount, 6000);
+    const b2 = (await paar('GET', `/api/w/${w2}/budget`)).body;
+    assert.equal(b2.items.find(i => i.cat === 'location').actual, 9000);
+    await paar('PATCH', `/api/vendors/${loc.id}`, { deposit_paid: true });
+    assert.equal((await paar('GET', `/api/w/${w2}/budget`)).body.paid, 3000);
+    const ics = await (await fetch(info.calendar_url)).text();
+    assert.match(ics, /Restzahlung Festsaal Rhein/); assert.doesNotMatch(ics, /Anzahlung Festsaal Rhein/, 'bezahlte Rate nicht mehr im Kalender');
+    assert.match(ics, /Kına-Abend/);
+    // Gästeliste per Schnellerfassung, Einladungen nach Gästekreis
+    const imp = await paar('POST', `/api/w/${w2}/guests/import`, { text: 'Fatma Yılmaz\t2\tFamilie Braut\tfatma@test.de\t"Ringstr. 1\n50667 Köln"\nAhmet Kaya; 4; Freunde\nOma Emine' });
+    assert.equal(imp.body.imported, 3);
+    const gl = (await paar('GET', `/api/w/${w2}/guests`)).body;
+    const fatma = gl.guests.find(g => g.name === 'Fatma Yılmaz');
+    assert.equal(fatma.adults, 2); assert.equal(fatma.address, 'Ringstr. 1, 50667 Köln');
+    const evId = k => info.events.find(e => e.key === k).id;
+    assert.ok(fatma.invites.some(i => i.event_id === evId('nikah')), 'Familie zur Nikah eingeladen');
+    assert.ok(!gl.guests.find(g => g.name === 'Ahmet Kaya').invites.some(i => i.event_id === evId('nikah')), 'Freunde nicht zur Nikah');
+    await paar('PATCH', `/api/guests/${fatma.id}`, { gender: 'w', invites: { [evId('henna')]: true } });
+    // Zusage ohne Konto über persönlichen Link, je Feier
+    const anon = client();
+    const rs = (await anon('GET', `/api/rsvp/${fatma.token}`)).body;
+    assert.equal(rs.guest.name, 'Fatma Yılmaz'); assert.ok(rs.invites.length >= 3);
+    assert.equal((await anon('PUT', `/api/rsvp/${fatma.token}`, { answers: rs.invites.map(i => ({ event_id: i.event_id, status: i.key === 'henna' ? 'absage' : 'zusage', persons: 2 })), allergies: 'Nüsse' })).status, 200);
+    const gl2 = (await paar('GET', `/api/w/${w2}/guests`)).body;
+    assert.equal(gl2.perEvent.find(x => x.event_id === evId('feier')).personen, 2);
+    assert.equal(gl2.perEvent.find(x => x.event_id === evId('henna')).absage, 1);
+    assert.equal((await anon('GET', '/api/rsvp/falscher-token-123')).status, 404);
+    assert.equal((await anon('GET', `/api/w/${w2}/guests`)).status, 401);
+    // Geschenk → Danksagung; Cockpit verknüpft alles
+    await paar('POST', `/api/w/${w2}/gifts`, { guest_id: fatma.id, kind: 'gold', description: 'Goldarmband (Takı)' });
+    const ov = (await paar('GET', `/api/w/${w2}/overview`)).body;
+    assert.equal(ov.guests.entries, 3); assert.equal(ov.guests.persons, 7); assert.equal(ov.vendors.booked, 1); assert.equal(ov.gifts.total, 1);
+    assert.equal(ov.budget.nextPayments[0].title, 'Restzahlung Festsaal Rhein');
+    // Datum verschieben: alle Feiern wandern mit
+    await paar('PATCH', `/api/w/${w2}`, { date: '2027-05-15' });
+    const ev2 = (await paar('GET', `/api/w/${w2}`)).body.events;
+    assert.equal(ev2.find(e => e.key === 'kina').date, '2027-05-14'); assert.equal(ev2.find(e => e.key === 'henna').date, '2027-05-13');
+    // Tradition nachträglich ergänzen: Polterabend kommt dazu, bestehende Daten bleiben
+    const pr = await paar('PATCH', `/api/w/${w2}/profile`, { traditions: ['standesamt', 'tuerkisch', 'islamisch', 'polterabend'] });
+    assert.equal(pr.status, 200);
+    const ev3 = (await paar('GET', `/api/w/${w2}`)).body.events;
+    assert.ok(ev3.some(e => e.key === 'polterabend')); assert.equal(ev3.length, ev2.length + 1);
+    assert.equal((await paar('GET', `/api/w/${w2}/guests`)).body.guests.length, 3);
+  });
+
+  await step('Weitere Kulturen: jüdisch, indisch, orthodox', async () => {
+    const j = await paar('POST', '/api/weddings', { name1: 'Mira', name2: 'Ben', date: '2027-06-12', profile: { traditions: ['standesamt', 'juedisch'] } });
+    assert.ok(j.body.warnings.some(x => /Schabbat/.test(x)), 'Samstag-Warnung');
+    const i = await paar('POST', '/api/weddings', { name1: 'Priya', name2: 'Arjun', date: '2027-11-20', profile: { traditions: ['indisch'], guests: 300 } });
+    assert.ok(i.body.warnings.some(x => /Standesamt/.test(x)), 'Hinweis auf fehlendes Standesamt');
+    const ie = (await paar('GET', `/api/w/${i.body.id}`)).body.events;
+    assert.deepEqual(['haldi', 'mehndi', 'pheras', 'sangeet', 'feier'].every(k => ie.some(e => e.key === k)), true);
+    assert.equal(ie.find(e => e.key === 'feier').title, 'Reception');
+    const o = await paar('POST', '/api/weddings', { name1: 'Eleni', name2: 'Nikos', date: '2027-08-07', profile: { traditions: ['standesamt', 'orthodox'] } });
+    assert.ok(o.body.warnings.some(x => /Fastenzeit/.test(x)));
   });
 
   await step('Fremde sehen nichts', async () => {

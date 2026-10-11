@@ -5,7 +5,8 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { db, tx, DATA_DIR } from './db.js';
-import { COUPLE_TEMPLATE, WITNESS_TEMPLATE, DEFAULT_SCHEDULE } from './templates.js';
+import { buildPlan, normalizeProfile, estimateBudget } from './generator.js';
+import { catalog, dateWarnings, VENDOR_CATS } from './traditions.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
@@ -94,20 +95,118 @@ function rateLimit(req, kind = 'fail', max = 20) { if (bucket(req, kind).n >= ma
 const countAttempt = (req, kind = 'fail') => { bucket(req, kind).n++; };
 setInterval(() => { const now = Date.now(); for (const [k, a] of attempts) if (now > a.reset) attempts.delete(k); }, 15 * 6e4).unref();
 
-function seedTasks(wid, audience, date) {
-  const tpl = audience === 'paar' ? COUPLE_TEMPLATE : WITNESS_TEMPLATE;
-  const ins = db.prepare('INSERT INTO tasks (wedding_id, audience, title, note, due, offset_days, product) VALUES (?,?,?,?,?,?,?)');
-  for (const t of tpl) ins.run(wid, audience, t.title, t.note, addDays(date, t.offset), t.offset, t.product || '');
+/* ---------------- Plan: Feiern, Aufgaben, Budget, Dienstleister ---------------- */
+
+const profileOf = w => { try { return normalizeProfile(JSON.parse(w.profile || '{}')); } catch { return normalizeProfile({}); } };
+const eventsOf = wid => db.prepare('SELECT * FROM events WHERE wedding_id = ? ORDER BY date, time, sort, id').all(wid);
+const mainEvent = wid => db.prepare("SELECT * FROM events WHERE wedding_id = ? AND key = 'feier' ORDER BY id LIMIT 1").get(wid);
+
+// Alte Hochzeiten ohne Feiern bekommen die Hauptfeier nachträglich
+function ensureBaseEvent(wid) {
+  if (mainEvent(wid)) return;
+  const w = weddingRow(wid); if (!w) return;
+  const r = db.prepare("INSERT INTO events (wedding_id, key, title, date, time, location, address, offset_days, scope, kind) VALUES (?,?,?,?,?,?,?,0,'alle','party')").run(wid, 'feier', 'Hochzeitsfeier', w.date, w.time, w.location, w.address);
+  db.prepare('UPDATE schedule SET event_id = ? WHERE wedding_id = ? AND event_id IS NULL').run(r.lastInsertRowid, wid);
+  // Bisherige Gäste-Zusagen übernehmen
+  for (const m of db.prepare("SELECT mb.user_id, u.name FROM members mb JOIN users u ON u.id = mb.user_id WHERE mb.wedding_id = ? AND mb.role = 'gast'").all(wid)) linkGuest(wid, m.user_id, m.name, '');
+}
+
+// Wendet den Plan an. Bestehende Einträge bleiben, fehlende werden ergänzt (Schlüssel: event.key, task.tkey, vendor.cat, budget.cat)
+function applyPlan(wid, profileIn, { audience = null } = {}) {
+  const w = weddingRow(wid); const plan = buildPlan(profileIn);
+  const evIds = new Map(eventsOf(wid).map(e => [e.key, e.id]));
+  plan.events.forEach((e, i) => {
+    if (evIds.has(e.key)) return;
+    const loc = e.key === 'feier' ? w.location : '';
+    const r = db.prepare('INSERT INTO events (wedding_id, key, title, date, time, location, address, offset_days, scope, kind, sort) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(wid, e.key, e.title, addDays(w.date, e.offset), e.key === 'feier' ? (w.time && w.time !== '14:00' ? w.time : e.time) : e.time, loc, e.key === 'feier' ? w.address : '', e.offset, e.scope, e.kind, i);
+    const id = Number(r.lastInsertRowid); evIds.set(e.key, id);
+    if (e.key === 'feier') db.prepare('UPDATE weddings SET time = (SELECT time FROM events WHERE id = ?) WHERE id = ?').run(id, wid);
+    const ins = db.prepare('INSERT INTO schedule (wedding_id, time, title, place, event_id) VALUES (?,?,?,?,?)');
+    for (const [tm, tt] of e.schedule) ins.run(wid, tm, tt, loc, id);
+    // Bereits vorhandene Gäste zur neuen Feier einladen, falls der Gästekreis passt
+    for (const g of db.prepare('SELECT * FROM guests WHERE wedding_id = ?').all(wid)) if (inScope(g, e.scope)) db.prepare('INSERT OR IGNORE INTO invites (guest_id, event_id, persons) VALUES (?,?,?)').run(g.id, id, g.adults + g.kids);
+  });
+  const evDate = new Map(eventsOf(wid).map(e => [e.id, e.date]));
+  const have = new Set(db.prepare('SELECT tkey FROM tasks WHERE wedding_id = ?').all(wid).map(t => t.tkey));
+  const insT = db.prepare('INSERT INTO tasks (wedding_id, audience, title, note, due, offset_days, product, event_id, tkey, vendor_cat, book) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+  for (const t of plan.tasks) {
+    if (have.has(t.k) || (audience && t.aud !== audience)) continue;
+    const ev = evIds.get(t.ev) || evIds.get('feier');
+    insT.run(wid, t.aud, t.t, t.n, addDays(evDate.get(ev) || w.date, t.o), t.o, t.p, ev, t.k, t.v, t.book ? 1 : 0);
+  }
+  if (!audience) {
+    const cats = new Set(db.prepare('SELECT cat FROM vendors WHERE wedding_id = ?').all(wid).map(v => v.cat));
+    for (const c of plan.vendors) if (!cats.has(c)) db.prepare('INSERT INTO vendors (wedding_id, cat) VALUES (?,?)').run(wid, c);
+    const bcats = new Set(db.prepare('SELECT cat FROM budget WHERE wedding_id = ?').all(wid).map(b => b.cat));
+    const fresh = bcats.size === 0;
+    for (const b of plan.budget) if (!bcats.has(b.cat)) db.prepare('INSERT INTO budget (wedding_id, cat, label, planned, per_guest, sort) VALUES (?,?,?,?,?,?)').run(wid, b.cat, b.label, fresh ? b.planned : 0, b.perGuest ? 1 : 0, b.sort);
+    db.prepare('UPDATE weddings SET profile = ? WHERE id = ?').run(JSON.stringify({ ...plan.profile, budget: plan.profile.budget || plan.total }), wid);
+  }
+  catchUp(wid);
+  return plan;
+}
+
+// Wer spät mit der Planung beginnt: Aufgaben, deren idealer Termin schon vorbei ist, werden auf die
+// nächsten Wochen verteilt (alle 2 Tage eine), statt sofort als „überfällig“ dazustehen.
+function catchUp(wid) {
+  const today = new Date().toISOString().slice(0, 10);
+  const evDate = new Map(eventsOf(wid).map(e => [e.id, e.date]));
+  const late = db.prepare('SELECT id, due, event_id FROM tasks WHERE wedding_id = ? AND done = 0 AND custom_due = 0 AND offset_days IS NOT NULL AND due < ? ORDER BY due, id').all(wid, today);
+  late.forEach((t, i) => {
+    const limit = addDays(evDate.get(t.event_id) || weddingRow(wid).date, -1);
+    let due = addDays(today, 3 + i * 2); if (due > limit) due = limit < today ? today : limit;
+    db.prepare('UPDATE tasks SET due = ? WHERE id = ?').run(due, t.id);
+  });
+  return late.length;
+}
+
+// Verschiebt Feiern und Aufgaben nach einer Datumsänderung. Von Hand gesetzte Termine bleiben stehen.
+function recomputeDates(wid) {
+  const w = weddingRow(wid);
+  for (const e of eventsOf(wid)) if (!e.custom_date && e.offset_days !== null) db.prepare('UPDATE events SET date = ? WHERE id = ?').run(addDays(w.date, e.offset_days), e.id);
+  const evDate = new Map(eventsOf(wid).map(e => [e.id, e.date]));
+  let moved = 0;
+  for (const t of db.prepare('SELECT id, offset_days, event_id, due FROM tasks WHERE wedding_id = ? AND offset_days IS NOT NULL AND custom_due = 0').all(wid)) {
+    const due = addDays(evDate.get(t.event_id) || w.date, t.offset_days);
+    if (due !== t.due) { db.prepare('UPDATE tasks SET due = ? WHERE id = ?').run(due, t.id); moved++; }
+  }
+  catchUp(wid);
+  return moved;
+}
+
+// Gästekreis einer Feier: alle, Familie, Frauen, kleiner Kreis (nur von Hand)
+function inScope(g, scope) {
+  if (scope === 'alle') return true;
+  if (scope === 'familie') return /famil/i.test(g.grp);
+  if (scope === 'frauen') return g.gender === 'w';
+  return false;
+}
+function inviteByScope(guestId) {
+  const g = db.prepare('SELECT * FROM guests WHERE id = ?').get(guestId);
+  for (const e of eventsOf(g.wedding_id)) if (inScope(g, e.scope) || e.key === 'feier') db.prepare('INSERT OR IGNORE INTO invites (guest_id, event_id, persons) VALUES (?,?,?)').run(g.id, e.id, g.adults + g.kids);
+}
+// App-Nutzer:in mit Gast-Code → vorhandenen Eintrag (gleiche E-Mail) verknüpfen oder neu anlegen
+function linkGuest(wid, userId, name, email) {
+  const existing = db.prepare('SELECT id FROM guests WHERE wedding_id = ? AND user_id = ?').get(wid, userId);
+  if (existing) return existing.id;
+  const byMail = email && db.prepare("SELECT id FROM guests WHERE wedding_id = ? AND user_id IS NULL AND email != '' AND lower(email) = lower(?)").get(wid, email);
+  if (byMail) { db.prepare('UPDATE guests SET user_id = ? WHERE id = ?').run(userId, byMail.id); return byMail.id; }
+  const r = db.prepare('INSERT INTO guests (wedding_id, name, email, user_id, token) VALUES (?,?,?,?,?)').run(wid, name, email || '', userId, rid(12));
+  inviteByScope(Number(r.lastInsertRowid));
+  return Number(r.lastInsertRowid);
 }
 
 const weddingRow = wid => db.prepare('SELECT * FROM weddings WHERE id = ?').get(wid);
 function publicWedding(w, role) {
   const out = { id: w.id, name1: w.name1, name2: w.name2, date: w.date, time: w.time, location: w.location, address: w.address, dresscode: w.dresscode, info: w.info, engaged_on: w.engaged_on, rsvp_until: w.rsvp_until };
+  const pr = profileOf(w);
+  out.profile = { traditions: pr.traditions, langs: pr.langs, options: pr.options, print: pr.print, guests: pr.guests, budget: role === 'paar' ? pr.budget : undefined };
   if (role === 'paar') Object.assign(out, { partner_code: w.partner_code, witness_code: w.witness_code, guest_code: w.guest_code });
   if (role === 'trauzeuge') out.guest_code = w.guest_code;
   return out;
 }
-const taskOut = t => ({ id: t.id, title: t.title, note: t.note, due: t.due, done: !!t.done, auto: t.offset_days !== null, custom_due: !!t.custom_due, product: t.product });
+const taskOut = t => ({ id: t.id, title: t.title, note: t.note, due: t.due, done: !!t.done, auto: t.offset_days !== null, custom_due: !!t.custom_due, product: t.product, event_id: t.event_id, vendor_cat: t.vendor_cat });
 const audienceOf = role => role === 'paar' ? 'paar' : role === 'trauzeuge' ? 'trauzeuge' : fail(403, 'Gäste haben keinen Zeitplan.');
 
 /* ---------------- Routen ---------------- */
@@ -158,16 +257,14 @@ route('POST', '/api/weddings', async (req, res, body) => {
   const time = isTime(body.time) ? body.time : '14:00';
   const location = str(body.location, 120, 'Ort') || '';
   const id = rid(8);
+  let plan;
   tx(() => {
     db.prepare('INSERT INTO weddings (id, name1, name2, date, time, location, partner_code, witness_code, guest_code, created_by) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .run(id, name1, name2, body.date, time, location, code('P'), code('T'), code('G'), user.id);
     db.prepare('INSERT INTO members (wedding_id, user_id, role, cal_token) VALUES (?,?,?,?)').run(id, user.id, 'paar', rid(18));
-    seedTasks(id, 'paar', body.date);
-    seedTasks(id, 'trauzeuge', body.date);
-    const ins = db.prepare('INSERT INTO schedule (wedding_id, time, title, place) VALUES (?,?,?,?)');
-    for (const s of DEFAULT_SCHEDULE) ins.run(id, s.time, s.title, s.place || location);
+    plan = applyPlan(id, body.profile || {});
   });
-  send(res, 201, { id, role: 'paar' });
+  send(res, 201, { id, role: 'paar', warnings: [...plan.warnings, ...dateWarnings(body.date, plan.profile.traditions)], events: eventsOf(id).length, tasks: plan.tasks.length });
 });
 
 route('POST', '/api/join', async (req, res, body) => {
@@ -181,16 +278,21 @@ route('POST', '/api/join', async (req, res, body) => {
   if (existing) return send(res, 200, { id: w.id, role: existing.role, already: true });
   tx(() => {
     db.prepare('INSERT INTO members (wedding_id, user_id, role, cal_token) VALUES (?,?,?,?)').run(w.id, user.id, role, rid(18));
-    if (role === 'gast') db.prepare('INSERT OR IGNORE INTO rsvps (wedding_id, user_id) VALUES (?,?)').run(w.id, user.id);
+    if (role === 'gast') { ensureBaseEvent(w.id); linkGuest(w.id, user.id, user.name, user.email); }
   });
   send(res, 201, { id: w.id, role });
 });
 
 route('GET', '/api/w/:wid', async (req, res, _b, p) => {
   const user = needUser(req); const m = membership(user, p.wid);
+  ensureBaseEvent(p.wid);
   const w = weddingRow(p.wid);
   const counts = db.prepare(`SELECT role, COUNT(*) n FROM members WHERE wedding_id = ? GROUP BY role`).all(p.wid);
-  send(res, 200, { wedding: publicWedding(w, m.role), role: m.role, calendar_url: `${PUBLIC_URL}/cal/${m.cal_token}.ics`, public_url: PUBLIC_URL, counts: Object.fromEntries(counts.map(c => [c.role, c.n])) });
+  let events = eventsOf(p.wid);
+  if (m.role === 'gast') { const g = db.prepare('SELECT id FROM guests WHERE wedding_id = ? AND user_id = ?').get(p.wid, user.id); const inv = new Set(g ? db.prepare('SELECT event_id FROM invites WHERE guest_id = ?').all(g.id).map(i => i.event_id) : []); events = events.filter(e => inv.has(e.id)); }
+  const pr = profileOf(w);
+  send(res, 200, { wedding: publicWedding(w, m.role), role: m.role, events: events.map(eventOut), calendar_url: `${PUBLIC_URL}/cal/${m.cal_token}.ics`, public_url: PUBLIC_URL, counts: Object.fromEntries(counts.map(c => [c.role, c.n])),
+    warnings: m.role === 'paar' ? [...buildPlan(pr).warnings, ...dateWarnings(w.date, pr.traditions)] : [] });
 });
 
 route('PATCH', '/api/w/:wid', async (req, res, body, p) => {
@@ -208,13 +310,15 @@ route('PATCH', '/api/w/:wid', async (req, res, body, p) => {
     if (body.date !== undefined && body.date !== w.date) {
       if (!isDate(body.date)) fail(400, 'Ungültiges Hochzeitsdatum.');
       upd.date = body.date;
-      // Automatisch erzeugte Schritte wandern mit, von Hand geänderte Termine bleiben stehen.
-      const auto = db.prepare('SELECT id, offset_days FROM tasks WHERE wedding_id = ? AND offset_days IS NOT NULL AND custom_due = 0').all(p.wid);
-      const u = db.prepare('UPDATE tasks SET due = ? WHERE id = ?');
-      for (const t of auto) { u.run(addDays(body.date, t.offset_days), t.id); moved++; }
     }
     const keys = Object.keys(upd);
     if (keys.length) db.prepare(`UPDATE weddings SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => upd[k]), p.wid);
+    ensureBaseEvent(p.wid);
+    // Hauptfeier spiegelt Zeit und Ort der Hochzeit
+    const me = mainEvent(p.wid);
+    for (const k of ['time', 'location', 'address']) if (upd[k] !== undefined) db.prepare(`UPDATE events SET ${k} = ? WHERE id = ?`).run(upd[k], me.id);
+    // Feiern und automatisch erzeugte Schritte wandern mit, von Hand geänderte Termine bleiben stehen.
+    if (upd.date) moved = recomputeDates(p.wid);
   });
   send(res, 200, { wedding: publicWedding(weddingRow(p.wid), 'paar'), moved });
 });
@@ -222,8 +326,9 @@ route('PATCH', '/api/w/:wid', async (req, res, body, p) => {
 // Zeitstrahl
 route('GET', '/api/w/:wid/tasks', async (req, res, _b, p) => {
   const user = needUser(req); const m = membership(user, p.wid, ['paar', 'trauzeuge']);
+  ensureBaseEvent(p.wid);
   const rows = db.prepare('SELECT * FROM tasks WHERE wedding_id = ? AND audience = ? ORDER BY due, id').all(p.wid, audienceOf(m.role));
-  send(res, 200, { tasks: rows.map(taskOut) });
+  send(res, 200, { tasks: rows.map(taskOut), payments: m.role === 'paar' ? paymentsOf(p.wid) : [], events: eventsOf(p.wid).map(eventOut) });
 });
 
 route('POST', '/api/w/:wid/tasks', async (req, res, body, p) => {
@@ -265,56 +370,380 @@ route('DELETE', '/api/tasks/:id', async (req, res, _b, p) => {
 route('POST', '/api/w/:wid/tasks/regenerate', async (req, res, _b, p) => {
   const user = needUser(req); const m = membership(user, p.wid, ['paar', 'trauzeuge']);
   const aud = audienceOf(m.role); const w = weddingRow(p.wid);
-  tx(() => { db.prepare('DELETE FROM tasks WHERE wedding_id = ? AND audience = ?').run(p.wid, aud); seedTasks(p.wid, aud, w.date); });
+  tx(() => { db.prepare('DELETE FROM tasks WHERE wedding_id = ? AND audience = ?').run(p.wid, aud); applyPlan(p.wid, profileOf(w), { audience: aud }); });
   send(res, 200, { ok: true });
 });
 
-// Zusagen
+// Zusagen & Gästeliste
 const MENUS = ['', 'fleisch', 'fisch', 'vegetarisch', 'vegan', 'kind'];
+const eventOut = e => ({ id: e.id, key: e.key, title: e.title, date: e.date, time: e.time, location: e.location, address: e.address, scope: e.scope, kind: e.kind, note: e.note, custom_date: !!e.custom_date, offset: e.offset_days });
+const invitesOf = gid => db.prepare('SELECT i.*, e.title, e.date, e.time, e.location, e.address, e.key FROM invites i JOIN events e ON e.id = i.event_id WHERE i.guest_id = ? ORDER BY e.date, e.time').all(gid);
+const inviteOut = i => ({ event_id: i.event_id, key: i.key, title: i.title, date: i.date, time: i.time, location: i.location, address: i.address, status: i.status, persons: i.persons, menu: i.menu, allergies: i.allergies, song: i.song, message: i.message, updated_at: i.updated_at });
+
+// Antworten speichern: entweder answers[] je Feier oder (älteres Format) eine Antwort für alle Einladungen
+function saveAnswers(guest, body) {
+  const inv = invitesOf(guest.id); if (!inv.length) fail(400, 'Ihr seid zu keiner Feier eingeladen.');
+  const max = Math.max(1, guest.adults + guest.kids);
+  const common = { allergies: str(body.allergies, 300, 'Allergien'), song: str(body.song, 150, 'Musikwunsch'), message: str(body.message, 1000, 'Nachricht'), menu: MENUS.includes(body.menu) ? body.menu : undefined };
+  const answers = Array.isArray(body.answers) ? body.answers : inv.map(i => ({ event_id: i.event_id, status: body.status, persons: body.persons }));
+  let n = 0;
+  for (const a of answers) {
+    const i = inv.find(x => x.event_id === Number(a.event_id)); if (!i) continue;
+    if (!['zusage', 'absage'].includes(a.status)) fail(400, 'Bitte zu- oder absagen.');
+    const persons = Number.isInteger(a.persons) && a.persons >= 1 ? Math.min(a.persons, Math.max(max, 10)) : i.persons || 1;
+    db.prepare(`UPDATE invites SET status = ?, persons = ?, menu = COALESCE(?, menu), allergies = COALESCE(?, allergies), song = COALESCE(?, song), message = COALESCE(?, message), updated_at = datetime('now') WHERE guest_id = ? AND event_id = ?`)
+      .run(a.status, persons, MENUS.includes(a.menu) ? a.menu : common.menu ?? null, common.allergies ?? null, common.song ?? null, common.message ?? null, guest.id, i.event_id);
+    n++;
+  }
+  if (!n) fail(400, 'Keine passende Einladung gefunden.');
+}
+function myGuest(user, wid) {
+  ensureBaseEvent(wid);
+  const id = linkGuest(wid, user.id, user.name, user.email);
+  return db.prepare('SELECT * FROM guests WHERE id = ?').get(id);
+}
 route('GET', '/api/w/:wid/rsvp', async (req, res, _b, p) => {
   const user = needUser(req); membership(user, p.wid, ['gast']);
-  db.prepare('INSERT OR IGNORE INTO rsvps (wedding_id, user_id) VALUES (?,?)').run(p.wid, user.id);
-  const r = db.prepare('SELECT status, persons, menu, allergies, song, message, updated_at FROM rsvps WHERE wedding_id = ? AND user_id = ?').get(p.wid, user.id);
-  send(res, 200, { rsvp: r });
+  const g = myGuest(user, p.wid); const inv = invitesOf(g.id).map(inviteOut);
+  const main = inv.find(i => i.key === 'feier') || inv[0] || {};
+  send(res, 200, { rsvp: { status: main.status || 'offen', persons: main.persons || 1, menu: main.menu || '', allergies: main.allergies || '', song: main.song || '', message: main.message || '', updated_at: main.updated_at }, invites: inv, guest: { name: g.name, adults: g.adults, kids: g.kids }, token: g.token });
 });
-
 route('PUT', '/api/w/:wid/rsvp', async (req, res, body, p) => {
   const user = needUser(req); membership(user, p.wid, ['gast']);
-  if (!['zusage', 'absage'].includes(body.status)) fail(400, 'Bitte zu- oder absagen.');
-  const persons = Number.isInteger(body.persons) && body.persons >= 1 && body.persons <= 10 ? body.persons : 1;
-  const menu = MENUS.includes(body.menu) ? body.menu : '';
-  const vals = [body.status, persons, menu, str(body.allergies, 300, 'Allergien') || '', str(body.song, 150, 'Musikwunsch') || '', str(body.message, 1000, 'Nachricht') || ''];
-  db.prepare(`INSERT INTO rsvps (wedding_id, user_id, status, persons, menu, allergies, song, message, updated_at) VALUES (?,?,?,?,?,?,?,?,datetime('now'))
-    ON CONFLICT(wedding_id, user_id) DO UPDATE SET status=excluded.status, persons=excluded.persons, menu=excluded.menu, allergies=excluded.allergies, song=excluded.song, message=excluded.message, updated_at=excluded.updated_at`)
-    .run(p.wid, user.id, ...vals);
+  saveAnswers(myGuest(user, p.wid), body);
   send(res, 200, { ok: true });
 });
 
+// Persönlicher Zusage-Link ohne Konto
+function guestByToken(req, token) {
+  rateLimit(req);
+  const g = typeof token === 'string' && /^[\w-]{8,40}$/.test(token) && db.prepare('SELECT * FROM guests WHERE token = ?').get(token);
+  if (!g) { countAttempt(req); fail(404, 'Dieser Link ist ungültig. Bitte fragt beim Brautpaar nach.'); }
+  return g;
+}
+route('GET', '/api/rsvp/:token', async (req, res, _b, p) => {
+  const g = guestByToken(req, p.token); const w = weddingRow(g.wedding_id); const pr = profileOf(w);
+  const seat = seatOf(g.wedding_id, `g${g.id}`);
+  send(res, 200, { wedding: { name1: w.name1, name2: w.name2, date: w.date, rsvp_until: w.rsvp_until, dresscode: w.dresscode, info: w.info, options: pr.options, langs: pr.langs }, guest: { name: g.name, salutation: g.salutation, adults: g.adults, kids: g.kids }, invites: invitesOf(g.id).map(inviteOut), seat });
+});
+route('PUT', '/api/rsvp/:token', async (req, res, body, p) => {
+  const g = guestByToken(req, p.token); saveAnswers(g, body); send(res, 200, { ok: true });
+});
+
+const guestOut = (g, inv, role) => {
+  const main = inv.find(i => i.key === 'feier') || inv[0];
+  return { id: g.id, name: g.name, salutation: g.salutation, grp: g.grp, side: g.side, gender: g.gender, adults: g.adults, kids: g.kids,
+    email: role === 'paar' ? g.email : '', phone: role === 'paar' ? g.phone : '', address: role === 'paar' ? g.address : '', lang: g.lang, notes: role === 'paar' ? g.notes : '', has_app: !!g.user_id,
+    token: role === 'paar' ? g.token : undefined,
+    status: main?.status || 'offen', persons: main?.status === 'zusage' ? main.persons : g.adults + g.kids, menu: main?.menu || '', allergies: main?.allergies || '', song: main?.song || '', message: role === 'paar' ? main?.message || '' : '', updated_at: main?.updated_at,
+    invites: inv.map(i => ({ event_id: i.event_id, status: i.status, persons: i.persons })) };
+};
 route('GET', '/api/w/:wid/guests', async (req, res, _b, p) => {
   const user = needUser(req); const m = membership(user, p.wid, ['paar', 'trauzeuge']);
-  const rows = db.prepare(`SELECT u.id, u.name, r.status, r.persons, r.menu, r.allergies, r.song, r.message, r.updated_at
-    FROM members mb JOIN users u ON u.id = mb.user_id LEFT JOIN rsvps r ON r.wedding_id = mb.wedding_id AND r.user_id = mb.user_id
-    WHERE mb.wedding_id = ? AND mb.role = 'gast' ORDER BY u.name COLLATE NOCASE`).all(p.wid);
-  const guests = rows.map(r => ({ ...r, status: r.status || 'offen', persons: r.persons || 1, message: m.role === 'paar' ? r.message : '' }));
-  const yes = guests.filter(g => g.status === 'zusage');
-  const stats = {
-    eingeladen: guests.length, zusage: yes.length, absage: guests.filter(g => g.status === 'absage').length, offen: guests.filter(g => g.status === 'offen').length,
-    personen: yes.reduce((s, g) => s + g.persons, 0),
-    menus: yes.reduce((o, g) => { if (g.menu) o[g.menu] = (o[g.menu] || 0) + g.persons; return o; }, {}),
-  };
+  ensureBaseEvent(p.wid);
+  const events = eventsOf(p.wid);
+  const allInv = db.prepare('SELECT i.*, e.key FROM invites i JOIN events e ON e.id = i.event_id JOIN guests g ON g.id = i.guest_id WHERE g.wedding_id = ?').all(p.wid);
+  const byGuest = new Map(); for (const i of allInv) { if (!byGuest.has(i.guest_id)) byGuest.set(i.guest_id, []); byGuest.get(i.guest_id).push(i); }
+  const guests = db.prepare('SELECT * FROM guests WHERE wedding_id = ? ORDER BY name COLLATE NOCASE').all(p.wid).map(g => guestOut(g, byGuest.get(g.id) || [], m.role));
+  const perEvent = events.map(e => {
+    const inv = allInv.filter(i => i.event_id === e.id); const yes = inv.filter(i => i.status === 'zusage');
+    return { event_id: e.id, title: e.title, eingeladen: inv.length, zusage: yes.length, absage: inv.filter(i => i.status === 'absage').length, offen: inv.filter(i => i.status === 'offen').length, personen: yes.reduce((s, i) => s + i.persons, 0),
+      menus: yes.reduce((o, i) => { if (i.menu) o[i.menu] = (o[i.menu] || 0) + i.persons; return o; }, {}) };
+  });
+  const main = perEvent.find(x => x.event_id === mainEvent(p.wid)?.id) || perEvent[0] || { eingeladen: 0, zusage: 0, absage: 0, offen: 0, personen: 0, menus: {} };
   const team = db.prepare(`SELECT u.id, u.name, mb.role FROM members mb JOIN users u ON u.id = mb.user_id WHERE mb.wedding_id = ? AND mb.role != 'gast' ORDER BY mb.role, u.name`).all(p.wid);
-  send(res, 200, { guests, stats, team });
+  send(res, 200, { guests, stats: main, perEvent, events: events.map(eventOut), team });
+});
+
+const GUEST_FIELDS = [['name', 80], ['salutation', 120], ['grp', 40], ['side', 20], ['gender', 2], ['email', 120], ['phone', 40], ['address', 300], ['lang', 3], ['notes', 500]];
+function guestData(body, partial) {
+  const d = {};
+  for (const [k, max] of GUEST_FIELDS) { const v = str(body[k], max, k); if (v !== undefined) d[k] = v; }
+  if (!partial && !d.name) fail(400, 'Bitte einen Namen eingeben.');
+  if (d.name !== undefined && !d.name) fail(400, 'Der Name darf nicht leer sein.');
+  if (d.gender !== undefined && !['', 'w', 'm'].includes(d.gender)) d.gender = '';
+  for (const k of ['adults', 'kids']) if (body[k] !== undefined) { const n = parseInt(body[k]); if (!(n >= 0 && n <= 30)) fail(400, 'Ungültige Personenzahl.'); d[k] = n; }
+  if (!partial && d.adults === undefined) d.adults = 1;
+  if (d.adults === 0 && !(d.kids > 0)) d.adults = 1;
+  return d;
+}
+function insertGuest(wid, d) {
+  const keys = Object.keys(d);
+  const r = db.prepare(`INSERT INTO guests (wedding_id, token, ${keys.join(', ')}) VALUES (?, ?, ${keys.map(() => '?').join(', ')})`).run(wid, rid(12), ...keys.map(k => d[k]));
+  inviteByScope(Number(r.lastInsertRowid)); return Number(r.lastInsertRowid);
+}
+route('POST', '/api/w/:wid/guests', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']); ensureBaseEvent(p.wid);
+  const id = tx(() => insertGuest(p.wid, guestData(body, false)));
+  send(res, 201, { id });
+});
+// Schnellerfassung: eine Zeile pro Gast. „Name; Personen; Gruppe; E-Mail; Adresse“ (Trenner ; , oder Tab)
+route('POST', '/api/w/:wid/guests/import', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']); ensureBaseEvent(p.wid);
+  const text = str(body.text, 100_000, 'Liste', { required: true });
+  const grpDefault = str(body.grp, 40, 'Gruppe') || '';
+  let n = 0;
+  tx(() => {
+    for (const parts0 of parseRows(text)) {
+      const line = parts0.join(';').trim(); if (!line.replace(/;/g, '')) continue;
+      const parts = parts0.length > 1 ? parts0.map(x => x.trim()) : line.split(/\t|;/).map(x => x.trim());
+      const cols = parts.length > 1 ? parts : line.split(/,(?=\s*\d|\s*[^,]*@)/).map(x => x.trim());
+      const [name, pers, grp, email, ...addr] = cols;
+      if (!name || /^name$/i.test(name)) continue;
+      const total = parseInt(pers) || 1;
+      insertGuest(p.wid, guestData({ name, adults: Math.max(1, total), grp: grp || grpDefault, email: /@/.test(email || '') ? email : '', address: addr.join(', ') }, false));
+      if (++n > 1500) fail(400, 'Bitte höchstens 1.500 Gäste auf einmal.');
+    }
+  });
+  send(res, 201, { imported: n });
+});
+// Zeilen aus Excel/Google Tabellen: Tab oder Semikolon, Zellen in "…" dürfen Zeilenumbrüche enthalten
+function parseRows(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; continue; }
+    if (c === '"' && cell === '') q = true;
+    else if (c === '\t' || c === ';') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += c;
+  }
+  row.push(cell); rows.push(row);
+  return rows.map(r => r.map(x => x.replace(/\s*\n\s*/g, ', ').trim())).filter(r => r.some(Boolean));
+}
+function ownGuest(req, id) {
+  const user = needUser(req);
+  const g = db.prepare('SELECT * FROM guests WHERE id = ?').get(Number(id)) || fail(404, 'Gast nicht gefunden.');
+  membership(user, g.wedding_id, ['paar']); return g;
+}
+route('PATCH', '/api/guests/:id', async (req, res, body, p) => {
+  const g = ownGuest(req, p.id); const d = guestData(body, true); const keys = Object.keys(d);
+  tx(() => {
+    if (keys.length) db.prepare(`UPDATE guests SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => d[k]), g.id);
+    if (body.invites && typeof body.invites === 'object') for (const [eid, on] of Object.entries(body.invites)) {
+      const e = db.prepare('SELECT id FROM events WHERE id = ? AND wedding_id = ?').get(Number(eid), g.wedding_id); if (!e) continue;
+      if (on) db.prepare('INSERT OR IGNORE INTO invites (guest_id, event_id, persons) VALUES (?,?,?)').run(g.id, e.id, (d.adults ?? g.adults) + (d.kids ?? g.kids));
+      else db.prepare('DELETE FROM invites WHERE guest_id = ? AND event_id = ?').run(g.id, e.id);
+    }
+    if (body.status && ['offen', 'zusage', 'absage'].includes(body.status)) db.prepare("UPDATE invites SET status = ?, updated_at = datetime('now') WHERE guest_id = ? AND event_id = COALESCE(?, event_id)").run(body.status, g.id, body.event_id ? Number(body.event_id) : null);
+  });
+  send(res, 200, { ok: true });
+});
+route('DELETE', '/api/guests/:id', async (req, res, _b, p) => {
+  const g = ownGuest(req, p.id);
+  db.prepare('DELETE FROM guests WHERE id = ?').run(g.id);
+  send(res, 200, { ok: true });
+});
+
+// Feiern
+route('POST', '/api/w/:wid/events', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  if (!isDate(body.date)) fail(400, 'Bitte ein Datum wählen.');
+  const r = db.prepare('INSERT INTO events (wedding_id, key, title, date, time, location, address, custom_date, scope, kind) VALUES (?,?,?,?,?,?,?,1,?,?)')
+    .run(p.wid, 'eigene_' + rid(4), str(body.title, 80, 'Titel', { required: true }), body.date, isTime(body.time) ? body.time : '18:00', str(body.location, 120, 'Ort') || '', str(body.address, 200, 'Adresse') || '', ['alle', 'familie', 'frauen', 'klein'].includes(body.scope) ? body.scope : 'alle', 'party');
+  const id = Number(r.lastInsertRowid);
+  for (const g of db.prepare('SELECT * FROM guests WHERE wedding_id = ?').all(p.wid)) if (inScope(g, body.scope || 'alle')) db.prepare('INSERT OR IGNORE INTO invites (guest_id, event_id, persons) VALUES (?,?,?)').run(g.id, id, g.adults + g.kids);
+  send(res, 201, { id });
+});
+function ownEvent(req, id) {
+  const user = needUser(req);
+  const e = db.prepare('SELECT * FROM events WHERE id = ?').get(Number(id)) || fail(404, 'Feier nicht gefunden.');
+  membership(user, e.wedding_id, ['paar']); return e;
+}
+route('PATCH', '/api/events/:id', async (req, res, body, p) => {
+  const e = ownEvent(req, p.id); const upd = {};
+  for (const [k, max] of [['title', 80], ['location', 120], ['address', 200], ['note', 1000]]) { const v = str(body[k], max, k); if (v !== undefined) upd[k] = v; }
+  if (upd.title === '') fail(400, 'Der Titel darf nicht leer sein.');
+  if (body.time !== undefined) { if (!isTime(body.time)) fail(400, 'Ungültige Uhrzeit.'); upd.time = body.time; }
+  if (body.scope !== undefined && ['alle', 'familie', 'frauen', 'klein'].includes(body.scope)) upd.scope = body.scope;
+  let moved = 0;
+  tx(() => {
+    if (body.date !== undefined && body.date !== e.date) {
+      if (!isDate(body.date)) fail(400, 'Ungültiges Datum.');
+      if (e.key === 'feier') { db.prepare('UPDATE weddings SET date = ? WHERE id = ?').run(body.date, e.wedding_id); }
+      else { upd.date = body.date; upd.custom_date = 1; }
+    }
+    const keys = Object.keys(upd);
+    if (keys.length) db.prepare(`UPDATE events SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => upd[k]), e.id);
+    if (e.key === 'feier') for (const k of ['time', 'location', 'address']) if (upd[k] !== undefined) db.prepare(`UPDATE weddings SET ${k} = ? WHERE id = ?`).run(upd[k], e.wedding_id);
+    moved = recomputeDates(e.wedding_id);
+  });
+  send(res, 200, { ok: true, moved });
+});
+route('DELETE', '/api/events/:id', async (req, res, _b, p) => {
+  const e = ownEvent(req, p.id);
+  if (e.key === 'feier') fail(400, 'Die Hauptfeier kann nicht gelöscht werden.');
+  tx(() => { db.prepare('UPDATE tasks SET event_id = NULL, offset_days = NULL, custom_due = 1 WHERE event_id = ? AND done = 0').run(e.id); db.prepare('DELETE FROM events WHERE id = ?').run(e.id); });
+  send(res, 200, { ok: true });
+});
+
+// Profil (Traditionen, Optionen, Sprachen) ändern: fehlende Feiern, Aufgaben, Posten werden ergänzt
+route('PATCH', '/api/w/:wid/profile', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  const w = weddingRow(p.wid); const cur = profileOf(w);
+  const next = normalizeProfile({ ...cur, ...body, options: { ...cur.options, ...(body.options || {}) }, print: { ...cur.print, ...(body.print || {}) } });
+  if (JSON.stringify(next.print).length > 20_000) fail(413, 'Zu viel Text für die Drucksachen.');
+  let plan; tx(() => { plan = applyPlan(p.wid, next); });
+  send(res, 200, { ok: true, warnings: [...plan.warnings, ...dateWarnings(w.date, next.traditions)] });
+});
+route('GET', '/api/catalog', async (req, res) => send(res, 200, catalog()));
+route('POST', '/api/plan-preview', async (req, res, body) => {
+  needUser(req);
+  const plan = buildPlan(body.profile || {});
+  const date = isDate(body.date) ? body.date : null;
+  send(res, 200, { events: plan.events.map(e => ({ key: e.key, title: e.title, date: date ? addDays(date, e.offset) : null, time: e.time, scope: e.scope })).sort((a, b) => (a.date || '').localeCompare(b.date || '') || a.time.localeCompare(b.time)),
+    tasks: plan.tasks.filter(t => t.aud === 'paar').length, witnessTasks: plan.tasks.filter(t => t.aud === 'trauzeuge').length, vendors: plan.vendors.length, budget: plan.total, estimate: estimateBudget(plan.profile.guests),
+    warnings: [...plan.warnings, ...(date ? dateWarnings(date, plan.profile.traditions) : [])] });
+});
+
+// Budget & Dienstleister
+const vendorOut = v => ({ ...v, label: VENDOR_CATS[v.cat] || v.cat, deposit_paid: !!v.deposit_paid, rest_paid: !!v.rest_paid });
+function paymentsOf(wid) {
+  const out = [];
+  for (const v of db.prepare("SELECT * FROM vendors WHERE wedding_id = ? AND status = 'gebucht'").all(wid)) {
+    const name = v.name || VENDOR_CATS[v.cat] || v.cat;
+    if (v.deposit > 0 && v.deposit_due) out.push({ vendor_id: v.id, kind: 'deposit', title: `Anzahlung ${name}`, amount: v.deposit, due: v.deposit_due, paid: !!v.deposit_paid });
+    const rest = Math.max(0, v.price - v.deposit);
+    if (rest > 0 && v.rest_due) out.push({ vendor_id: v.id, kind: 'rest', title: `Restzahlung ${name}`, amount: rest, due: v.rest_due, paid: !!v.rest_paid });
+  }
+  return out.sort((a, b) => a.due.localeCompare(b.due));
+}
+function budgetOf(wid) {
+  const vendors = db.prepare('SELECT * FROM vendors WHERE wedding_id = ?').all(wid);
+  const items = db.prepare('SELECT * FROM budget WHERE wedding_id = ? ORDER BY sort, id').all(wid).map(b => {
+    const vs = vendors.filter(v => v.cat === b.cat && v.status === 'gebucht');
+    const vActual = vs.reduce((s, v) => s + v.price, 0), vPaid = vs.reduce((s, v) => s + (v.deposit_paid ? v.deposit : 0) + (v.rest_paid ? Math.max(0, v.price - v.deposit) : 0), 0);
+    return { id: b.id, cat: b.cat, label: b.label, planned: b.planned, actual: b.actual ?? (vs.length ? vActual : null), manual_actual: b.actual, paid: b.paid + vPaid, per_guest: !!b.per_guest, vendors: vs.length };
+  });
+  // Gebuchte Dienstleister ohne passenden Budgetposten trotzdem zählen
+  const known = new Set(items.map(i => i.cat));
+  for (const v of vendors.filter(v => v.status === 'gebucht' && !known.has(v.cat))) items.push({ id: null, cat: v.cat, label: VENDOR_CATS[v.cat] || v.cat, planned: 0, actual: v.price, paid: (v.deposit_paid ? v.deposit : 0) + (v.rest_paid ? Math.max(0, v.price - v.deposit) : 0), vendors: 1 });
+  const sum = k => items.reduce((s, i) => s + (i[k] || 0), 0);
+  return { total: profileOf(weddingRow(wid)).budget, planned: sum('planned'), actual: items.reduce((s, i) => s + (i.actual ?? i.planned), 0), paid: sum('paid'), items, payments: paymentsOf(wid) };
+}
+route('GET', '/api/w/:wid/budget', async (req, res, _b, p) => { const user = needUser(req); membership(user, p.wid, ['paar']); send(res, 200, budgetOf(p.wid)); });
+route('POST', '/api/w/:wid/budget', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  const r = db.prepare('INSERT INTO budget (wedding_id, cat, label, planned, sort) VALUES (?,?,?,?,999)').run(p.wid, 'eigen_' + rid(3), str(body.label, 80, 'Posten', { required: true }), Math.max(0, Number(body.planned) || 0));
+  send(res, 201, { id: Number(r.lastInsertRowid) });
+});
+route('PATCH', '/api/w/:wid/budget-total', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  const total = Math.max(0, Math.min(10_000_000, Number(body.total) || 0)); if (!total) fail(400, 'Bitte ein Budget eingeben.');
+  const w = weddingRow(p.wid); const pr = profileOf(w); const cur = db.prepare('SELECT SUM(planned) s FROM budget WHERE wedding_id = ?').get(p.wid).s || 0;
+  tx(() => {
+    if (body.rescale && cur > 0) for (const b of db.prepare('SELECT id, planned FROM budget WHERE wedding_id = ?').all(p.wid)) db.prepare('UPDATE budget SET planned = ? WHERE id = ?').run(Math.round(b.planned * total / cur / 10) * 10, b.id);
+    db.prepare('UPDATE weddings SET profile = ? WHERE id = ?').run(JSON.stringify({ ...pr, budget: total }), p.wid);
+  });
+  send(res, 200, budgetOf(p.wid));
+});
+function ownRow(req, table, id) {
+  const user = needUser(req);
+  const r = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(Number(id)) || fail(404, 'Eintrag nicht gefunden.');
+  membership(user, r.wedding_id, ['paar']); return r;
+}
+const money = v => { const n = Number(v); if (!(n >= 0 && n <= 10_000_000)) fail(400, 'Ungültiger Betrag.'); return Math.round(n * 100) / 100; };
+route('PATCH', '/api/budget/:id', async (req, res, body, p) => {
+  const b = ownRow(req, 'budget', p.id); const upd = {};
+  if (body.label !== undefined) upd.label = str(body.label, 80, 'Posten') || b.label;
+  if (body.planned !== undefined) upd.planned = money(body.planned);
+  if (body.actual !== undefined) upd.actual = body.actual === null || body.actual === '' ? null : money(body.actual);
+  if (body.paid !== undefined) upd.paid = money(body.paid);
+  const keys = Object.keys(upd); if (keys.length) db.prepare(`UPDATE budget SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => upd[k]), b.id);
+  send(res, 200, { ok: true });
+});
+route('DELETE', '/api/budget/:id', async (req, res, _b, p) => { const b = ownRow(req, 'budget', p.id); db.prepare('DELETE FROM budget WHERE id = ?').run(b.id); send(res, 200, { ok: true }); });
+
+route('GET', '/api/w/:wid/vendors', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  send(res, 200, { vendors: db.prepare('SELECT * FROM vendors WHERE wedding_id = ? ORDER BY id').all(p.wid).map(vendorOut), cats: VENDOR_CATS });
+});
+route('POST', '/api/w/:wid/vendors', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  const cat = VENDOR_CATS[body.cat] ? body.cat : fail(400, 'Bitte eine Kategorie wählen.');
+  const r = db.prepare('INSERT INTO vendors (wedding_id, cat, name) VALUES (?,?,?)').run(p.wid, cat, str(body.name, 100, 'Name') || '');
+  send(res, 201, { id: Number(r.lastInsertRowid) });
+});
+route('PATCH', '/api/vendors/:id', async (req, res, body, p) => {
+  const v = ownRow(req, 'vendors', p.id); const upd = {};
+  for (const [k, max] of [['name', 100], ['contact', 100], ['phone', 40], ['email', 120], ['website', 200], ['notes', 2000]]) { const x = str(body[k], max, k); if (x !== undefined) upd[k] = x; }
+  if (body.status !== undefined) { if (!['offen', 'angefragt', 'angebot', 'gebucht', 'abgesagt'].includes(body.status)) fail(400, 'Ungültiger Status.'); upd.status = body.status; }
+  for (const k of ['price', 'deposit']) if (body[k] !== undefined) upd[k] = money(body[k]);
+  for (const k of ['deposit_due', 'rest_due']) if (body[k] !== undefined) { if (body[k] !== '' && !isDate(body[k])) fail(400, 'Ungültiges Datum.'); upd[k] = body[k]; }
+  for (const k of ['deposit_paid', 'rest_paid']) if (body[k] !== undefined) upd[k] = body[k] ? 1 : 0;
+  tx(() => {
+    const keys = Object.keys(upd); if (keys.length) db.prepare(`UPDATE vendors SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => upd[k]), v.id);
+    // Verknüpfung: gebucht → „Buchen“-Aufgaben dieser Kategorie erledigt
+    if (upd.status === 'gebucht') db.prepare("UPDATE tasks SET done = 1 WHERE wedding_id = ? AND audience = 'paar' AND vendor_cat = ? AND book = 1").run(v.wedding_id, v.cat);
+  });
+  send(res, 200, { vendor: vendorOut(db.prepare('SELECT * FROM vendors WHERE id = ?').get(v.id)) });
+});
+route('DELETE', '/api/vendors/:id', async (req, res, _b, p) => { const v = ownRow(req, 'vendors', p.id); db.prepare('DELETE FROM vendors WHERE id = ?').run(v.id); send(res, 200, { ok: true }); });
+
+// Geschenke → Danksagungen
+const GIFT_KINDS = ['geld', 'gold', 'sache', 'gutschein', 'erlebnis'];
+route('GET', '/api/w/:wid/gifts', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  send(res, 200, { gifts: db.prepare('SELECT gi.*, g.name AS guest_name, g.salutation, g.address FROM gifts gi LEFT JOIN guests g ON g.id = gi.guest_id WHERE gi.wedding_id = ? ORDER BY gi.id DESC').all(p.wid).map(x => ({ ...x, thanked: !!x.thanked })) });
+});
+function giftData(body, wid) {
+  const d = {};
+  if (body.guest_id !== undefined) { const gid = body.guest_id ? Number(body.guest_id) : null; if (gid && !db.prepare('SELECT 1 FROM guests WHERE id = ? AND wedding_id = ?').get(gid, wid)) fail(400, 'Gast nicht gefunden.'); d.guest_id = gid; }
+  for (const [k, max] of [['from_name', 100], ['description', 300]]) { const v = str(body[k], max, k); if (v !== undefined) d[k] = v; }
+  if (body.kind !== undefined) d.kind = GIFT_KINDS.includes(body.kind) ? body.kind : 'sache';
+  if (body.amount !== undefined) d.amount = money(body.amount || 0);
+  if (body.thanked !== undefined) d.thanked = body.thanked ? 1 : 0;
+  return d;
+}
+route('POST', '/api/w/:wid/gifts', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  const d = giftData(body, p.wid); if (!d.guest_id && !d.from_name) fail(400, 'Von wem ist das Geschenk?');
+  const keys = Object.keys(d);
+  const r = db.prepare(`INSERT INTO gifts (wedding_id, ${keys.join(', ')}) VALUES (?, ${keys.map(() => '?').join(', ')})`).run(p.wid, ...keys.map(k => d[k]));
+  send(res, 201, { id: Number(r.lastInsertRowid) });
+});
+route('PATCH', '/api/gifts/:id', async (req, res, body, p) => {
+  const g = ownRow(req, 'gifts', p.id); const d = giftData(body, g.wedding_id); const keys = Object.keys(d);
+  if (keys.length) db.prepare(`UPDATE gifts SET ${keys.map(k => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map(k => d[k]), g.id);
+  send(res, 200, { ok: true });
+});
+route('DELETE', '/api/gifts/:id', async (req, res, _b, p) => { const g = ownRow(req, 'gifts', p.id); db.prepare('DELETE FROM gifts WHERE id = ?').run(g.id); send(res, 200, { ok: true }); });
+
+// Cockpit: alles Wichtige auf einen Blick, verknüpft über alle Bereiche
+route('GET', '/api/w/:wid/overview', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']); ensureBaseEvent(p.wid);
+  const tasks = db.prepare("SELECT * FROM tasks WHERE wedding_id = ? AND audience = 'paar' ORDER BY due, id").all(p.wid);
+  const vendors = db.prepare('SELECT status FROM vendors WHERE wedding_id = ?').all(p.wid);
+  const guests = db.prepare('SELECT adults, kids, address, email FROM guests WHERE wedding_id = ?').all(p.wid);
+  const gifts = db.prepare('SELECT thanked FROM gifts WHERE wedding_id = ?').all(p.wid);
+  const seating = seatingRow(p.wid); const sd = seating ? JSON.parse(seating.data) : null;
+  const seats = (sd?.items || []).filter(i => i.kind === 'table');
+  const b = budgetOf(p.wid);
+  send(res, 200, {
+    tasks: { total: tasks.length, done: tasks.filter(t => t.done).length, next: tasks.filter(t => !t.done).slice(0, 5).map(taskOut) },
+    vendors: { total: vendors.filter(v => v.status !== 'abgesagt').length, booked: vendors.filter(v => v.status === 'gebucht').length },
+    guests: { entries: guests.length, persons: guests.reduce((s, g) => s + g.adults + g.kids, 0), withAddress: guests.filter(g => g.address).length },
+    budget: { total: b.total, planned: b.planned, actual: b.actual, paid: b.paid, nextPayments: b.payments.filter(x => !x.paid).slice(0, 3) },
+    seating: { tables: seats.length, seats: seats.reduce((s, t) => s + (t.seats || 0), 0), assigned: seats.reduce((s, t) => s + (t.guests || []).filter(Boolean).length, 0) },
+    gifts: { total: gifts.length, thanked: gifts.filter(g => g.thanked).length },
+  });
 });
 
 // Tagesablauf
 route('GET', '/api/w/:wid/schedule', async (req, res, _b, p) => {
-  const user = needUser(req); membership(user, p.wid);
-  send(res, 200, { items: db.prepare('SELECT id, time, title, place FROM schedule WHERE wedding_id = ? ORDER BY time, id').all(p.wid) });
+  const user = needUser(req); const m = membership(user, p.wid); ensureBaseEvent(p.wid);
+  let items = db.prepare('SELECT id, time, title, place, event_id FROM schedule WHERE wedding_id = ? ORDER BY time, id').all(p.wid);
+  const main = mainEvent(p.wid); items.forEach(i => { if (!i.event_id) i.event_id = main.id; });
+  if (m.role === 'gast') { const g = myGuest(user, p.wid); const inv = new Set(db.prepare('SELECT event_id FROM invites WHERE guest_id = ?').all(g.id).map(i => i.event_id)); items = items.filter(i => inv.has(i.event_id)); }
+  send(res, 200, { items });
 });
 route('POST', '/api/w/:wid/schedule', async (req, res, body, p) => {
   const user = needUser(req); membership(user, p.wid, ['paar']);
   if (!isTime(body.time)) fail(400, 'Bitte eine Uhrzeit wählen.');
-  const r = db.prepare('INSERT INTO schedule (wedding_id, time, title, place) VALUES (?,?,?,?)').run(p.wid, body.time, str(body.title, 100, 'Programmpunkt', { required: true }), str(body.place, 120, 'Ort') || '');
+  ensureBaseEvent(p.wid);
+  const ev = body.event_id ? db.prepare('SELECT id FROM events WHERE id = ? AND wedding_id = ?').get(Number(body.event_id), p.wid) : mainEvent(p.wid);
+  if (!ev) fail(400, 'Feier nicht gefunden.');
+  const r = db.prepare('INSERT INTO schedule (wedding_id, time, title, place, event_id) VALUES (?,?,?,?,?)').run(p.wid, body.time, str(body.title, 100, 'Programmpunkt', { required: true }), str(body.place, 120, 'Ort') || '', ev.id);
   send(res, 201, { id: Number(r.lastInsertRowid) });
 });
 function ownScheduleItem(req, id) {
@@ -413,15 +842,18 @@ route('GET', '/api/w/:wid/floorplan', async (req, res, _b, p) => {
 });
 
 // Gäste sehen nur ihren eigenen Tisch
-route('GET', '/api/w/:wid/my-seat', async (req, res, _b, p) => {
-  const user = needUser(req); membership(user, p.wid);
-  const row = seatingRow(p.wid); const data = row ? JSON.parse(row.data) : null;
-  const key = `u${user.id}`;
+function seatOf(wid, key) {
+  const row = seatingRow(wid); const data = row ? JSON.parse(row.data) : null;
   for (const it of data?.items || []) {
     const i = (it.guests || []).findIndex(g => g === key);
-    if (i >= 0) return send(res, 200, { table: String(it.name || 'Tisch').slice(0, 60), seat: i + 1, neighbours: (it.guests || []).filter(Boolean).length - 1 });
+    if (i >= 0) return { table: String(it.name || 'Tisch').slice(0, 60), seat: i + 1, neighbours: (it.guests || []).filter(Boolean).length - 1 };
   }
-  send(res, 200, { table: null });
+  return { table: null };
+}
+route('GET', '/api/w/:wid/my-seat', async (req, res, _b, p) => {
+  const user = needUser(req); const m = membership(user, p.wid);
+  const key = m.role === 'gast' ? `g${myGuest(user, p.wid).id}` : `u${user.id}`;
+  send(res, 200, seatOf(p.wid, key));
 });
 
 /* ---------------- Kalender-Abo (ICS) ---------------- */
@@ -446,12 +878,22 @@ async function calendar(req, res, token) {
         'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(t.title)}`, 'TRIGGER:-PT15H', 'END:VALARM', 'END:VEVENT');
     }
   }
-  const start = `${ymd(w.date)}T${w.time.replace(':', '')}00`;
-  const endD = new Date(`${w.date}T${w.time}:00Z`); endD.setUTCHours(endD.getUTCHours() + 10);
-  const end = endD.toISOString().slice(0, 19).replace(/[-:]/g, '');
-  L.push('BEGIN:VEVENT', `UID:wedding-${w.id}@weddify`, `DTSTAMP:${stamp}`, `DTSTART:${start}`, `DTEND:${end}`, `SUMMARY:${icsEsc(`Hochzeit ${couple}`)}`,
-    `LOCATION:${icsEsc([w.location, w.address].filter(Boolean).join(', '))}`, `DESCRIPTION:${icsEsc(w.dresscode ? 'Dresscode: ' + w.dresscode : '')}`,
-    'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Morgen ist der große Tag', 'TRIGGER:-P1D', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR');
+  if (m.role === 'paar') for (const pay of paymentsOf(w.id).filter(x => !x.paid)) {
+    L.push('BEGIN:VEVENT', `UID:pay-${pay.vendor_id}-${pay.kind}@weddify`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${ymd(pay.due)}`, `DTEND;VALUE=DATE:${ymd(addDays(pay.due, 1))}`,
+      `SUMMARY:${icsEsc(`€ ${pay.title}: ${pay.amount.toLocaleString('de-DE')} €`)}`, 'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(pay.title)}`, 'TRIGGER:-P3D', 'END:VALARM', 'END:VEVENT');
+  }
+  ensureBaseEvent(w.id);
+  let evs = eventsOf(w.id);
+  if (m.role === 'gast') { const g = db.prepare('SELECT id FROM guests WHERE wedding_id = ? AND user_id = ?').get(w.id, m.user_id); const inv = new Set(g ? db.prepare('SELECT event_id FROM invites WHERE guest_id = ?').all(g.id).map(i => i.event_id) : []); evs = evs.filter(e => inv.has(e.id)); }
+  for (const e of evs) {
+    const start = `${ymd(e.date)}T${e.time.replace(':', '')}00`;
+    const endD = new Date(`${e.date}T${e.time}:00Z`); endD.setUTCHours(endD.getUTCHours() + (e.key === 'feier' ? 10 : 3));
+    const end = endD.toISOString().slice(0, 19).replace(/[-:]/g, '');
+    L.push('BEGIN:VEVENT', `UID:event-${e.id}@weddify`, `DTSTAMP:${stamp}`, `DTSTART:${start}`, `DTEND:${end}`, `SUMMARY:${icsEsc(`${e.title} · ${couple}`)}`,
+      `LOCATION:${icsEsc([e.location, e.address].filter(Boolean).join(', '))}`, `DESCRIPTION:${icsEsc(w.dresscode && e.key === 'feier' ? 'Dresscode: ' + w.dresscode : '')}`,
+      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc('Morgen: ' + e.title)}`, 'TRIGGER:-P1D', 'END:VALARM', 'END:VEVENT');
+  }
+  L.push('END:VCALENDAR');
   res.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': 'inline; filename="hochzeit.ics"', 'Cache-Control': 'no-cache' });
   res.end(L.map(fold).join('\r\n') + '\r\n');
 }

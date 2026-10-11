@@ -5,50 +5,70 @@ Läuft auf einem eigenen Server und braucht nur Node.js 22. Es gibt keine extern
 
 ## Was die App kann
 
-| Bereich | Funktionen |
-|---|---|
-| **Brautpaar** | Countdown · Zeitstrahl, der aus dem Hochzeitsdatum automatisch erstellt wird, mit jedem Schritt anpassbar · eigene Schritte hinzufügen · Gästeübersicht mit Zusagen, Menüwünschen, Allergien und Musikwünschen · Tagesablauf pflegen · **Sitzplan-Generator** · Einladungscodes · Kalender-Abo |
-| **Trauzeug:innen** | Eigener Zeitstrahl für JGA, Hochzeitszeitung und Rede, den das Paar nicht sieht · Gästeübersicht · Beiträge der Gäste für die Hochzeitszeitung · Sitzplan ansehen · Ablauf · Kalender-Abo |
-| **Gäste** | Countdown · eigener Tisch und Platz · Zu- oder Absage mit Personenzahl, Menü, Allergien und Musikwunsch · Anfahrt, Dresscode und Hinweise · Tagesablauf · Beitrag zur Hochzeitszeitung · Hochzeitstermin im Kalender |
+**Aus wenigen Angaben ein kompletter, verknüpfter Plan.** Der Assistent fragt nur nach Namen, Datum, Ort, Traditionen, ungefährer Gästezahl, ein paar Optionen und den Sprachen. Daraus entstehen:
 
-### Der Zeitstrahl
-- Beim Anlegen einer Hochzeit entstehen automatisch 29 Schritte für das Paar und 15 für die Trauzeug:innen (Vorlagen in `templates.js`).
-- Jeder Schritt lässt sich bearbeiten (Titel, Datum, Notiz), abhaken, löschen oder durch eigene Schritte ergänzen.
-- Wenn das Hochzeitsdatum geändert wird, wandern alle automatischen Schritte mit. Von Hand verschobene Termine bleiben stehen und lassen sich mit „Automatisches Datum“ zurücksetzen.
-- „Zeitplan neu erstellen“ setzt den Zeitplan auf die Vorlage zurück.
+| Bereich | Inhalt |
+|---|---|
+| **Feiern** | Alle Feiern der gewählten Traditionen mit Datum, Uhrzeit, Gästekreis und Programm, z. B. Standesamt, Henna- bzw. Kına-Abend, Nikah, Kirche, Mehndi, Chuppa, Hauptfeier |
+| **Zeitplan** | Aufgaben je Tradition, bezogen auf die passende Feier, für das Paar und getrennt für die Trauzeug:innen |
+| **Budget** | Gesamtbudget (angegeben oder aus der Gästezahl geschätzt), verteilt auf Posten inklusive traditioneller Kosten |
+| **Dienstleister** | Checkliste passend zu den Traditionen, z. B. Imam, Davul-Zurna, Henna-Künstlerin, Pandit, Rabbiner:in |
+| **Gästeliste** | Einladungen je Feier nach Gästekreis (alle, Familie, nur Frauen) und persönliche Zusage-Links ohne Konto |
+| **Sitzplan** | Grundriss, automatische Tischplanung, Namen pro Stuhl, auf Wunsch getrennte Damen- und Herrenbereiche |
+| **Druckerei** | Save-the-Date, persönliche Einladungen mit QR-Code, Programm bzw. Kirchenheft, Menükarten, Platzkarten, Tischnummern, Sitzplan-Aushang, Willkommensschild, Gastgeschenk-Anhänger, Adressetiketten, Danksagungen. Bis zu 3 Sprachen, auch Arabisch und Persisch von rechts nach links, optional mit Bismillah. 4 Designs. |
+| **Geschenke** | Wer hat was geschenkt (auch Gold/Takı und Geld), daraus entstehen die Danksagungskarten |
+
+### Traditionen (Wissensbasis in `traditions.js`)
+- **Deutschland:** Standesamt, freie Trauung, Polterabend
+- **Christlich:** evangelisch, katholisch, orthodox
+- **Islamisch:** islamisch, arabisch
+- **Türkisch & kurdisch:** türkisch, kurdisch
+- **Europa:** polnisch, italienisch, spanisch, russisch
+- **Weitere Kulturen:** persisch, indisch (Hindu), Sikh, jüdisch, westafrikanisch, chinesisch
+
+Kombinationen sind ausdrücklich vorgesehen (z. B. Standesamt + türkisch + islamisch). Doppelte Aufgaben wie „Location buchen“ werden zusammengeführt.
+
+**Datumswarnungen:**
+- Schabbat bei jüdischen Trauungen
+- Ramadan bei islamischen, türkischen und arabischen Hochzeiten (ungefähre Daten bis 2031)
+- Orthodoxe Fastenzeit im August
+- Fehlendes Standesamt: In Deutschland ist nur die standesamtliche Ehe rechtlich gültig.
+
+Die Inhalte sind Planungshilfen. Religiöse und rechtliche Details unterscheiden sich je nach Gemeinde, Rechtsschule, Standesamt und Familie.
+
+### Wie alles verknüpft ist
+- **Datum der Hauptfeier ändern:** Alle Feiern und Aufgaben wandern mit. Von Hand gesetzte Termine bleiben stehen.
+- **Später Planungsstart:** Aufgaben, deren idealer Termin schon vorbei ist, werden auf die nächsten Wochen verteilt.
+- **Dienstleister auf „gebucht“ setzen:**
+  - Die passende „Buchen“-Aufgabe ist erledigt.
+  - Der Preis fließt ins Budget.
+  - Anzahlung und Restzahlung erscheinen im Zeitplan und im Kalender-Abo.
+  - „Bezahlt“ zählt automatisch im Budget.
+- **Gäste:**
+  - Zusagen je Feier fließen in die Gästeübersicht (Personen, Menüwünsche, Allergien).
+  - Zusagen zur Hauptfeier landen im Sitzplan, von dort auf Platzkarten und Aushang.
+  - Adressen ergeben die Etiketten.
+  - Der persönliche Link wird auf der Einladung zum QR-Code.
+  - Gäste sehen ihren Tisch auf der Zusage-Seite.
+- **Geschenke** ergeben die Danksagungskarten. Abgehakte Danksagungen werden nicht erneut gedruckt.
+- **Traditionen nachträglich ändern:** Fehlende Feiern, Aufgaben, Posten und Dienstleister werden ergänzt, Eingetragenes bleibt erhalten.
+
+### Rollen
+| Rolle | Sieht |
+|---|---|
+| **Brautpaar** | alles |
+| **Trauzeug:innen** | eigenen Zeitplan (das Paar sieht ihn nicht), Gäste, Sitzplan, Feiern, Beiträge für die Hochzeitszeitung |
+| **Gäste** | eigene Einladungen und Zusage je Feier, Programm, eigenen Tisch, Beitrag zur Hochzeitszeitung. Zusagen gehen auch ohne Konto über den persönlichen Link `/app#/r/<token>`. |
 
 ### Einladen
-Beim Anlegen einer Hochzeit entstehen drei Codes, jeweils auch als Link (`/app#/join/CODE`):
-- `G-…` für Gäste
-- `T-…` für Trauzeug:innen
-- `P-…` für die zweite Hälfte des Paares
+- `G-…` Gäste (mit Konto; Gäste aus der Gästeliste brauchen keins, der persönliche Link reicht)
+- `T-…` Trauzeug:innen
+- `P-…` zweite Hälfte des Paares
 
-### Sitzplan-Generator
-1. **Grundriss einfügen:** Bild einfügen (Strg+V / ⌘+V), hineinziehen oder auswählen (PNG, JPG, WebP). Die Raumkontur wird automatisch erkannt. Dicke Wandlinien zählen, dünne Maß- und Hilfslinien nicht. Ohne Grundriss reicht die Eingabe von Breite und Länge.
-2. **Maßstab setzen:** Zwei Punkte mit bekanntem Abstand antippen, zum Beispiel eine Wand, und die echte Länge eintragen. Ab dann ist alles in echter Größe.
-3. **Raum anpassen:** Ecken verschieben. Wer einen Wand-Mittelpunkt zieht, legt eine neue Ecke an, so lassen sich auch L-förmige Säle abbilden.
-4. **Tische legen:** Zur Wahl stehen runde Tische (Ø 150/180), Rechtecktische, Tafeln, quadratische Tische und der Brauttisch (nur einseitig besetzt). Dazu kommen Tanzfläche, DJ/Band, Buffet, Bar, Tortentisch und Säulen. Alles lässt sich verschieben, drehen und in der Größe ändern. Die Zahl der Plätze ist frei wählbar, die Stühle werden automatisch angeordnet.
-5. **Prüfung:** Tische außerhalb des Raums oder mit unter 1 m Abstand werden rot markiert, Abstände unter 1,5 m gelb.
-6. **Bestuhlung:** Alle Zusagen erscheinen mit Begleitung, dazu das Paar und die Trauzeug:innen. Gäste ohne App lassen sich ergänzen. Plätze werden einzeln vergeben oder automatisch verteilt, dabei sitzen Begleitungen zusammen und das Paar am Brauttisch. Jeder Gast sieht in der App den eigenen Tisch und Platz.
-7. **Übersicht „Wer sitzt wo“:** zum Drucken oder als Vorlage für das Sitzplan-Poster.
+Wer mit dem Gäste-Code beitritt und dieselbe E-Mail wie ein Eintrag in der Gästeliste hat, wird automatisch mit diesem Eintrag verknüpft.
 
-### Automatische Tischplanung
-- **Tischform:** Automatisch, rund, rechteckig oder lange Tafeln. **Größe:** automatisch passend oder fest gewählt, zum Beispiel Ø 150/180/200 cm, 160×80 bis 240×90 cm, Tafeln 4–8 m oder so lang, wie es der Raum zulässt.
-- „Automatisch“ nimmt zuerst runde Tische mit Ø 180 cm, den Standard auf Hochzeiten. Wird es eng, folgen Ø 150, Rechtecktische und lange Tafeln.
-- Brauttisch und Tanzfläche werden auf Wunsch mitgeplant. Die Tanzfläche wächst mit der Gästezahl. Bar, DJ, Buffet und Säulen bleiben als Hindernisse stehen.
-- Die Tische werden im Raster mit mindestens 1,5 m Abstand verteilt, von der Tanzfläche nach außen. Reicht der Platz nicht, sagt die App, wie viele Plätze fehlen.
-- Danach lässt sich jeder Tisch frei verschieben, drehen und in der Größe ändern.
-
-### Namen pro Stuhl und Tischkarten
-- Jeder Stuhl hat ein Eingabefeld. Ihr tippt einen Namen ein oder wählt jemanden aus der Gästeliste. Neue Namen werden als Gast angelegt. Platzhalter wie „Begleitung 1“ sind markiert und werden durch den eingetippten Namen ersetzt.
-- **Tischkarten** (Unterseite „Tischkarten erstellen“ im Sitzplan) entstehen automatisch aus dem Plan:
-  - Platzkarten: Faltkarten 90 × 90 mm, 6 pro A4-Seite, wahlweise mit Tisch und Menüwahl für den Service
-  - Tischnummern: 95 × 135 mm, 4 pro A4-Seite
-  - Sitzplan-Aushang: alphabetisch für den Eingang
-- **Designs:** Klassisch, Botanisch, Modern, Gold & Nacht. Gedruckt wird über den Browser, auch „Als PDF speichern“ ist möglich.
-
-### Erinnerungen
-Jede Person hat einen eigenen Kalender-Abo-Link (`/cal/<token>.ics`). Apple Kalender, Google Kalender und Outlook laden ihn regelmäßig neu. Änderungen im Zeitplan erscheinen deshalb automatisch, mit einer Erinnerung am Vortag. Einzelne Schritte lassen sich zusätzlich direkt zu Google Kalender hinzufügen.
+### Gästeliste schnell füllen
+„Liste einfügen“ nimmt eine Zeile pro Gast oder Haushalt: `Name; Personen; Gruppe; E-Mail; Adresse`. Ihr könnt direkt aus Excel oder Google Tabellen kopieren, mehrzeilige Adresszellen werden erkannt.
 
 ## Lokal starten
 
@@ -119,10 +139,15 @@ sqlite3 data/weddify.db ".backup 'backup-$(date +%F).db'"
 ```
 server.js       HTTP-Server, API, Kalender-Feed, statische Dateien
 db.js           SQLite-Schema
-templates.js    Vorlagen für die Zeitstrahlen und den Tagesablauf
+traditions.js   Wissensbasis: Traditionen, Feiern, Aufgaben, Budget, Dienstleister, Datumsregeln
+generator.js    erzeugt aus dem Profil den verknüpften Plan
 public/
   index.html    Shop mit Marktanalyse (Startseite)
   app.html/.js/.css   Planer-App (Single-Page-App, mobil zuerst, als App installierbar)
+  planner.js    Assistent, Cockpit, Feiern, Gästeliste, Budget, Dienstleister, Geschenke, Zusagen
+  seating.js    Sitzplan-Generator
+  print.js      Druckerei (alle Drucksachen, mehrsprachig, QR-Codes)
+  vendor/qrcode.js  QR-Code-Bibliothek (MIT, Kazuhiko Arase)
 test/smoke.mjs  Ende-zu-Ende-Test aller Rollen
 ```
 

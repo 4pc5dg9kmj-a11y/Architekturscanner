@@ -119,13 +119,14 @@ export function detectRoom(imgData, w, h) {
 /* ---------------- Personen ---------------- */
 // people: Schlüssel → Anzeige in der Liste, names: Schlüssel → Name für Tischkarten ('' = noch unbekannt)
 export function buildPeople(w, guestsRes, P) {
-  const people = new Map(), names = new Map();
-  const add = (k, l, n) => { people.set(k, l); names.set(k, n); };
+  const people = new Map(), names = new Map(), meta = new Map();
+  const add = (k, l, n, m = {}) => { people.set(k, l); names.set(k, n); meta.set(k, m); };
   add('p1', `${w.name1} (Paar)`, w.name1); add('p2', `${w.name2} (Paar)`, w.name2);
   for (const t of guestsRes.team) if (t.role === 'trauzeuge') add(`u${t.id}`, `${t.name} (Trauzeug:in)`, t.name);
-  for (const g of guestsRes.guests) if (g.status === 'zusage') { add(`u${g.id}`, g.name, g.name); for (let k = 2; k <= g.persons; k++) add(`u${g.id}#${k}`, `${g.name} · Begleitung ${k - 1}`, ''); }
+  // Gäste aus der Gästeliste mit Zusage zur Hauptfeier; Schlüssel g<id>, Begleitungen g<id>#2 …
+  for (const g of guestsRes.guests) if (g.status === 'zusage') { const m = { gender: g.gender || '', grp: g.grp || '' }; add(`g${g.id}`, g.name, g.name, m); for (let k = 2; k <= g.persons; k++) add(`g${g.id}#${k}`, `${g.name} · Begleitung ${k - 1}`, '', { grp: m.grp, gender: '' }); }
   for (const x of P.extra || []) add(x.id, x.name, x.name);
-  return { people, names };
+  return { people, names, meta };
 }
 
 /* ---------------- Automatische Tischverteilung ---------------- */
@@ -259,7 +260,7 @@ export async function vSeating(ctx) {
   const S2 = { confirmAuto: false, autoInfo: '' };
 
   // Personen, die einen Platz brauchen
-  const { people, names } = buildPeople(S.w, guestsRes, P);
+  const { people, names, meta } = buildPeople(S.w, guestsRes, P);
   const label = key => P.names[key] || people.get(key) || 'Unbekannt';
   const party = key => key.split('#')[0];
 
@@ -490,17 +491,32 @@ export async function vSeating(ctx) {
     const groups = new Map(); for (const k of freeKeys) { const p = party(k); if (!groups.has(p)) groups.set(p, []); groups.get(p).push(k); }
     if (head) { const couple = ['p1', 'p2'].filter(k => groups.has(k)); couple.forEach(k => groups.delete(k)); place(head, couple); }
     const order = tables.filter(t => t !== head).sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
-    for (const [, keys] of groups) {
-      const fits = order.find(t => t.guests.filter(g => !g).length >= keys.length) || (head && head.guests.filter(g => !g).length >= keys.length ? head : null);
-      if (fits) place(fits, keys);
-      else for (const k of keys) { const t = order.find(t => t.guests.some(g => !g)); if (t) place(t, [k]); }
-    }
+    // Gleiche Gruppe (z. B. „Familie Braut“) sitzt an benachbarten Tischen
+    const sorted = [...groups.entries()].sort((a, b) => (meta.get(a[0])?.grp || '~').localeCompare(meta.get(b[0])?.grp || '~', 'de'));
+    const fill = (list, tabs) => {
+      for (const [, keys] of list) {
+        const fits = tabs.find(t => t.guests.filter(g => !g).length >= keys.length) || (head && head.guests.filter(g => !g).length >= keys.length ? head : null);
+        if (fits) place(fits, keys);
+        else for (const k of keys) { const t = tabs.find(t => t.guests.some(g => !g)); if (t) place(t, [k]); }
+      }
+    };
+    if (S.w.profile?.options?.separated) {
+      // Getrennte Bereiche: Damen-Tische zuerst, dann Herren; Tische werden entsprechend benannt
+      const g = k => meta.get(k)?.gender || '';
+      const W = sorted.filter(([p]) => g(p) === 'w'), M = sorted.filter(([p]) => g(p) === 'm'), U = sorted.filter(([p]) => !g(p));
+      const need = l => l.reduce((s, [, k]) => s + k.length, 0);
+      const free = t => t.guests.filter(x => !x).length;
+      const take = n => { const out = []; let sum = 0; while (order.length && sum < n) { const t = order.shift(); out.push(t); sum += free(t); } return out; };
+      const tw = take(need(W)), tm = take(need(M));
+      tw.forEach(t => { if (!/Damen/.test(t.name)) t.name = `${t.name} · Damen`; }); tm.forEach(t => { if (!/Herren/.test(t.name)) t.name = `${t.name} · Herren`; });
+      fill(W, tw); fill(M, tm); fill(U, [...order, ...tw, ...tm]);
+    } else fill(sorted, order);
   }
 
   function drawList() {
     const tables = P.items.filter(i => i.kind === 'table').sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
     view.querySelector('#stList').innerHTML = `<div class="row between"><div><span class="eyebrow">Übersicht</span><h3>Wer sitzt wo</h3></div>
-      <div class="row"><button class="btn sec small" id="stPrint">Drucken</button><a class="btn small" href="#/w/${wid}/tischkarten">Tischkarten erstellen</a></div></div>
+      <div class="row"><button class="btn sec small" id="stPrint">Drucken</button><a class="btn small" href="#/w/${wid}/druck?typ=place">Tischkarten erstellen</a></div></div>
       ${tables.length ? `<div class="tablelist">${tables.map(t => `<div><b>${esc(t.name)}</b><ul>${t.guests.filter(Boolean).map(g => `<li>${esc(label(g))}</li>`).join('') || '<li class="muted">noch leer</li>'}</ul></div>`).join('')}</div>` : '<p class="empty">Noch keine Tische im Plan.</p>'}`;
     view.querySelector('#stPrint').onclick = () => window.print();
   }
