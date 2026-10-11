@@ -14,12 +14,14 @@ await new Promise((ok, bad) => { srv.stdout.on('data', d => String(d).includes('
 
 function client() {
   let cookie = '';
-  return async (method, url, body) => {
+  const fn = async (method, url, body) => {
     const r = await fetch(BASE + url, { method, headers: { ...(cookie ? { Cookie: cookie } : {}), ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}) }, body: method !== 'GET' ? JSON.stringify(body ?? {}) : undefined });
     const sc = r.headers.get('set-cookie'); if (sc) cookie = sc.split(';')[0];
     const text = await r.text(); let json; try { json = JSON.parse(text); } catch { json = text; }
     return { status: r.status, body: json, headers: r.headers };
   };
+  fn.cookie = () => cookie;
+  return fn;
 }
 let passed = 0;
 const step = (name, fn) => fn().then(() => { passed++; console.log('  ✓', name); });
@@ -120,6 +122,57 @@ try {
     assert.match(ics, /^BEGIN:VCALENDAR\r\n/); assert.match(ics, /BEGIN:VALARM/); assert.match(ics, /DTSTART:20270710T140000/);
     assert.ok(ics.split('\r\n').every(l => Buffer.byteLength(l) <= 75));
     assert.equal((await fetch(BASE + '/cal/falsch.ics')).status, 404);
+  });
+
+  await step('Sitzplan: speichern, Rechte, Grundriss, eigener Platz', async () => {
+    const g = (await paar('GET', `/api/w/${wid}/guests`)).body.guests[0];
+    const plan = { v: 1, room: { pts: [[0, 0], [1200, 0], [1200, 1600], [0, 1600]] }, extra: [], nextId: 3,
+      items: [{ id: 'i1', type: 'rund180', kind: 'table', shape: 'round', d: 180, seats: 10, x: 300, y: 300, rot: 0, name: 'Tisch 3', guests: [null, `u${g.id}`, null, null, null, null, null, null, null, null] }] };
+    assert.equal((await paar('PUT', `/api/w/${wid}/seating`, { data: plan })).status, 200);
+    assert.equal((await tz('PUT', `/api/w/${wid}/seating`, { data: plan })).status, 403);
+    assert.equal((await gast('GET', `/api/w/${wid}/seating`)).status, 403, 'Gäste sehen nicht den ganzen Plan');
+    assert.equal((await tz('GET', `/api/w/${wid}/seating`)).body.data.items[0].name, 'Tisch 3');
+    const seat = (await gast('GET', `/api/w/${wid}/my-seat`)).body;
+    assert.equal(seat.table, 'Tisch 3'); assert.equal(seat.seat, 2);
+    // Bild-Upload: nur echte Bilder
+    const png = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
+    const up = (type, body) => fetch(`${BASE}/api/w/${wid}/floorplan`, { method: 'PUT', headers: { 'Content-Type': type, Cookie: paar.cookie() }, body });
+    assert.equal((await up('image/png', png)).status, 200);
+    assert.equal((await up('image/png', Buffer.from('nicht ein bild'))).status, 415);
+    assert.equal((await up('text/html', Buffer.from('<script>'))).status, 415);
+    const img = await fetch(`${BASE}/api/w/${wid}/floorplan`, { headers: { Cookie: paar.cookie() } });
+    assert.equal(img.status, 200); assert.equal(img.headers.get('content-type'), 'image/png');
+    assert.equal((await gast('GET', `/api/w/${wid}/floorplan`)).status, 403);
+    assert.ok((await paar('GET', `/api/w/${wid}/seating`)).body.has_floorplan);
+  });
+
+  await step('Sitzplan-Logik: Raumerkennung und Abstandsprüfung', async () => {
+    const { detectRoom, checkPlan, seatsOf } = await import('../public/seating.js');
+    // 100×80 Bild mit Rahmen (Wände) bei x=10..90, y=10..70
+    const w = 100, h = 80, d = new Uint8ClampedArray(w * h * 4).fill(255);
+    const px = (x, y) => { const i = (y * w + x) * 4; d[i] = d[i + 1] = d[i + 2] = 0; };
+    for (let x = 10; x <= 90; x++) { px(x, 10); px(x, 70); } for (let y = 10; y <= 70; y++) { px(10, y); px(90, y); }
+    const r = detectRoom(d, w, h);
+    assert.deepEqual([r.x0, r.y0, r.x1, r.y1, r.found], [10, 10, 90, 70, true]);
+    // Dicke Wände plus dünne Maßlinie darunter: die Maßlinie darf nicht als Wand zählen
+    const W2 = 340, H2 = 300, d2 = new Uint8ClampedArray(W2 * H2 * 4).fill(255);
+    const px2 = (x, y) => { const i = (y * W2 + x) * 4; d2[i] = d2[i + 1] = d2[i + 2] = 0; };
+    for (let t = 0; t < 4; t++) { for (let x = 20; x <= 320; x++) { px2(x, 20 + t); px2(x, 240 - t); } for (let y = 20; y <= 240; y++) { px2(20 + t, y); px2(320 - t, y); } }
+    for (let x = 20; x <= 320; x++) px2(x, 262);
+    const r2 = detectRoom(d2, W2, H2);
+    assert.deepEqual([r2.x0, r2.y0, r2.x1, r2.y1], [20, 20, 320, 240], 'Maßlinie wird ignoriert');
+    const room = { pts: [[0, 0], [1000, 0], [1000, 1000], [0, 1000]] };
+    const t = (id, x, y) => ({ id, name: id, kind: 'table', shape: 'round', d: 180, seats: 10, x, y, rot: 0, guests: [] });
+    assert.equal(checkPlan({ room, items: [t('A', 200, 200), t('B', 600, 200)] }).size, 0, '220 cm Abstand ist ok');
+    assert.equal(checkPlan({ room, items: [t('A', 200, 200), t('B', 450, 200)] }).get('A').level, 2, '70 cm ist zu eng');
+    assert.equal(checkPlan({ room, items: [t('A', 200, 200), t('B', 510, 200)] }).get('A').level, 1, '130 cm ist knapp');
+    assert.equal(checkPlan({ room, items: [t('A', 50, 500)] }).get('A').level, 2, 'außerhalb des Raums');
+    assert.equal(seatsOf({ kind: 'table', shape: 'rect', w: 200, h: 80, seats: 8, ends: true, sides: 'both' }).length, 8);
+    assert.ok(seatsOf({ kind: 'table', shape: 'rect', w: 240, h: 80, seats: 4, sides: 'one' }).every(([, y]) => y < 0), 'Brauttisch nur einseitig');
+  });
+
+  await step('Viele Gäste im selben WLAN können sich registrieren', async () => {
+    for (let i = 0; i < 25; i++) { const c = client(); const r = await c('POST', '/api/register', { name: 'G' + i, email: `wlan${i}@test.de`, password: 'geheim123' }); assert.equal(r.status, 201); assert.equal((await c('POST', '/api/join', { code: codes.guest_code })).status, 201); }
   });
 
   await step('Fremde sehen nichts', async () => {

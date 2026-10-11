@@ -1,10 +1,10 @@
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, unlink, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { db, tx } from './db.js';
+import { db, tx, DATA_DIR } from './db.js';
 import { COUPLE_TEMPLATE, WITNESS_TEMPLATE, DEFAULT_SCHEDULE } from './templates.js';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -30,7 +30,7 @@ async function readJson(req) {
   // Nur JSON annehmen: Formulare fremder Seiten können kein JSON ohne CORS-Vorabprüfung senden (CSRF-Schutz).
   if (!type.startsWith('application/json')) fail(415, 'Bitte als JSON senden.');
   let size = 0; const chunks = [];
-  for await (const c of req) { size += c.length; if (size > 100_000) fail(413, 'Anfrage zu groß.'); chunks.push(c); }
+  for await (const c of req) { size += c.length; if (size > 600_000) fail(413, 'Anfrage zu groß.'); chunks.push(c); }
   if (!size) return {};
   try { const v = JSON.parse(Buffer.concat(chunks).toString('utf8')); return v && typeof v === 'object' ? v : {}; }
   catch { fail(400, 'Ungültiges JSON.'); }
@@ -81,15 +81,18 @@ function membership(user, wid, roles) {
   return m;
 }
 
-// Einfache Begrenzung für Anmeldeversuche pro IP
+// Begrenzung pro IP: gezählt werden nur Fehlversuche (falsches Passwort, falscher Code),
+// damit viele Gäste im selben WLAN sich problemlos registrieren können. Registrierungen haben ein eigenes, großzügiges Limit.
 const attempts = new Map();
-function rateLimit(req) {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress;
-  const now = Date.now(); const a = attempts.get(ip) || { n: 0, reset: now + 15 * 6e4 };
-  if (now > a.reset) { a.n = 0; a.reset = now + 15 * 6e4; }
-  a.n++; attempts.set(ip, a);
-  if (a.n > 20) fail(429, 'Zu viele Versuche. Bitte wartet 15 Minuten.');
+const ipOf = req => (process.env.TRUST_PROXY === '1' && req.headers['x-forwarded-for']?.split(',')[0].trim()) || req.socket.remoteAddress;
+function bucket(req, kind) {
+  const key = kind + ':' + ipOf(req); const now = Date.now();
+  let a = attempts.get(key); if (!a || now > a.reset) { a = { n: 0, reset: now + 15 * 6e4 }; attempts.set(key, a); }
+  return a;
 }
+function rateLimit(req, kind = 'fail', max = 20) { if (bucket(req, kind).n >= max) fail(429, 'Zu viele Versuche. Bitte wartet 15 Minuten.'); }
+const countAttempt = (req, kind = 'fail') => { bucket(req, kind).n++; };
+setInterval(() => { const now = Date.now(); for (const [k, a] of attempts) if (now > a.reset) attempts.delete(k); }, 15 * 6e4).unref();
 
 function seedTasks(wid, audience, date) {
   const tpl = audience === 'paar' ? COUPLE_TEMPLATE : WITNESS_TEMPLATE;
@@ -110,11 +113,11 @@ const audienceOf = role => role === 'paar' ? 'paar' : role === 'trauzeuge' ? 'tr
 /* ---------------- Routen ---------------- */
 
 const routes = [];
-const route = (method, pattern, handler) => routes.push({ method, re: new RegExp('^' + pattern.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), handler });
+const route = (method, pattern, handler, opts = {}) => routes.push({ method, re: new RegExp('^' + pattern.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), handler, ...opts });
 
 // Konto
 route('POST', '/api/register', async (req, res, body) => {
-  rateLimit(req);
+  rateLimit(req, 'reg', 60); countAttempt(req, 'reg');
   const name = str(body.name, 60, 'Name', { required: true });
   const email = str(body.email, 120, 'E-Mail', { required: true }).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail(400, 'Bitte eine gültige E-Mail-Adresse eingeben.');
@@ -129,7 +132,7 @@ route('POST', '/api/login', async (req, res, body) => {
   rateLimit(req);
   const email = str(body.email, 120, 'E-Mail', { required: true }).toLowerCase();
   const u = db.prepare('SELECT id, pass_hash FROM users WHERE email = ?').get(email);
-  if (!u || typeof body.password !== 'string' || !(await checkPassword(body.password, u.pass_hash))) fail(401, 'E-Mail oder Passwort stimmt nicht.');
+  if (!u || typeof body.password !== 'string' || !(await checkPassword(body.password, u.pass_hash))) { countAttempt(req); fail(401, 'E-Mail oder Passwort stimmt nicht.'); }
   createSession(res, u.id);
   send(res, 200, { ok: true });
 });
@@ -172,7 +175,7 @@ route('POST', '/api/join', async (req, res, body) => {
   rateLimit(req);
   const c = str(body.code, 20, 'Code', { required: true }).toUpperCase();
   const w = db.prepare('SELECT id, partner_code, witness_code, guest_code FROM weddings WHERE partner_code = ? OR witness_code = ? OR guest_code = ?').get(c, c, c);
-  if (!w) fail(404, 'Diesen Code kennen wir nicht. Bitte prüft die Schreibweise.');
+  if (!w) { countAttempt(req); fail(404, 'Diesen Code kennen wir nicht. Bitte prüft die Schreibweise.'); }
   const role = c === w.partner_code ? 'paar' : c === w.witness_code ? 'trauzeuge' : 'gast';
   const existing = db.prepare('SELECT role FROM members WHERE wedding_id = ? AND user_id = ?').get(w.id, user.id);
   if (existing) return send(res, 200, { id: w.id, role: existing.role, already: true });
@@ -289,7 +292,7 @@ route('PUT', '/api/w/:wid/rsvp', async (req, res, body, p) => {
 
 route('GET', '/api/w/:wid/guests', async (req, res, _b, p) => {
   const user = needUser(req); const m = membership(user, p.wid, ['paar', 'trauzeuge']);
-  const rows = db.prepare(`SELECT u.name, r.status, r.persons, r.menu, r.allergies, r.song, r.message, r.updated_at
+  const rows = db.prepare(`SELECT u.id, u.name, r.status, r.persons, r.menu, r.allergies, r.song, r.message, r.updated_at
     FROM members mb JOIN users u ON u.id = mb.user_id LEFT JOIN rsvps r ON r.wedding_id = mb.wedding_id AND r.user_id = mb.user_id
     WHERE mb.wedding_id = ? AND mb.role = 'gast' ORDER BY u.name COLLATE NOCASE`).all(p.wid);
   const guests = rows.map(r => ({ ...r, status: r.status || 'offen', persons: r.persons || 1, message: m.role === 'paar' ? r.message : '' }));
@@ -299,7 +302,7 @@ route('GET', '/api/w/:wid/guests', async (req, res, _b, p) => {
     personen: yes.reduce((s, g) => s + g.persons, 0),
     menus: yes.reduce((o, g) => { if (g.menu) o[g.menu] = (o[g.menu] || 0) + g.persons; return o; }, {}),
   };
-  const team = db.prepare(`SELECT u.name, mb.role FROM members mb JOIN users u ON u.id = mb.user_id WHERE mb.wedding_id = ? AND mb.role != 'gast' ORDER BY mb.role, u.name`).all(p.wid);
+  const team = db.prepare(`SELECT u.id, u.name, mb.role FROM members mb JOIN users u ON u.id = mb.user_id WHERE mb.wedding_id = ? AND mb.role != 'gast' ORDER BY mb.role, u.name`).all(p.wid);
   send(res, 200, { guests, stats, team });
 });
 
@@ -356,6 +359,71 @@ route('DELETE', '/api/contributions/:id', async (req, res, _b, p) => {
   send(res, 200, { ok: true });
 });
 
+/* ---------------- Sitzplan ---------------- */
+
+const FLOOR_DIR = path.join(DATA_DIR, 'floorplans');
+const IMAGE_TYPES = { 'image/png': [0x89, 0x50, 0x4e, 0x47], 'image/jpeg': [0xff, 0xd8, 0xff], 'image/webp': [0x52, 0x49, 0x46, 0x46] };
+const floorFile = wid => path.join(FLOOR_DIR, wid.replace(/[^\w-]/g, ''));
+const seatingRow = wid => db.prepare('SELECT data, floor_mime, updated_at FROM seating WHERE wedding_id = ?').get(wid);
+
+route('GET', '/api/w/:wid/seating', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar', 'trauzeuge']);
+  const row = seatingRow(p.wid);
+  send(res, 200, { data: row ? JSON.parse(row.data) : null, has_floorplan: !!row?.floor_mime, updated_at: row?.updated_at || null });
+});
+
+route('PUT', '/api/w/:wid/seating', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  if (!body.data || typeof body.data !== 'object' || Array.isArray(body.data)) fail(400, 'Ungültiger Sitzplan.');
+  const json = JSON.stringify(body.data);
+  if (json.length > 500_000) fail(413, 'Der Sitzplan ist zu groß.');
+  db.prepare(`INSERT INTO seating (wedding_id, data, updated_at) VALUES (?,?,datetime('now'))
+    ON CONFLICT(wedding_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`).run(p.wid, json);
+  send(res, 200, { ok: true });
+});
+
+route('PUT', '/api/w/:wid/floorplan', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  const type = (req.headers['content-type'] || '').split(';')[0].trim();
+  if (!IMAGE_TYPES[type]) fail(415, 'Bitte ein Bild als PNG, JPG oder WebP hochladen.');
+  let size = 0; const chunks = [];
+  for await (const c of req) { size += c.length; if (size > 8_000_000) fail(413, 'Das Bild ist zu groß (max. 8 MB).'); chunks.push(c); }
+  const buf = Buffer.concat(chunks);
+  if (!IMAGE_TYPES[type].every((b, i) => buf[i] === b)) fail(415, 'Die Datei ist kein gültiges Bild.');
+  await mkdir(FLOOR_DIR, { recursive: true });
+  await writeFile(floorFile(p.wid), buf);
+  db.prepare(`INSERT INTO seating (wedding_id, floor_mime) VALUES (?,?) ON CONFLICT(wedding_id) DO UPDATE SET floor_mime = excluded.floor_mime`).run(p.wid, type);
+  send(res, 200, { ok: true });
+}, { raw: true });
+
+route('DELETE', '/api/w/:wid/floorplan', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar']);
+  await unlink(floorFile(p.wid)).catch(() => {});
+  db.prepare(`UPDATE seating SET floor_mime = '' WHERE wedding_id = ?`).run(p.wid);
+  send(res, 200, { ok: true });
+});
+
+route('GET', '/api/w/:wid/floorplan', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['paar', 'trauzeuge']);
+  const row = seatingRow(p.wid);
+  if (!row?.floor_mime) fail(404, 'Kein Grundriss hochgeladen.');
+  const buf = await readFile(floorFile(p.wid)).catch(() => fail(404, 'Kein Grundriss hochgeladen.'));
+  res.writeHead(200, { 'Content-Type': row.floor_mime, 'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff' });
+  res.end(buf);
+});
+
+// Gäste sehen nur ihren eigenen Tisch
+route('GET', '/api/w/:wid/my-seat', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid);
+  const row = seatingRow(p.wid); const data = row ? JSON.parse(row.data) : null;
+  const key = `u${user.id}`;
+  for (const it of data?.items || []) {
+    const i = (it.guests || []).findIndex(g => g === key);
+    if (i >= 0) return send(res, 200, { table: String(it.name || 'Tisch').slice(0, 60), seat: i + 1, neighbours: (it.guests || []).filter(Boolean).length - 1 });
+  }
+  send(res, 200, { table: null });
+});
+
 /* ---------------- Kalender-Abo (ICS) ---------------- */
 
 const icsEsc = s => String(s).replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/([,;])/g, '\\$1');
@@ -391,7 +459,7 @@ async function calendar(req, res, token) {
 /* ---------------- Statische Dateien ---------------- */
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' };
-const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 async function serveStatic(req, res, pathname) {
   const file = pathname === '/' ? '/index.html' : pathname === '/app' || pathname === '/app/' ? '/app.html' : pathname;
@@ -416,7 +484,7 @@ const server = http.createServer(async (req, res) => {
       for (const r of routes) {
         if (r.method !== req.method) continue;
         const m = url.pathname.match(r.re);
-        if (m) { const body = await readJson(req); return await r.handler(req, res, body, m.groups || {}); }
+        if (m) { const body = r.raw ? null : await readJson(req); return await r.handler(req, res, body, m.groups || {}); }
       }
       fail(404, 'Unbekannte Adresse.');
     }

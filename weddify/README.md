@@ -7,9 +7,9 @@ Läuft auf einem eigenen Server und braucht nur Node.js 22. Es gibt keine extern
 
 | Bereich | Funktionen |
 |---|---|
-| **Brautpaar** | Countdown · Zeitstrahl, der aus dem Hochzeitsdatum automatisch erstellt wird, mit jedem Schritt anpassbar · eigene Schritte hinzufügen · Gästeübersicht mit Zusagen, Menüwünschen, Allergien und Musikwünschen · Tagesablauf pflegen · Einladungscodes · Kalender-Abo |
-| **Trauzeug:innen** | Eigener Zeitstrahl für JGA, Hochzeitszeitung und Rede, den das Paar nicht sieht · Gästeübersicht · Beiträge der Gäste für die Hochzeitszeitung · Ablauf · Kalender-Abo |
-| **Gäste** | Countdown · Zu- oder Absage mit Personenzahl, Menü, Allergien und Musikwunsch · Anfahrt, Dresscode und Hinweise · Tagesablauf · Beitrag zur Hochzeitszeitung · Hochzeitstermin im Kalender |
+| **Brautpaar** | Countdown · Zeitstrahl, der aus dem Hochzeitsdatum automatisch erstellt wird, mit jedem Schritt anpassbar · eigene Schritte hinzufügen · Gästeübersicht mit Zusagen, Menüwünschen, Allergien und Musikwünschen · Tagesablauf pflegen · **Sitzplan-Generator** · Einladungscodes · Kalender-Abo |
+| **Trauzeug:innen** | Eigener Zeitstrahl für JGA, Hochzeitszeitung und Rede, den das Paar nicht sieht · Gästeübersicht · Beiträge der Gäste für die Hochzeitszeitung · Sitzplan ansehen · Ablauf · Kalender-Abo |
+| **Gäste** | Countdown · eigener Tisch und Platz · Zu- oder Absage mit Personenzahl, Menü, Allergien und Musikwunsch · Anfahrt, Dresscode und Hinweise · Tagesablauf · Beitrag zur Hochzeitszeitung · Hochzeitstermin im Kalender |
 
 ### Der Zeitstrahl
 - Beim Anlegen einer Hochzeit entstehen automatisch 29 Schritte für das Paar und 15 für die Trauzeug:innen (Vorlagen in `templates.js`).
@@ -22,6 +22,15 @@ Beim Anlegen einer Hochzeit entstehen drei Codes, jeweils auch als Link (`/app#/
 - `G-…` für Gäste
 - `T-…` für Trauzeug:innen
 - `P-…` für die zweite Hälfte des Paares
+
+### Sitzplan-Generator
+1. **Grundriss einfügen:** Bild einfügen (Strg+V / ⌘+V), hineinziehen oder auswählen (PNG, JPG, WebP). Die Raumkontur wird automatisch erkannt. Dicke Wandlinien zählen, dünne Maß- und Hilfslinien nicht. Ohne Grundriss reicht die Eingabe von Breite und Länge.
+2. **Maßstab setzen:** Zwei Punkte mit bekanntem Abstand antippen, zum Beispiel eine Wand, und die echte Länge eintragen. Ab dann ist alles in echter Größe.
+3. **Raum anpassen:** Ecken verschieben. Wer einen Wand-Mittelpunkt zieht, legt eine neue Ecke an, so lassen sich auch L-förmige Säle abbilden.
+4. **Tische legen:** Zur Wahl stehen runde Tische (Ø 150/180), Rechtecktische, Tafeln, quadratische Tische und der Brauttisch (nur einseitig besetzt). Dazu kommen Tanzfläche, DJ/Band, Buffet, Bar, Tortentisch und Säulen. Alles lässt sich verschieben, drehen und in der Größe ändern. Die Zahl der Plätze ist frei wählbar, die Stühle werden automatisch angeordnet.
+5. **Prüfung:** Tische außerhalb des Raums oder mit unter 1 m Abstand werden rot markiert, Abstände unter 1,5 m gelb.
+6. **Bestuhlung:** Alle Zusagen erscheinen mit Begleitung, dazu das Paar und die Trauzeug:innen. Gäste ohne App lassen sich ergänzen. Plätze werden einzeln vergeben oder automatisch verteilt, dabei sitzen Begleitungen zusammen und das Paar am Brauttisch. Jeder Gast sieht in der App den eigenen Tisch und Platz.
+7. **Übersicht „Wer sitzt wo“:** zum Drucken oder als Vorlage für das Sitzplan-Poster.
 
 ### Erinnerungen
 Jede Person hat einen eigenen Kalender-Abo-Link (`/cal/<token>.ics`). Apple Kalender, Google Kalender und Outlook laden ihn regelmäßig neu. Änderungen im Zeitplan erscheinen deshalb automatisch, mit einer Erinnerung am Vortag. Einzelne Schritte lassen sich zusätzlich direkt zu Google Kalender hinzufügen.
@@ -45,7 +54,7 @@ Die Datenbank liegt in `./data/weddify.db`.
 
 ### Ohne Docker
 ```bash
-PORT=3000 DATA_DIR=/var/lib/weddify COOKIE_SECURE=1 PUBLIC_URL=https://eure-domain.de npm start
+PORT=3000 DATA_DIR=/var/lib/weddify COOKIE_SECURE=1 TRUST_PROXY=1 PUBLIC_URL=https://eure-domain.de npm start
 ```
 Den Prozess mit systemd oder pm2 dauerhaft laufen lassen.
 
@@ -65,6 +74,7 @@ Caddy besorgt das Zertifikat automatisch. Hinter HTTPS `COOKIE_SECURE=1` setzen.
 | `DATA_DIR` | `./data` | Ordner für die SQLite-Datenbank |
 | `COOKIE_SECURE` | `0` | `1`, sobald die Seite über HTTPS läuft |
 | `PUBLIC_URL` | `http://localhost:PORT` | Öffentliche Adresse für Einladungs- und Kalenderlinks |
+| `TRUST_PROXY` | `0` | `1` hinter einem Reverse Proxy, damit die echte Besucher-IP für die Anmeldebegrenzung zählt |
 
 ### Backup
 ```bash
@@ -75,7 +85,7 @@ sqlite3 data/weddify.db ".backup 'backup-$(date +%F).db'"
 - Passwörter werden mit scrypt und eigenem Salt gespeichert.
 - Sitzungen laufen über HttpOnly-Cookies mit SameSite=Lax. In der Datenbank steht nur ein Hash des Tokens.
 - Schreibende Anfragen werden nur als JSON angenommen. Das schützt vor CSRF.
-- Anmeldung, Registrierung und Code-Eingabe sind auf 20 Versuche pro 15 Minuten und IP begrenzt.
+- Pro IP und 15 Minuten sind höchstens 20 Fehlversuche bei Anmeldung und Code-Eingabe erlaubt. Gezählt werden nur Fehlversuche, damit viele Gäste im selben WLAN beitreten können. Registrierungen sind auf 60 pro IP und 15 Minuten begrenzt.
 - Jede Anfrage prüft die Rolle:
   - Gäste sehen keine Zeitpläne und keine Gästeliste.
   - Das Paar sieht weder die Zeitung-Beiträge noch den Zeitplan der Trauzeug:innen.

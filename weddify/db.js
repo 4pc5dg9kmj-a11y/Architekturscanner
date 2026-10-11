@@ -5,6 +5,7 @@ import path from 'node:path';
 const dir = process.env.DATA_DIR || './data';
 mkdirSync(dir, { recursive: true });
 
+export const DATA_DIR = dir;
 export const db = new DatabaseSync(path.join(dir, 'weddify.db'));
 
 db.exec(`
@@ -90,6 +91,14 @@ CREATE TABLE IF NOT EXISTS schedule (
   time        TEXT NOT NULL,
   title       TEXT NOT NULL,
   place       TEXT NOT NULL DEFAULT ''
+);
+
+-- Sitzplan: Raum, Tische und Platzbelegung als JSON; Grundriss-Bild liegt als Datei in DATA_DIR/floorplans
+CREATE TABLE IF NOT EXISTS seating (
+  wedding_id  TEXT PRIMARY KEY REFERENCES weddings(id) ON DELETE CASCADE,
+  data        TEXT NOT NULL DEFAULT '{}',
+  floor_mime  TEXT NOT NULL DEFAULT '',
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Beiträge der Gäste für die Hochzeitszeitung: sehen nur Trauzeug:innen (Überraschung!)

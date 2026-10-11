@@ -1,6 +1,8 @@
 // weddify Planer – Single-Page-App ohne Framework.
 // Bereiche: Paar, Trauzeug:innen, Gäste. Daten kommen vom eigenen Server (/api).
 
+import { vSeating } from './seating.js';
+
 const $ = s => document.querySelector(s);
 const view = $('#view');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -43,11 +45,12 @@ const I = {
   mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
   pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg>',
   heart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 6-8 11-8 11z"/></svg>',
+  seat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="3.5" r="1.6"/><circle cx="12" cy="20.5" r="1.6"/><circle cx="3.5" cy="12" r="1.6"/><circle cx="20.5" cy="12" r="1.6"/></svg>',
   spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>',
 };
 const TABS = {
-  paar: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['ablauf', 'Ablauf', I.clock], ['einstellungen', 'Mehr', I.gear]],
-  trauzeuge: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['beitraege', 'Zeitung', I.pen], ['ablauf', 'Ablauf', I.clock]],
+  paar: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['sitzplan', 'Sitzplan', I.seat], ['ablauf', 'Ablauf', I.clock], ['einstellungen', 'Mehr', I.gear]],
+  trauzeuge: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['sitzplan', 'Sitzplan', I.seat], ['beitraege', 'Zeitung', I.pen]],
   gast: [['uebersicht', 'Übersicht', I.home], ['zusage', 'Zusage', I.mail], ['ablauf', 'Ablauf', I.clock], ['beitrag', 'Zeitung', I.pen]],
 };
 const ROLE_LABEL = { paar: 'Brautpaar', trauzeuge: 'Trauzeug:in', gast: 'Gast' };
@@ -155,7 +158,7 @@ async function renderWedding(wid, tab) {
   if (!tabs.some(t => t[0] === tab)) tab = 'uebersicht';
   S.tab = tab;
   setChrome({ tabs, active: tab });
-  const fn = { uebersicht: vOverview, zeitplan: vTimeline, gaeste: vGuests, ablauf: vSchedule, einstellungen: vSettings, zusage: vRsvp, beitrag: vContrib, beitraege: vContrib }[tab];
+  const fn = { uebersicht: vOverview, zeitplan: vTimeline, gaeste: vGuests, ablauf: vSchedule, einstellungen: vSettings, sitzplan: () => vSeating({ api, S, esc, toast, view }), zusage: vRsvp, beitrag: vContrib, beitraege: vContrib }[tab];
   await fn();
   tick();
 }
@@ -213,9 +216,11 @@ async function vOverview() {
   } else {
     const { rsvp } = await load('rsvp', `/api/w/${S.w.id}/rsvp`);
     const { items } = await load('schedule', `/api/w/${S.w.id}/schedule`);
+    const seat = await api(`/api/w/${S.w.id}/my-seat`).catch(() => ({ table: null }));
     const st = { offen: ['Ihr habt noch nicht geantwortet.', 'Jetzt zu- oder absagen'], zusage: ['Ihr habt zugesagt. Wir freuen uns auf euch!', 'Zusage ändern'], absage: ['Ihr habt abgesagt. Schade, dass ihr nicht dabei sein könnt.', 'Antwort ändern'] }[rsvp.status];
     const addr = [S.w.location, S.w.address].filter(Boolean).join(', ');
     side = `<section class="card"><span class="eyebrow">Eure Antwort</span><p>${st[0]}</p>${S.w.rsvp_until && rsvp.status === 'offen' ? `<p class="small muted">Bitte antwortet bis ${fmt(parseD(S.w.rsvp_until))}.</p>` : ''}<a class="btn ${rsvp.status === 'offen' ? '' : 'sec'}" href="#/w/${S.w.id}/zusage">${st[1]}</a></section>
+      ${seat.table ? `<section class="card center"><span class="eyebrow">Euer Platz</span><div class="names" style="font-size:2.6rem">${esc(seat.table)}</div><p class="small muted">Platz ${seat.seat}${seat.neighbours ? ` · mit ${seat.neighbours} weiteren Gästen am Tisch` : ''}</p></section>` : ''}
       <section class="card"><span class="eyebrow">Gut zu wissen</span>
         ${addr ? `<div><div class="lbl">Wo</div><p>${esc(addr)}</p><a class="mini" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}">Route planen</a></div>` : ''}
         ${S.w.dresscode ? `<div><div class="lbl">Dresscode</div><p>${esc(S.w.dresscode)}</p></div>` : ''}
