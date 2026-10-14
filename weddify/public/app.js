@@ -3,6 +3,7 @@
 
 import { vSeating } from './seating.js';
 import { vPrint } from './print.js';
+import { vGames } from './games.js';
 import { renderWizard, vCockpit, vMore, vEvents, vGuestManager, vBudget, vVendors, vGifts, vGuestRsvp, renderPublicRsvp, vCosts, vReceipts } from './planner.js';
 
 const $ = s => document.querySelector(s);
@@ -49,17 +50,18 @@ const I = {
   heart: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-8-5-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 6-8 11-8 11z"/></svg>',
   seat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="3.5" r="1.6"/><circle cx="12" cy="20.5" r="1.6"/><circle cx="3.5" cy="12" r="1.6"/><circle cx="20.5" cy="12" r="1.6"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>',
+  game: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/></svg>',
   spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></svg>',
 };
 const TABS = {
   paar: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['sitzplan', 'Sitzplan', I.seat], ['mehr', 'Mehr', I.more]],
-  trauzeuge: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['gaeste', 'Gäste', I.guests], ['sitzplan', 'Sitzplan', I.seat], ['beitraege', 'Zeitung', I.pen]],
+  trauzeuge: [['uebersicht', 'Übersicht', I.home], ['zeitplan', 'Zeitplan', I.plan], ['spiele', 'Spiele', I.game], ['sitzplan', 'Sitzplan', I.seat], ['beitraege', 'Zeitung', I.pen]],
   gast: [['uebersicht', 'Übersicht', I.home], ['zusage', 'Zusage', I.mail], ['ablauf', 'Programm', I.clock], ['beitrag', 'Zeitung', I.pen]],
 };
 // Unterseiten ohne eigenen Reiter → welcher Reiter leuchtet
 const SUBPAGES = {
   paar: { tischkarten: 'sitzplan', druck: 'mehr', budget: 'mehr', kosten: 'mehr', belege: 'mehr', dienstleister: 'mehr', geschenke: 'mehr', feiern: 'mehr', einstellungen: 'mehr', traditionen: 'mehr', ablauf: 'mehr' },
-  trauzeuge: { feiern: 'uebersicht', ablauf: 'uebersicht', druck: 'sitzplan', tischkarten: 'sitzplan' },
+  trauzeuge: { gaeste: 'uebersicht', feiern: 'uebersicht', ablauf: 'uebersicht', druck: 'sitzplan', tischkarten: 'sitzplan' },
   gast: { feiern: 'ablauf' },
 };
 const ROLE_LABEL = { paar: 'Brautpaar', trauzeuge: 'Trauzeug:in', gast: 'Gast' };
@@ -161,7 +163,7 @@ async function renderWedding(wid, tab) {
     uebersicht: S.role === 'paar' ? () => vCockpit(c) : vOverview, zeitplan: vTimeline, gaeste: () => vGuestManager(c), sitzplan: () => vSeating(c),
     mehr: () => vMore(c), feiern: () => vEvents(c), ablauf: () => vEvents(c), budget: () => vBudget(c), kosten: () => vCosts(c), belege: () => vReceipts(c), dienstleister: () => vVendors(c), geschenke: () => vGifts(c),
     druck: () => vPrint(c), tischkarten: () => vPrint(c), traditionen: () => renderWizard(c, { edit: true }), einstellungen: vSettings,
-    zusage: () => vGuestRsvp(c), beitrag: vContrib, beitraege: vContrib,
+    zusage: () => vGuestRsvp(c), spiele: () => vGames(c), beitrag: vContrib, beitraege: vContrib,
   }[tab];
   await fn();
   tick();

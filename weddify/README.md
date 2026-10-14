@@ -62,11 +62,22 @@ Die Inhalte sind Planungshilfen. Religiöse und rechtliche Details unterscheiden
 - Bei PDF-Rechnungen wird die Datei gespeichert, den Betrag tragt ihr selbst ein.
 - Die Kostenrichtwerte stehen in `traditions.js` (`COST_BASE`, `COST_TRAD`) und lassen sich dort anpassen.
 
+### Spiele für Trauzeug:innen (`public/games.js`)
+17 druckfertige Spiele, automatisch mit Namen, Datum, Ort, Tischen aus dem Sitzplan und Gästezahl befüllt. Jeder Inhalt lässt sich anpassen. Das Paar sieht die Rubrik nicht (Server prüft die Rolle).
+- **Am Tisch:** Hochzeitsquiz mit Lösungsblatt, Hochzeits-Bingo (jede Karte anders gemischt), Foto-Challenge pro Tisch (optional mit Upload-QR), Tisch-Duell
+- **Rätsel:** Wortsuchrätsel und Kreuzworträtsel, beide automatisch generiert, mit Lösung
+- **Zum Mitmachen:** Gäste-Bingo „Finde jemanden, der …“, Lückentext-Geschichte, Wetten & Prognosen
+- **Erinnerungen:** Ratschläge fürs Eheleben, Date-Ideen-Glas, Briefe für später (Jahrestage werden berechnet), Wunschkarten (Wunschbaum oder Ballonflug)
+- **Kinder:** Rätselbogen mit Malfeld, Suchliste und leichtem Wortgitter
+- **Moderation:** Schuhspiel „Wer von beiden …?“ mit Namensschildern, Spickzettel für Baumstamm, Schleiertanz, Brautstrauß, Herz ausschneiden u. a.
+- **Traditionen:** Brautauslösung & Türspiele (Wykup, Chuangmen, Kapı parası, Joota Chupai), Oczepiny, Namen auf der Schuhsohle, Ring im Milchbad, Krawatte versteigern; passende Spiele werden markiert
+- Spieleplan mit Uhrzeiten und druckbarem Regieplan. Gleiche Karten bei jedem Druck dank festem Zufallsstartwert.
+
 ### Rollen
 | Rolle | Sieht |
 |---|---|
 | **Brautpaar** | alles |
-| **Trauzeug:innen** | eigenen Zeitplan (das Paar sieht ihn nicht), Gäste, Sitzplan, Feiern, Beiträge für die Hochzeitszeitung |
+| **Trauzeug:innen** | eigenen Zeitplan (das Paar sieht ihn nicht), Spiele-Rubrik, Gäste, Sitzplan, Feiern, Beiträge für die Hochzeitszeitung |
 | **Gäste** | eigene Einladungen und Zusage je Feier, Programm, eigenen Tisch, Beitrag zur Hochzeitszeitung. Zusagen gehen auch ohne Konto über den persönlichen Link `/app#/r/<token>`. |
 
 ### Einladen
@@ -156,6 +167,7 @@ public/
   planner.js    Assistent, Cockpit, Feiern, Gästeliste, Budget, Dienstleister, Geschenke, Zusagen
   seating.js    Sitzplan-Generator
   print.js      Druckerei (alle Drucksachen, mehrsprachig, QR-Codes)
+  games.js      Spiele der Trauzeug:innen (Katalog, Rätsel-Generatoren, Druck)
   vendor/qrcode.js  QR-Code-Bibliothek (MIT, Kazuhiko Arase)
   vendor/ocr/   Tesseract.js für die Belegerkennung (Apache-2.0) mit Sprachdaten deu/eng
   ocr.js, receipt-parse.js  Belegscan und Auswertung
@@ -173,6 +185,7 @@ test/smoke.mjs  Ende-zu-Ende-Test aller Rollen
 | GET/POST | `/api/w/:id/tasks` | Paar, Trauzeug:innen (jeweils eigener Zeitplan) |
 | PATCH/DELETE | `/api/tasks/:id` | Besitzer des Zeitplans |
 | POST | `/api/w/:id/tasks/regenerate` | Paar, Trauzeug:innen |
+| GET/PUT | `/api/w/:id/games` | nur Trauzeug:innen |
 | GET/PUT | `/api/w/:id/rsvp` | Gäste |
 | GET | `/api/w/:id/guests` | Paar, Trauzeug:innen |
 | GET/POST | `/api/w/:id/schedule` | alle lesen, Paar schreibt |

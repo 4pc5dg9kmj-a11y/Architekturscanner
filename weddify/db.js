@@ -234,6 +234,15 @@ CREATE TABLE IF NOT EXISTS expenses (
 CREATE INDEX IF NOT EXISTS expenses_w ON expenses(wedding_id);
 `);
 
+db.exec(`
+-- Spiele der Trauzeug:innen (Inhalte je Spiel als JSON). Das Paar sieht sie nicht.
+CREATE TABLE IF NOT EXISTS games (
+  wedding_id  TEXT PRIMARY KEY REFERENCES weddings(id) ON DELETE CASCADE,
+  data        TEXT NOT NULL DEFAULT '{}',
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+
 // Spalten nachrüsten (bestehende Datenbanken)
 function addColumn(table, col, def) {
   if (!db.prepare(`PRAGMA table_info(${table})`).all().some(c => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);

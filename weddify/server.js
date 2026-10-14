@@ -206,7 +206,7 @@ function publicWedding(w, role) {
   if (role === 'trauzeuge') out.guest_code = w.guest_code;
   return out;
 }
-const taskOut = t => ({ id: t.id, title: t.title, note: t.note, due: t.due, done: !!t.done, auto: t.offset_days !== null, custom_due: !!t.custom_due, product: t.product, event_id: t.event_id, vendor_cat: t.vendor_cat });
+const taskOut = t => ({ id: t.id, title: t.title, note: t.note, due: t.due, offset_days: t.offset_days, done: !!t.done, auto: t.offset_days !== null, custom_due: !!t.custom_due, product: t.product, event_id: t.event_id, vendor_cat: t.vendor_cat });
 const audienceOf = role => role === 'paar' ? 'paar' : role === 'trauzeuge' ? 'trauzeuge' : fail(403, 'Gäste haben keinen Zeitplan.');
 
 /* ---------------- Routen ---------------- */
@@ -797,6 +797,20 @@ route('PATCH', '/api/gifts/:id', async (req, res, body, p) => {
   send(res, 200, { ok: true });
 });
 route('DELETE', '/api/gifts/:id', async (req, res, _b, p) => { const g = ownRow(req, 'gifts', p.id); db.prepare('DELETE FROM gifts WHERE id = ?').run(g.id); send(res, 200, { ok: true }); });
+
+// Spiele (nur Trauzeug:innen; das Paar soll überrascht werden)
+route('GET', '/api/w/:wid/games', async (req, res, _b, p) => {
+  const user = needUser(req); membership(user, p.wid, ['trauzeuge']);
+  const row = db.prepare('SELECT data, updated_at FROM games WHERE wedding_id = ?').get(p.wid);
+  send(res, 200, { data: row ? JSON.parse(row.data) : {}, updated_at: row?.updated_at || null });
+});
+route('PUT', '/api/w/:wid/games', async (req, res, body, p) => {
+  const user = needUser(req); membership(user, p.wid, ['trauzeuge']);
+  if (!body.data || typeof body.data !== 'object' || Array.isArray(body.data)) fail(400, 'Ungültige Daten.');
+  const json = JSON.stringify(body.data); if (json.length > 400_000) fail(413, 'Zu viele Inhalte.');
+  db.prepare(`INSERT INTO games (wedding_id, data, updated_at) VALUES (?,?,datetime('now')) ON CONFLICT(wedding_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`).run(p.wid, json);
+  send(res, 200, { ok: true });
+});
 
 // Cockpit: alles Wichtige auf einen Blick, verknüpft über alle Bereiche
 route('GET', '/api/w/:wid/overview', async (req, res, _b, p) => {

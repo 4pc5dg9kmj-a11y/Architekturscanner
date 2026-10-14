@@ -80,7 +80,7 @@ try {
     assert.equal(now.find(t => t.title.startsWith('Budget mit')).due, '2026-07-01', 'von Hand gesetztes Datum bleibt');
     assert.equal(now.find(t => t.title.startsWith('Brautstrauß')).due, '2027-05-20');
     const reset = await paar('PATCH', `/api/tasks/${tasks[0].id}`, { reset_due: true });
-    assert.equal(reset.body.task.due, '2026-07-10'); assert.equal(reset.body.task.custom_due, false);
+    assert.ok(Number.isInteger(reset.body.task.offset_days)); assert.equal(reset.body.task.due, addDays('2027-07-10', reset.body.task.offset_days)); assert.equal(reset.body.task.custom_due, false);
   });
 
   await step('Trauzeug:in tritt bei und hat eigenen Zeitplan', async () => {
@@ -324,6 +324,27 @@ try {
     assert.equal(ie.find(e => e.key === 'feier').title, 'Reception');
     const o = await paar('POST', '/api/weddings', { name1: 'Eleni', name2: 'Nikos', date: '2027-08-07', profile: { traditions: ['standesamt', 'orthodox'] } });
     assert.ok(o.body.warnings.some(x => /Fastenzeit/.test(x)));
+  });
+
+  await step('Spiele: nur Trauzeug:innen, Rätsel-Generatoren', async () => {
+    assert.equal((await paar('GET', `/api/w/${wid}/games`)).status, 403);
+    assert.equal((await gast('GET', `/api/w/${wid}/games`)).status, 403);
+    const data = { games: { quiz: { questions: 'Wer? | A | *B' } }, plan: { quiz: { on: true, time: '20:30' } } };
+    assert.equal((await tz('PUT', `/api/w/${wid}/games`, { data })).status, 200);
+    assert.deepEqual((await tz('GET', `/api/w/${wid}/games`)).body.data, data);
+    assert.equal((await paar('PUT', `/api/w/${wid}/games`, { data: {} })).status, 403);
+    assert.equal((await tz('PUT', `/api/w/${wid}/games`, { data: [1] })).status, 400);
+    const G = await import('../public/games.js');
+    const q = G.parseQuiz('Wer? | Anna | *Ben | Beide\nOffen?');
+    assert.equal(q[0].answers.find(a => a.ok).t, 'Ben'); assert.equal(q[1].answers.length, 0);
+    const ws = G.wordSearch(['Anna', 'Jörg', 'Liebe', 'Torte', 'Hochzeit', 'Ringe'], 12, 'seed');
+    assert.equal(ws.placed.length, 6); assert.ok(ws.placed.some(p => p.w === 'JOERG'));
+    for (const p of ws.placed) assert.equal(p.cells.map(([r, c]) => ws.grid[r][c]).join(''), p.w);
+    assert.deepEqual(G.wordSearch(['Liebe'], 10, 'x').grid, G.wordSearch(['Liebe'], 10, 'x').grid);
+    const cw = G.crossword([{ clue: 'a', answer: 'Hochzeit' }, { clue: 'b', answer: 'Torte' }, { clue: 'c', answer: 'Ringe' }, { clue: 'd', answer: 'Liebe' }, { clue: 'e', answer: 'Kuss' }]);
+    assert.ok(cw.placed.length >= 4);
+    for (const p of cw.placed) for (let i = 0; i < p.w.length; i++) assert.equal(cw.grid[p.r + (p.dir === 'v' ? i : 0)][p.c + (p.dir === 'h' ? i : 0)].ch, p.w[i]);
+    assert.ok(G.GAMES.length >= 15 && G.GAMES.every(g => g.def({ a: 'Anna', b: 'Ben', date: '1. Mai 2027', weekday: 'Samstag', month: 'Mai', place: 'Hamburg', guests: 80, traditions: [] })));
   });
 
   await step('Fremde sehen nichts', async () => {
