@@ -1,0 +1,12 @@
+{
+  "name": "weddify",
+  "version": "0.1.0",
+  "private": true,
+  "description": "weddify – Hochzeitsshop mit Planer für Brautpaar, Trauzeug:innen und Gäste",
+  "type": "module",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning test/smoke.mjs"
+  }
+}

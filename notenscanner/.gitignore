@@ -1,0 +1,5 @@
+.venv/
+noten/
+*.musicxml
+*.mid
+*.pdf
